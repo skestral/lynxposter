@@ -202,7 +202,7 @@ def create_local_user(session: Session, *, display_name: str, timezone: str) -> 
 
 
 def claim_unowned_personas_for_user(session: Session, user: User) -> int:
-    if user.role != "user":
+    if user.role not in {"user", "admin"}:
         return 0
     owned_persona = session.scalar(select(Persona.id).where(Persona.owner_user_id == user.id).limit(1))
     if owned_persona:

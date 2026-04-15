@@ -76,6 +76,26 @@ def test_claim_unowned_personas_only_assigns_to_first_regular_user(session):
     assert len(list_personas(session, owner_user_id=second_user.id)) == 0
 
 
+def test_claim_unowned_personas_can_assign_to_admin_user(session):
+    _create_persona(session, name="Admin Owned", slug="admin-owned")
+
+    admin_user = create_or_update_user(
+        session,
+        oidc_sub="admin-sub-1",
+        email="admin@example.com",
+        username="admin",
+        display_name="Admin",
+        role="admin",
+        timezone="UTC",
+        groups=["admins"],
+    )
+
+    claimed = claim_unowned_personas_for_user(session, admin_user)
+
+    assert claimed == 1
+    assert len(list_personas(session, owner_user_id=admin_user.id)) == 1
+
+
 def test_persona_queries_respect_owner_user_id(session):
     first_user = create_or_update_user(
         session,
