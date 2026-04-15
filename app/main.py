@@ -217,8 +217,6 @@ def _page_guard(request: Request, *, role: str = "any") -> Principal | RedirectR
 
 
 def _owner_user_id_for_principal(principal: Principal) -> str | None:
-    if principal.is_admin:
-        return None
     return principal.user_id if principal.is_user else None
 
 

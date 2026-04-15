@@ -228,7 +228,7 @@ def test_admin_role_also_satisfies_user_guard_in_oidc_mode(monkeypatch):
     _enforce_role(principal, "admin")
 
 
-def test_admin_principal_is_not_scoped_to_owned_personas():
+def test_admin_principal_is_scoped_to_owned_personas():
     principal = Principal(
         user_id="admin-1",
         display_name="Admin",
@@ -237,7 +237,7 @@ def test_admin_principal_is_not_scoped_to_owned_personas():
         is_authenticated=True,
     )
 
-    assert _owner_user_id_for_principal(principal) is None
+    assert _owner_user_id_for_principal(principal) == "admin-1"
 
 
 def test_local_mode_builds_principal_from_selected_local_user(session, monkeypatch):

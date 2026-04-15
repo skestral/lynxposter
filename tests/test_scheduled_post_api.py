@@ -18,12 +18,18 @@ from app.domain import MediaItem
 from app.schemas import ScheduledPostCreate
 
 
-def _create_persona(session, *, slug: str = "scheduled-post-api"):
+def _create_persona(
+    session,
+    *,
+    slug: str = "scheduled-post-api",
+    owner_user_id: str | None = "admin-user",
+):
     return create_persona(
         session,
         {
             "name": "Scheduled API Persona",
             "slug": slug,
+            "owner_user_id": owner_user_id,
             "is_enabled": True,
             "timezone": "server",
             "settings_json": {},

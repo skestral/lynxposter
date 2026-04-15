@@ -18,10 +18,17 @@ def _request_with_session() -> Request:
     return Request({"type": "http", "headers": [], "session": {}})
 
 
-def _create_persona(session, *, name: str = "Dashboard", slug: str = "dashboard") -> Persona:
+def _create_persona(
+    session,
+    *,
+    name: str = "Dashboard",
+    slug: str = "dashboard",
+    owner_user_id: str | None = "admin-user",
+) -> Persona:
     persona = Persona(
         name=name,
         slug=slug,
+        owner_user_id=owner_user_id,
         is_enabled=True,
         timezone="UTC",
         settings_json={},
