@@ -5,9 +5,9 @@
     <div class="card-body p-4">
         <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
             <div>
-                <div class="section-kicker mb-2">Planning Workspace</div>
-                <h1 class="h4 mb-1">Scheduled Posts</h1>
-                <p class="text-secondary mb-0">Create new work, plot upcoming posts on a calendar, or triage the queue by status without leaving this page.</p>
+                <div class="section-kicker mb-2">Planner</div>
+                <h1 class="h4 mb-1">Post Planner</h1>
+                <p class="text-secondary mb-0">Draft once, map out the calendar, and keep an eye on every post plan from one page.</p>
             </div>
             <div class="d-flex gap-2 flex-wrap">
                 <span class="badge soft-badge rounded-pill px-3 py-2">{{ posts|length }} posts in view</span>
@@ -27,7 +27,7 @@
                 <button class="nav-link" id="workspace-calendar-tab" data-bs-toggle="tab" data-bs-target="#workspace-calendar-pane" type="button" role="tab">Calendar</button>
             </li>
             <li class="nav-item" role="presentation">
-                <button class="nav-link" id="workspace-kanban-tab" data-bs-toggle="tab" data-bs-target="#workspace-kanban-pane" type="button" role="tab">Kanban</button>
+                <button class="nav-link" id="workspace-kanban-tab" data-bs-toggle="tab" data-bs-target="#workspace-kanban-pane" type="button" role="tab">Board</button>
             </li>
         </ul>
 
@@ -40,10 +40,10 @@
                                 <div class="d-flex justify-content-between align-items-start gap-3 mb-4">
                                     <div>
                                         <div class="section-kicker mb-2">Composer</div>
-                                        <h2 class="h5 mb-1">Schedule a post</h2>
-                                        <p class="text-secondary mb-0">Manual posts originate here and publish directly to the destination accounts you choose.</p>
+                                        <h2 class="h5 mb-1">Build a post plan</h2>
+                                        <p class="text-secondary mb-0">Draft once and choose exactly where it should go.</p>
                                     </div>
-                                    <span class="badge soft-badge rounded-pill px-3 py-2">Step-based</span>
+                                    <span class="badge soft-badge rounded-pill px-3 py-2">Guided flow</span>
                                 </div>
                                 <form id="scheduled-post-form" class="tab-pane-stack">
                                     <ul class="nav nav-pills glass-tabs" id="compose-tabs" role="tablist">
@@ -99,7 +99,7 @@
                                                         <input class="form-control" name="scheduled_for" type="datetime-local">
                                                     </div>
                                                     <div class="col-md-6">
-                                                        <label class="form-label">Source Link</label>
+                                                        <label class="form-label">Original Link</label>
                                                         <input class="form-control" name="source_link">
                                                     </div>
                                                     <div class="col-md-6">
@@ -121,7 +121,7 @@
                                                 <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
                                                     <div>
                                                         <div class="fw-semibold">Instagram Giveaway Rules</div>
-                                                        <div class="small text-secondary">Giveaways require exactly one Instagram destination. Share is interpreted as a story mention captured while the giveaway is live.</div>
+                                                        <div class="small text-secondary">Giveaways need exactly one Instagram destination. Shares are treated as story mentions captured while the giveaway is live.</div>
                                                     </div>
                                                     <span class="badge text-bg-light border">One winner</span>
                                                 </div>
@@ -168,7 +168,7 @@
                                                 </div>
                                             </div>
                                             <div class="surface-panel-soft">
-                                                <div class="small text-secondary">This tab activates when the post type is <strong>Instagram Giveaway</strong>.</div>
+                                                <div class="small text-secondary">This tab wakes up when the post type is <strong>Instagram Giveaway</strong>.</div>
                                             </div>
                                         </div>
 
@@ -176,7 +176,7 @@
                                             <div class="surface-panel">
                                                 <label class="form-label">Uploads</label>
                                                 <input class="form-control" name="uploads" type="file" multiple>
-                                                <div class="form-text" id="upload-summary">Selected images and videos will be attached to the scheduled post.</div>
+                                                <div class="form-text" id="upload-summary">Selected images and videos will travel with this post plan.</div>
                                                 <div id="upload-preview-list" class="row g-3 mt-1"></div>
                                             </div>
                                             <div class="surface-panel-soft">
@@ -203,8 +203,8 @@
                                     </div>
 
                                     <div class="d-flex gap-2 flex-wrap">
-                                        <button class="btn btn-primary" type="submit">Create Post</button>
-                                        <a class="btn btn-outline-secondary" href="/sandbox/page">Open Sandbox</a>
+                                        <button class="btn btn-primary" type="submit">Save Post Plan</button>
+                                        <a class="btn btn-outline-secondary" href="/sandbox/page">Open Preview Studio</a>
                                     </div>
                                 </form>
                             </div>
@@ -216,7 +216,7 @@
                                 <div class="d-flex justify-content-between align-items-center mb-3">
                                     <div>
                                         <div class="section-kicker mb-2">Queue</div>
-                                        <h2 class="h5 mb-0">Recent Scheduled Posts</h2>
+                                        <h2 class="h5 mb-0">Recent Post Plans</h2>
                                     </div>
                                     <span class="badge soft-badge rounded-pill px-3 py-2">{{ posts|length }} recent</span>
                                 </div>
@@ -245,7 +245,7 @@
                                                 <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="/scheduled-posts/{{ post.id }}/page">Open</a></td>
                                             </tr>
                                         {% else %}
-                                            <tr><td colspan="6" class="text-secondary">No scheduled posts yet.</td></tr>
+                                            <tr><td colspan="6" class="text-secondary">No post plans yet.</td></tr>
                                         {% endfor %}
                                         </tbody>
                                     </table>
@@ -261,7 +261,7 @@
                     <div>
                         <div class="section-kicker mb-2">Planner</div>
                         <h2 class="h5 mb-1">Calendar View</h2>
-                        <p class="text-secondary mb-0">Switch between a month and week view to see what is going out, then click any card to open the post.</p>
+                        <p class="text-secondary mb-0">Switch between month and week to see what is going out, then open any card to edit it.</p>
                     </div>
                     <div class="d-flex flex-wrap gap-2 align-items-center">
                         <div class="btn-group" role="group" aria-label="Calendar view switcher">
@@ -276,7 +276,7 @@
                 <div class="surface-panel-soft d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
                     <div>
                         <div class="fw-semibold" id="calendar-range-label">Loading calendar...</div>
-                        <div class="small text-secondary">Only posts with a scheduled time appear on the calendar. Drafts without a date stay visible in kanban.</div>
+                        <div class="small text-secondary">Only posts with a scheduled time appear here. Drafts without a date stay on the board.</div>
                     </div>
                     <div class="d-flex gap-2 flex-wrap">
                         <span class="badge text-bg-light border" id="calendar-summary-total">0 scheduled</span>
@@ -288,9 +288,9 @@
                     <div class="scheduled-calendar-grid" id="scheduled-calendar-grid"></div>
                 </div>
                 <div class="scheduled-calendar-empty d-none" id="scheduled-calendar-empty">
-                    <div class="surface-panel text-center">
-                        <div class="fw-semibold mb-2">No scheduled posts in this range</div>
-                        <div class="text-secondary">Move to a different month or week, or schedule a post from the New Post tab.</div>
+                        <div class="surface-panel text-center">
+                        <div class="fw-semibold mb-2">No post plans in this range</div>
+                        <div class="text-secondary">Move to a different month or week, or create one from the New Post tab.</div>
                     </div>
                 </div>
             </div>
@@ -299,8 +299,8 @@
                 <div class="d-flex flex-column flex-xl-row justify-content-between align-items-xl-center gap-3 mb-4">
                     <div>
                         <div class="section-kicker mb-2">Workflow</div>
-                        <h2 class="h5 mb-1">Kanban View</h2>
-                        <p class="text-secondary mb-0">Watch the queue move from draft to completion, with a dedicated lane for anything that needs attention.</p>
+                        <h2 class="h5 mb-1">Board View</h2>
+                        <p class="text-secondary mb-0">Watch plans move from draft to done, with a dedicated lane for anything that needs attention.</p>
                     </div>
                     <span class="badge soft-badge rounded-pill px-3 py-2">Grouped by status</span>
                 </div>
@@ -566,7 +566,7 @@ function renderTargetAccounts() {
   const accounts = personaTargets[personaSelect.value] || [];
   targetAccountList.innerHTML = "";
   if (!accounts.length) {
-    targetAccountList.innerHTML = '<div class="col-12"><div class="alert alert-light border mb-0">This persona has no enabled destination accounts yet.</div></div>';
+    targetAccountList.innerHTML = '<div class="col-12"><div class="alert alert-light border mb-0">This persona does not have any ready destination accounts yet.</div></div>';
     return;
   }
   for (const account of accounts) {
@@ -586,7 +586,7 @@ function renderTargetAccounts() {
           <textarea class="form-control override-body" data-account-id="${account.id}" rows="2"></textarea>
         </div>
         <div class="post-guidance-panel border rounded p-2 bg-body-tertiary mt-3" data-account-id="${account.id}">
-          <div class="fw-semibold small">Publishing Guidance</div>
+          <div class="fw-semibold small">Delivery Notes</div>
           <div class="small text-secondary post-guidance-summary"></div>
           <div class="small mt-2 post-guidance-status"></div>
         </div>
@@ -688,8 +688,8 @@ function refreshPostGuidance() {
 
   bodyLengthIndicator.textContent = `${bodyTextarea.value.length} chars`;
   uploadSummary.textContent = snapshot.total
-    ? `${describeAttachmentSnapshot(snapshot)} will be attached to the scheduled post.`
-    : "Selected images and videos will be attached to the scheduled post.";
+    ? `${describeAttachmentSnapshot(snapshot)} will travel with this post plan.`
+    : "Selected images and videos will travel with this post plan.";
   snapshotBodyLength.textContent = `${bodyTextarea.value.length} chars`;
   snapshotAttachments.textContent = `${snapshot.total} attachment${snapshot.total === 1 ? "" : "s"}`;
   snapshotTargets.textContent = `${selectedTargets} target${selectedTargets === 1 ? "" : "s"}`;
@@ -902,7 +902,7 @@ function renderWeekCalendar() {
         <div class="scheduled-calendar-column-events">
           ${dayPosts.length
             ? dayPosts.map((post) => calendarEventMarkup(post)).join("")
-            : '<div class="scheduled-calendar-placeholder">No scheduled posts</div>'}
+            : '<div class="scheduled-calendar-placeholder">No post plans</div>'}
         </div>
       </div>
     `;
@@ -921,7 +921,7 @@ function renderCalendar() {
   if (!visibleScheduled.length) {
     calendarRoot.classList.add("d-none");
     calendarEmpty.classList.remove("d-none");
-    calendarRangeLabel.textContent = "No scheduled posts yet";
+    calendarRangeLabel.textContent = "No post plans yet";
     return;
   }
 
@@ -971,7 +971,7 @@ function renderKanbanBoard() {
     count.textContent = String(items.length);
     lane.innerHTML = items.length
       ? items.map((post) => kanbanCardMarkup(post)).join("")
-      : '<div class="scheduled-kanban-empty">No posts in this bucket.</div>';
+      : '<div class="scheduled-kanban-empty">No post plans in this lane.</div>';
   });
 }
 
@@ -1012,11 +1012,11 @@ document.getElementById("scheduled-post-form").addEventListener("submit", async 
       .filter((checkbox) => checkbox.closest("[data-account-service]")?.dataset.accountService === "instagram")
       .map((checkbox) => checkbox.value);
     if (instagramTargetIds.length !== 1 || targetAccountIds.length !== 1) {
-      alert("Instagram giveaway posts must target exactly one Instagram destination account.");
+      alert("Instagram giveaway posts need exactly one Instagram destination account.");
       return;
     }
     if (!giveaway?.giveaway_end_at) {
-      alert("Instagram giveaway posts require a giveaway end time.");
+      alert("Instagram giveaway posts need an end time.");
       return;
     }
   }
@@ -1037,7 +1037,7 @@ document.getElementById("scheduled-post-form").addEventListener("submit", async 
 
   const response = await fetch("/scheduled-posts", {method: "POST", body: payload});
   if (!response.ok) {
-    alert(await response.text());
+    alert(await window.readApiMessage(response));
     return;
   }
   const created = await response.json();

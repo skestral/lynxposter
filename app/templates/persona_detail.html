@@ -35,7 +35,7 @@
     <div class="card-body">
         <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
             <div>
-                <div class="section-kicker mb-2">Persona Workspace</div>
+                <div class="section-kicker mb-2">Persona Studio</div>
                 <h1 class="h3 mb-1">{{ persona.name }}</h1>
                 <div class="small-muted code-ish">{{ persona.slug }}</div>
             </div>
@@ -56,10 +56,10 @@
         <button class="nav-link active" id="persona-overview-tab" data-bs-toggle="tab" data-bs-target="#persona-overview-pane" type="button" role="tab">Overview</button>
     </li>
     <li class="nav-item" role="presentation">
-        <button class="nav-link" id="persona-accounts-tab" data-bs-toggle="tab" data-bs-target="#persona-accounts-pane" type="button" role="tab">Accounts</button>
+        <button class="nav-link" id="persona-accounts-tab" data-bs-toggle="tab" data-bs-target="#persona-accounts-pane" type="button" role="tab">Connections</button>
     </li>
     <li class="nav-item" role="presentation">
-        <button class="nav-link" id="persona-routing-tab" data-bs-toggle="tab" data-bs-target="#persona-routing-pane" type="button" role="tab">Routing</button>
+        <button class="nav-link" id="persona-routing-tab" data-bs-toggle="tab" data-bs-target="#persona-routing-pane" type="button" role="tab">Routes</button>
     </li>
 </ul>
 
@@ -70,7 +70,7 @@
                 <form id="persona-update-form" class="tab-pane-stack">
                     <div class="surface-panel">
                         <div class="section-kicker mb-2">Overview</div>
-                        <h2 class="h5 mb-3">Identity and automation defaults</h2>
+                        <h2 class="h5 mb-3">Identity and defaults</h2>
                         <div class="row g-3">
                             <div class="col-md-4">
                                 <label class="form-label">Name</label>
@@ -93,11 +93,11 @@
                                 <input class="form-control" name="max_retries" type="number" value="{{ persona.retry_settings_json.max_retries if persona.retry_settings_json else 5 }}">
                             </div>
                             <div class="col-md-3">
-                                <label class="form-label">Max Posts / Hour</label>
+                                <label class="form-label">Max Posts Per Hour</label>
                                 <input class="form-control" name="max_per_hour" type="number" value="{{ persona.throttle_settings_json.max_per_hour if persona.throttle_settings_json else 0 }}">
                             </div>
                             <div class="col-md-3">
-                                <label class="form-label">Overflow Policy</label>
+                                <label class="form-label">When The Hourly Cap Is Hit</label>
                                 <select class="form-select" name="overflow_posts">
                                     {% set overflow = persona.throttle_settings_json.overflow_posts if persona.throttle_settings_json else "retry" %}
                                     <option value="retry" {% if overflow == "retry" %}selected{% endif %}>Retry</option>
@@ -107,7 +107,7 @@
                             <div class="col-md-3 d-flex align-items-end">
                                 <div class="form-check">
                                     <input class="form-check-input" type="checkbox" name="is_enabled" {% if persona.is_enabled %}checked{% endif %}>
-                                    <label class="form-check-label">Enabled</label>
+                                    <label class="form-check-label">Ready to use</label>
                                 </div>
                             </div>
                         </div>
@@ -115,10 +115,10 @@
 
                     <div class="surface-panel">
                         <div class="section-kicker mb-2">Posting Defaults</div>
-                        <h2 class="h5 mb-3">Shared guardrails</h2>
+                        <h2 class="h5 mb-3">Shared rules</h2>
                         <div class="row g-3">
                             <div class="col-md-3">
-                                <label class="form-label">Lookback Hours</label>
+                                <label class="form-label">Lookback Window (Hours)</label>
                                 <input class="form-control" name="post_time_limit" type="number" value="{{ persona.settings_json.post_time_limit if persona.settings_json else 12 }}">
                             </div>
                             <div class="col-md-3">
@@ -132,7 +132,7 @@
                                 </select>
                             </div>
                             <div class="col-md-3">
-                                <label class="form-label">Mentions Policy</label>
+                                <label class="form-label">What To Do With Mentions</label>
                                 {% set mentions = persona.settings_json.mentions if persona.settings_json else "strip" %}
                                 <select class="form-select" name="mentions">
                                     <option value="strip" {% if mentions == "strip" %}selected{% endif %}>Strip</option>
@@ -142,13 +142,13 @@
                             <div class="col-md-3 d-flex align-items-end">
                                 <div class="form-check">
                                     <input class="form-check-input" type="checkbox" name="quote_posts" {% if persona.settings_json and persona.settings_json.quote_posts %}checked{% endif %}>
-                                    <label class="form-check-label">Allow Quote Posts</label>
+                                    <label class="form-check-label">Allow quote posts</label>
                                 </div>
                             </div>
                             <div class="col-md-3 d-flex align-items-end">
                                 <div class="form-check">
                                     <input class="form-check-input" type="checkbox" name="post_default" {% if persona.settings_json and persona.settings_json.post_default %}checked{% endif %}>
-                                    <label class="form-check-label">Enable Default Posting</label>
+                                    <label class="form-check-label">Post automatically when routes match</label>
                                 </div>
                             </div>
                             <div class="col-12">
@@ -156,13 +156,13 @@
                                     <input class="form-check-input" type="checkbox" name="import_existing_posts" {% if persona.settings_json and persona.settings_json.import_existing_posts %}checked{% endif %}>
                                     <label class="form-check-label">Import existing posts on first scan</label>
                                 </div>
-                                <div class="small text-secondary">Keep this off to prevent a new or reset source account from flooding destination accounts with historical posts.</div>
+                                <div class="small text-secondary">Keep this off for a clean start so an old backlog does not flood your destinations.</div>
                             </div>
                         </div>
                     </div>
 
                     <div class="d-flex gap-2 flex-wrap">
-                        <button class="btn btn-primary" type="submit">Save Persona Settings</button>
+                        <button class="btn btn-primary" type="submit">Save Persona</button>
                     </div>
                 </form>
             </div>
@@ -174,8 +174,8 @@
             <div class="col-12 col-xl-5">
                 <div class="card section-card h-100">
                     <div class="card-body">
-                        <div class="section-kicker mb-2">Add Account</div>
-                        <h2 class="h5 mb-3">Service setup</h2>
+                        <div class="section-kicker mb-2">Add Connection</div>
+                        <h2 class="h5 mb-3">Connect a service</h2>
                         <form id="account-create-form" class="tab-pane-stack" data-mode="create">
                             <div class="surface-panel">
                                 <div class="row g-3">
@@ -198,26 +198,26 @@
                                     <div class="col-md-4">
                                         <div class="form-check">
                                             <input class="form-check-input" type="checkbox" name="is_enabled" checked>
-                                            <label class="form-check-label">Enabled</label>
+                                            <label class="form-check-label">Ready to use</label>
                                         </div>
                                     </div>
                                     <div class="col-md-4">
                                         <div class="form-check">
                                             <input class="form-check-input" type="checkbox" name="source_enabled">
-                                            <label class="form-check-label">Source Enabled</label>
+                                            <label class="form-check-label">Watch for incoming posts</label>
                                         </div>
                                     </div>
                                     <div class="col-md-4">
                                         <div class="form-check">
                                             <input class="form-check-input" type="checkbox" name="destination_enabled">
-                                            <label class="form-check-label">Destination Enabled</label>
+                                            <label class="form-check-label">Publish from lynxposter</label>
                                         </div>
                                     </div>
                                 </div>
                             </div>
 
                             <div class="surface-panel">
-                                <div class="section-kicker mb-2">Service Fields</div>
+                                <div class="section-kicker mb-2">Service Details</div>
                                 <div class="row g-3">
                                     {% for definition in service_definitions %}
                                         {% for field in definition.credential_fields %}
@@ -245,11 +245,11 @@
                 <div class="card section-card h-100">
                     <div class="card-body">
                         <div class="d-flex justify-content-between align-items-center mb-3">
-                            <div>
-                                <div class="section-kicker mb-2">Existing Accounts</div>
-                                <h2 class="h5 mb-0">Connections and credentials</h2>
-                            </div>
-                            <span class="badge soft-badge rounded-pill px-3 py-2">{{ accounts|length }} configured</span>
+                                <div>
+                                    <div class="section-kicker mb-2">Existing Accounts</div>
+                                    <h2 class="h5 mb-0">Saved Connections</h2>
+                                </div>
+                                <span class="badge soft-badge rounded-pill px-3 py-2">{{ accounts|length }} configured</span>
                         </div>
                         <div class="d-flex flex-column gap-3">
                             {% for entry in accounts %}
@@ -262,18 +262,18 @@
                                         </div>
                                         <div class="d-flex gap-2 flex-wrap justify-content-end">
                                             {% if entry.account_read.source_supported %}
-                                                <span class="badge text-bg-light border">Source</span>
+                                                <span class="badge text-bg-light border">Reads</span>
                                             {% endif %}
                                             {% if entry.account_read.destination_supported %}
-                                                <span class="badge text-bg-light border">Destination</span>
+                                                <span class="badge text-bg-light border">Publishes</span>
                                             {% endif %}
                                             {% if entry.account_read.configured %}
-                                                <span class="badge text-bg-success">Configured</span>
+                                                <span class="badge text-bg-success">Ready</span>
                                             {% else %}
-                                                <span class="badge text-bg-warning">Needs Setup</span>
+                                                <span class="badge text-bg-warning">Finish setup</span>
                                             {% endif %}
                                             {% if entry.account.last_error %}
-                                                <span class="badge text-bg-danger">Attention</span>
+                                                <span class="badge text-bg-danger">Needs attention</span>
                                             {% endif %}
                                         </div>
                                     </div>
@@ -297,19 +297,19 @@
                                                 <div class="col-md-4">
                                                     <div class="form-check">
                                                         <input class="form-check-input" type="checkbox" name="is_enabled" {% if entry.account.is_enabled %}checked{% endif %}>
-                                                        <label class="form-check-label">Enabled</label>
+                                                        <label class="form-check-label">Ready to use</label>
                                                     </div>
                                                 </div>
                                                 <div class="col-md-4">
                                                     <div class="form-check">
                                                         <input class="form-check-input" type="checkbox" name="source_enabled" {% if entry.account.source_enabled %}checked{% endif %}>
-                                                        <label class="form-check-label">Source Enabled</label>
+                                                        <label class="form-check-label">Watch for incoming posts</label>
                                                     </div>
                                                 </div>
                                                 <div class="col-md-4">
                                                     <div class="form-check">
                                                         <input class="form-check-input" type="checkbox" name="destination_enabled" {% if entry.account.destination_enabled %}checked{% endif %}>
-                                                        <label class="form-check-label">Destination Enabled</label>
+                                                        <label class="form-check-label">Publish from lynxposter</label>
                                                     </div>
                                                 </div>
                                             </div>
@@ -352,7 +352,7 @@
                                         <div class="surface-panel-soft">
                                             <div class="d-flex flex-column flex-md-row justify-content-between gap-2 align-items-md-start">
                                                 <div>
-                                                    <div class="fw-semibold">Token Lifecycle</div>
+                                                    <div class="fw-semibold">Token Lifespan</div>
                                                     <div class="small text-secondary">{{ entry.instagram_token_status.summary }}</div>
                                                 </div>
                                                 <span class="badge {{ entry.instagram_token_status.badge_class }}">{{ entry.instagram_token_status.badge_label }}</span>
@@ -375,10 +375,10 @@
                                                     data-account-id="{{ entry.account.id }}"
                                                     data-account-label="{{ entry.account.label }}"
                                                 >
-                                                    Record Token Refreshed
+                                                    Record Token Refresh
                                                 </button>
                                                 <div class="small text-secondary mt-2">
-                                                    Use this after refreshing or replacing the long-lived token in Meta so LynxPoster can reset the reminder window.
+                                                    Use this after refreshing or replacing the long-lived token in Meta so lynxposter can reset the reminder window.
                                                 </div>
                                             </div>
                                             {% endif %}
@@ -387,7 +387,7 @@
 
                                         {% if entry.account.last_error %}
                                         <div class="alert alert-danger py-2 mb-0">
-                                            <div class="fw-semibold">Last Account Error</div>
+                                            <div class="fw-semibold">Last connection hiccup</div>
                                             <div class="small mb-0">{{ entry.account.last_error }}</div>
                                         </div>
                                         {% endif %}
@@ -401,7 +401,7 @@
                                                 data-account-id="{{ entry.account.id }}"
                                                 data-account-label="{{ entry.account.label }}"
                                             >
-                                                Validate Login
+                                                Check Login
                                             </button>
                                             {% endif %}
                                             <button
@@ -417,7 +417,7 @@
                                 </div>
                             </details>
                             {% else %}
-                            <div class="alert alert-light border mb-0">No accounts yet.</div>
+                            <div class="alert alert-light border mb-0">No connections yet.</div>
                             {% endfor %}
                         </div>
                     </div>
@@ -431,9 +431,9 @@
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <div>
-                        <div class="section-kicker mb-2">Routing</div>
-                        <h2 class="h5 mb-1">Matrix</h2>
-                        <p class="text-secondary mb-0">Imported posts fan out from a source-enabled account to the destination-enabled accounts checked here.</p>
+                        <div class="section-kicker mb-2">Routes</div>
+                        <h2 class="h5 mb-1">Delivery Map</h2>
+                        <p class="text-secondary mb-0">Choose where new posts should travel when this persona watches a source account for incoming content.</p>
                     </div>
                     <button class="btn btn-primary" id="save-routes-button" {% if not source_accounts or not destination_accounts %}disabled{% endif %}>Save Routes</button>
                 </div>
@@ -442,7 +442,7 @@
                     <table class="table align-middle">
                         <thead>
                             <tr>
-                                <th>Source</th>
+                                <th>From</th>
                                 {% for destination in destination_accounts %}
                                 <th class="route-cell">{{ destination.label }}</th>
                                 {% endfor %}
@@ -473,7 +473,7 @@
                     </table>
                 </div>
                 {% else %}
-                <div class="alert alert-light border mb-0">Add at least one source-enabled account and one destination-enabled account to configure routing.</div>
+                <div class="alert alert-light border mb-0">Add at least one incoming account and one publishing account to build routes.</div>
                 {% endif %}
             </div>
         </div>
@@ -484,17 +484,6 @@
 {% block scripts %}
 <script>
 const personaId = "{{ persona.id }}";
-
-async function responseMessage(response) {
-  try {
-    const payload = await response.clone().json();
-    if (typeof payload.detail === "string" && payload.detail.trim()) return payload.detail;
-    if (typeof payload.message === "string" && payload.message.trim()) return payload.message;
-    return JSON.stringify(payload);
-  } catch {
-    return await response.text();
-  }
-}
 
 function collectScopedFields(form) {
   const credentials = {};
@@ -569,7 +558,7 @@ document.getElementById("persona-update-form").addEventListener("submit", async 
     body: JSON.stringify(payload),
   });
   if (!response.ok) {
-    alert(await response.text());
+    alert(await window.readApiMessage(response));
     return;
   }
   window.location.reload();
@@ -596,7 +585,7 @@ document.getElementById("account-create-form").addEventListener("submit", async 
     body: JSON.stringify(payload),
   });
   if (!response.ok) {
-    alert(await responseMessage(response));
+    alert(await window.readApiMessage(response));
     return;
   }
   window.location.reload();
@@ -612,7 +601,7 @@ document.querySelectorAll(".account-update-form").forEach((form) => {
       body: JSON.stringify(payload),
     });
     if (!response.ok) {
-      alert(await responseMessage(response));
+      alert(await window.readApiMessage(response));
       return;
     }
     window.location.reload();
@@ -622,14 +611,14 @@ document.querySelectorAll(".account-update-form").forEach((form) => {
 document.querySelectorAll(".delete-account-button").forEach((button) => {
   button.addEventListener("click", async () => {
     const label = button.dataset.accountLabel || "this account";
-    const confirmed = window.confirm(`Delete ${label} from this persona? This removes its routes and stored delivery state.`);
+    const confirmed = window.confirm(`Delete ${label} from this persona? This removes its routes and saved delivery state.`);
     if (!confirmed) return;
 
     const response = await fetch(`/personas/${personaId}/accounts/${button.dataset.accountId}`, {
       method: "DELETE",
     });
     if (!response.ok) {
-      alert(await responseMessage(response));
+      alert(await window.readApiMessage(response));
       return;
     }
     window.location.reload();
@@ -647,10 +636,10 @@ document.querySelectorAll(".instagram-login-validate-button").forEach((button) =
       body: JSON.stringify(payload),
     });
     if (!response.ok) {
-      alert(await responseMessage(response));
+      alert(await window.readApiMessage(response));
       return;
     }
-    const message = await responseMessage(response);
+    const message = await window.readApiMessage(response);
     if (message) alert(message);
     window.location.reload();
   });
@@ -666,7 +655,7 @@ document.querySelectorAll(".instagram-token-refresh-button").forEach((button) =>
       method: "POST",
     });
     if (!response.ok) {
-      alert(await responseMessage(response));
+      alert(await window.readApiMessage(response));
       return;
     }
     window.location.reload();
@@ -689,21 +678,11 @@ if (saveRoutesButton) {
       body: JSON.stringify({routes}),
     });
     if (!response.ok) {
-      alert(await responseMessage(response));
+      alert(await window.readApiMessage(response));
       return;
     }
     window.location.reload();
   });
 }
-
-document.querySelectorAll(".secret-toggle-button").forEach((button) => {
-  button.addEventListener("click", () => {
-    const input = button.parentElement.querySelector(".secret-toggle-input");
-    if (!input) return;
-    const isVisible = input.type === "text";
-    input.type = isVisible ? "password" : "text";
-    button.textContent = isVisible ? "Show" : "Hide";
-  });
-});
 </script>
 {% endblock %}

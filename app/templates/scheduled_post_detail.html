@@ -4,13 +4,13 @@
     <div class="card-body">
         <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
             <div>
-                <div class="section-kicker mb-2">Scheduled Post</div>
-                <h1 class="h3 mb-1">Edit delivery plan</h1>
+                <div class="section-kicker mb-2">Post Plan</div>
+                <h1 class="h3 mb-1">Edit post plan</h1>
                 <div class="small-muted code-ish">{{ post.id }}</div>
             </div>
             <div class="d-flex gap-2 flex-wrap">
                 <span class="badge soft-badge rounded-pill px-3 py-2">{{ post.display_status|replace('_', ' ')|title }}</span>
-                <span class="badge soft-badge rounded-pill px-3 py-2">{{ post.target_account_ids|length }} targets</span>
+                <span class="badge soft-badge rounded-pill px-3 py-2">{{ post.target_account_ids|length }} destinations</span>
             </div>
         </div>
     </div>
@@ -22,7 +22,7 @@
             <div class="card-body">
                 {% if post.last_error %}
                 <div class="alert alert-danger">
-                    <div class="fw-semibold">Last Post Error</div>
+                    <div class="fw-semibold">Last delivery hiccup</div>
                     <div class="mb-0">{{ post.last_error }}</div>
                 </div>
                 {% endif %}
@@ -48,7 +48,7 @@
                                 <div class="row g-3">
                                     <div class="col-12">
                                         <label class="form-label">Persona</label>
-                                        <input class="form-control" value="{{ persona.name }}" disabled>
+                                        <div class="lp-static-field">{{ persona.name }}</div>
                                     </div>
                                     <div class="col-12">
                                         <div class="d-flex justify-content-between align-items-center gap-3">
@@ -77,7 +77,7 @@
                                         <input class="form-control" name="scheduled_for" type="datetime-local" value="{{ post.scheduled_for|datetime_local_input if post.scheduled_for else '' }}">
                                     </div>
                                     <div class="col-md-6">
-                                        <label class="form-label">Source Link</label>
+                                        <label class="form-label">Original Link</label>
                                         <input class="form-control" name="source_link" value="{{ post.metadata_json.get('link', '') }}">
                                     </div>
                                     <div class="col-md-6">
@@ -100,7 +100,7 @@
                                 <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
                                     <div>
                                         <div class="fw-semibold">Instagram Giveaway Rules</div>
-                                        <div class="small text-secondary">Share is interpreted as a story mention captured while the giveaway is live.</div>
+                                        <div class="small text-secondary">Shares are treated as story mentions captured while the giveaway is live.</div>
                                     </div>
                                     {% if post.giveaway %}
                                     <span class="badge text-bg-light border">{{ post.giveaway.status|replace('_', ' ')|title }}</span>
@@ -142,13 +142,13 @@
                                         </div>
                                     </div>
                                     <div class="col-12">
-                                        <div class="small text-secondary" id="giveaway-target-hint">Instagram giveaway posts must target exactly one Instagram destination account.</div>
+                                        <div class="small text-secondary" id="giveaway-target-hint">Instagram giveaway posts need exactly one Instagram destination account.</div>
                                     </div>
                                 </div>
                             </div>
                             {% if post.post_type != 'instagram_giveaway' %}
                             <div class="surface-panel-soft">
-                                <div class="small text-secondary">Switch the post type to <strong>Instagram Giveaway</strong> to edit raffle rules here.</div>
+                                <div class="small text-secondary">Switch the post type to <strong>Instagram Giveaway</strong> to edit the giveaway rules here.</div>
                             </div>
                             {% endif %}
                         </div>
@@ -157,7 +157,7 @@
                             <div class="surface-panel">
                                 <label class="form-label">Add Uploads</label>
                                 <input class="form-control" name="uploads" type="file" multiple>
-                                <div class="form-text" id="upload-summary">Choose more images or videos to append to this draft.</div>
+                                <div class="form-text" id="upload-summary">Choose more images or videos to add to this post plan.</div>
                                 <div id="upload-preview-list" class="row g-3 mt-1"></div>
                             </div>
                             <div class="surface-panel-soft">
@@ -193,7 +193,7 @@
                                                 <textarea class="form-control override-body" data-account-id="{{ account.id }}" rows="2">{{ post.publish_overrides_json.get(account.id, {}).get('body', '') if post.publish_overrides_json.get(account.id) else '' }}</textarea>
                                             </div>
                                             <div class="post-guidance-panel border rounded p-2 bg-body-tertiary mt-3" data-account-id="{{ account.id }}">
-                                                <div class="fw-semibold small">Publishing Guidance</div>
+                                                <div class="fw-semibold small">Delivery Notes</div>
                                                 <div class="small mt-2 post-guidance-status"></div>
                                             </div>
                                         </div>
@@ -205,12 +205,12 @@
                     </div>
 
                     <div class="d-flex gap-2 flex-wrap">
-                        <button class="btn btn-primary" type="submit">Save Post</button>
+                        <button class="btn btn-primary" type="submit">Save Post Plan</button>
                         {% if post.status == "draft" %}
                         <button class="btn btn-outline-danger" type="button" id="delete-draft-button">Delete Draft</button>
                         {% endif %}
-                        <button class="btn btn-outline-primary" type="button" id="send-now-button">Send Now</button>
-                        <a class="btn btn-outline-secondary" href="/sandbox/page?post_id={{ post.id }}">Open In Sandbox</a>
+                        <button class="btn btn-outline-primary" type="button" id="send-now-button">Publish Now</button>
+                        <a class="btn btn-outline-secondary" href="/sandbox/page?post_id={{ post.id }}">Open In Preview Studio</a>
                     </div>
                 </form>
             </div>
@@ -659,7 +659,7 @@ function refreshGiveawayState() {
     giveawayTargetHint.className = selectedInstagramTargets === 1 ? "small text-success" : "small text-danger";
     giveawayTargetHint.textContent = selectedInstagramTargets === 1
       ? "Exactly one Instagram destination is selected."
-      : "Instagram giveaway posts must target exactly one Instagram destination account.";
+      : "Instagram giveaway posts need exactly one Instagram destination account.";
   }
 }
 
@@ -673,8 +673,8 @@ function refreshPostGuidance() {
   snapshotTargets.textContent = `${selectedTargets} target${selectedTargets === 1 ? "" : "s"}`;
   const pendingSnapshot = fileSnapshot(uploadsInput?.files || []);
   uploadSummary.textContent = pendingSnapshot.total
-    ? `${describeAttachmentSnapshot(pendingSnapshot)} will be appended to this draft.`
-    : "Choose more images or videos to append to this draft.";
+    ? `${describeAttachmentSnapshot(pendingSnapshot)} will be added to this post plan.`
+    : "Choose more images or videos to add to this post plan.";
   refreshGiveawayState();
 
   document.querySelectorAll("[data-account-service]").forEach((wrapper) => {
@@ -737,11 +737,11 @@ document.getElementById("scheduled-post-update-form").addEventListener("submit",
       return wrapper?.dataset.accountService === "instagram";
     });
     if (instagramTargetIds.length !== 1 || postPayload.target_account_ids.length !== 1) {
-      alert("Instagram giveaway posts must target exactly one Instagram destination account.");
+      alert("Instagram giveaway posts need exactly one Instagram destination account.");
       return;
     }
     if (!postPayload.giveaway?.giveaway_end_at) {
-      alert("Instagram giveaway posts require a giveaway end time.");
+      alert("Instagram giveaway posts need an end time.");
       return;
     }
   }
@@ -762,7 +762,7 @@ document.getElementById("scheduled-post-update-form").addEventListener("submit",
     body: payload,
   });
   if (!response.ok) {
-    alert(await response.text());
+    alert(await window.readApiMessage(response));
     return;
   }
   window.location.reload();
@@ -771,7 +771,7 @@ document.getElementById("scheduled-post-update-form").addEventListener("submit",
 document.getElementById("send-now-button").addEventListener("click", async () => {
   const response = await fetch(`/scheduled-posts/${postId}/send-now`, {method: "POST"});
   if (!response.ok) {
-    alert(await response.text());
+    alert(await window.readApiMessage(response));
     return;
   }
   window.location.reload();
@@ -781,7 +781,7 @@ if (confirmGiveawayWinnerButton) {
   confirmGiveawayWinnerButton.addEventListener("click", async () => {
     const response = await fetch(`/scheduled-posts/${postId}/giveaway/review/confirm`, {method: "POST"});
     if (!response.ok) {
-      alert(await response.text());
+      alert(await window.readApiMessage(response));
       return;
     }
     window.location.reload();
@@ -792,7 +792,7 @@ if (advanceGiveawayWinnerButton) {
   advanceGiveawayWinnerButton.addEventListener("click", async () => {
     const response = await fetch(`/scheduled-posts/${postId}/giveaway/review/advance`, {method: "POST"});
     if (!response.ok) {
-      alert(await response.text());
+      alert(await window.readApiMessage(response));
       return;
     }
     window.location.reload();
@@ -801,12 +801,12 @@ if (advanceGiveawayWinnerButton) {
 
 if (deleteDraftButton) {
   deleteDraftButton.addEventListener("click", async () => {
-    const confirmed = window.confirm("Delete this draft scheduled post? This removes it from the scheduler list.");
+    const confirmed = window.confirm("Delete this draft? It will disappear from the planner.");
     if (!confirmed) return;
 
     const response = await fetch(`/scheduled-posts/${postId}`, {method: "DELETE"});
     if (!response.ok) {
-      alert(await response.text());
+      alert(await window.readApiMessage(response));
       return;
     }
     window.location.href = "/scheduled-posts/page";

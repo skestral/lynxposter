@@ -164,11 +164,11 @@ def test_persona_detail_template_renders_instagram_token_tracking_controls():
         service_definitions=iter_service_definitions(),
     )
 
-    assert "Token Lifecycle" in html
-    assert "Record Token Refreshed" in html
+    assert "Token Lifespan" in html
+    assert "Record Token Refresh" in html
     assert "instagram-token-refresh-button" in html
-    assert "Validate Login" in html
-    assert "Last Account Error" in html
+    assert "Check Login" in html
+    assert "Last connection hiccup" in html
     assert "Instagram login failed. Challenge required." in html
 
 
@@ -276,7 +276,7 @@ def test_scheduled_post_templates_render_attachment_previews():
     assert '/media/attachments/attachment-1' in detail_html
     assert 'upload-preview-list' in list_html
     assert 'name="uploads"' in detail_html
-    assert 'Selected images and videos will be attached' in list_html
+    assert 'Selected images and videos will travel with this post plan.' in list_html
     assert 'Post Snapshot' in detail_html
     assert 'Post Snapshot' in list_html
     assert 'id="compose-tabs"' in list_html
@@ -296,7 +296,7 @@ def test_scheduled_post_templates_render_attachment_previews():
     assert 'Delete Draft' in detail_html
     assert 'Post Type' in detail_html
     assert 'Post Type' in list_html
-    assert 'Last Post Error' in detail_html
+    assert 'Last delivery hiccup' in detail_html
     assert 'Delivery Outcome' in detail_html
     assert 'Succeeded' in detail_html
     assert 'Failed' in detail_html
@@ -468,11 +468,11 @@ def test_dashboard_template_shows_recent_scheduled_post_errors():
         instagram_webhook_observability=None,
     )
 
-    assert "Recent Scheduled Posts" in html
+    assert "Recent Post Plans" in html
     assert "Instagram session expired." in html
     assert "Failure" in html
     assert "delivery-summary-pill is-failure" in html
-    assert "Recent Worker Events" in html
+    assert "Recent Automation Runs" in html
     assert "Autorun Run" in html
     assert "Imported 4 posts from Instagram" in html
 
@@ -705,7 +705,7 @@ def test_logs_template_renders_grouped_worker_runs():
         instagram_webhook_observability=None,
     )
 
-    assert "Worker Runs" in html
+    assert "Automation Runs" in html
     assert "Manual Run" in html
     assert "Lynx" in html
     assert "Savannah" in html
@@ -839,7 +839,7 @@ def test_logs_template_renders_instagram_webhook_observability_for_admin():
         },
     )
 
-    assert "Instagram Webhook Observatory" in html
+    assert "Instagram Webhook Activity" in html
     assert "Field Activity" in html
     assert "Recent Deliveries" in html
     assert "Count me in @friend" in html

@@ -5,10 +5,10 @@
         <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
             <div>
                 <div class="section-kicker mb-2">Persona Library</div>
-                <h1 class="h3 mb-1">Manage personas</h1>
-                <div class="text-secondary">Each persona keeps its own account graph, routing map, and posting defaults.</div>
+                <h1 class="h3 mb-1">Build your cast</h1>
+                <div class="text-secondary">Each persona keeps its own accounts, routes, and posting defaults in one tidy den.</div>
             </div>
-            <span class="badge soft-badge rounded-pill px-3 py-2">{{ personas|length }} total personas</span>
+            <span class="badge soft-badge rounded-pill px-3 py-2">{{ personas|length }} personas</span>
         </div>
     </div>
 </div>
@@ -41,7 +41,7 @@
                             <div class="col-md-6 d-flex align-items-end">
                                 <div class="form-check">
                                     <input class="form-check-input" type="checkbox" name="is_enabled" checked>
-                                    <label class="form-check-label">Enabled</label>
+                                    <label class="form-check-label">Ready to use</label>
                                 </div>
                             </div>
                         </div>
@@ -54,18 +54,18 @@
                                 <input class="form-control" name="max_retries" type="number" value="5">
                             </div>
                             <div class="col-md-4">
-                                <label class="form-label">Max Posts / Hour</label>
+                                <label class="form-label">Max Posts Per Hour</label>
                                 <input class="form-control" name="max_per_hour" type="number" value="0">
                             </div>
                             <div class="col-md-4">
-                                <label class="form-label">Overflow Policy</label>
+                                <label class="form-label">When The Hourly Cap Is Hit</label>
                                 <select class="form-select" name="overflow_posts">
                                     <option value="retry" selected>Retry</option>
                                     <option value="skip">Skip</option>
                                 </select>
                             </div>
                             <div class="col-md-4">
-                                <label class="form-label">Lookback Hours</label>
+                                <label class="form-label">Lookback Window (Hours)</label>
                                 <input class="form-control" name="post_time_limit" type="number" value="12">
                             </div>
                             <div class="col-md-4">
@@ -78,7 +78,7 @@
                                 </select>
                             </div>
                             <div class="col-md-4">
-                                <label class="form-label">Mentions Policy</label>
+                                <label class="form-label">What To Do With Mentions</label>
                                 <select class="form-select" name="mentions">
                                     <option value="strip" selected>Strip</option>
                                     <option value="keep">Keep</option>
@@ -87,13 +87,13 @@
                             <div class="col-md-6">
                                 <div class="form-check">
                                     <input class="form-check-input" type="checkbox" name="quote_posts" checked>
-                                    <label class="form-check-label">Allow Quote Posts</label>
+                                    <label class="form-check-label">Allow quote posts</label>
                                 </div>
                             </div>
                             <div class="col-md-6">
                                 <div class="form-check">
                                     <input class="form-check-input" type="checkbox" name="post_default" checked>
-                                    <label class="form-check-label">Enable Default Posting</label>
+                                    <label class="form-check-label">Post automatically when routes match</label>
                                 </div>
                             </div>
                             <div class="col-12">
@@ -101,7 +101,7 @@
                                     <input class="form-check-input" type="checkbox" name="import_existing_posts">
                                     <label class="form-check-label">Import existing posts on first scan</label>
                                 </div>
-                                <div class="small text-secondary">Leave this off to establish a safe baseline and only crosspost new content going forward.</div>
+                                <div class="small text-secondary">Leave this off for a clean start so only fresh posts begin traveling.</div>
                             </div>
                         </div>
                     </div>
@@ -117,10 +117,10 @@
         <div class="card section-card h-100">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center mb-3">
-                    <div>
-                        <div class="section-kicker mb-2">Library</div>
-                        <h2 class="h5 mb-0">Existing Personas</h2>
-                    </div>
+                        <div>
+                            <div class="section-kicker mb-2">Library</div>
+                            <h2 class="h5 mb-0">Saved Personas</h2>
+                        </div>
                     <span class="badge soft-badge rounded-pill px-3 py-2">{{ personas|length }} total</span>
                 </div>
                 <div class="table-responsive">
@@ -143,10 +143,10 @@
                                         <span class="badge text-bg-secondary">Disabled</span>
                                     {% endif %}
                                 </td>
-                                <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="/personas/{{ persona.id }}/page">Manage</a></td>
+                                <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="/personas/{{ persona.id }}/page">Open</a></td>
                             </tr>
                         {% else %}
-                            <tr><td colspan="4" class="text-secondary">No personas available.</td></tr>
+                            <tr><td colspan="4" class="text-secondary">No personas yet. Create one to get the ball rolling.</td></tr>
                         {% endfor %}
                         </tbody>
                     </table>
@@ -189,7 +189,7 @@ document.getElementById("persona-create-form").addEventListener("submit", async 
     body: JSON.stringify(payload),
   });
   if (!response.ok) {
-    alert(await response.text());
+    alert(await window.readApiMessage(response));
     return;
   }
   window.location.reload();

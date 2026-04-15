@@ -4,8 +4,8 @@
     <div class="col-12 col-xl-5">
         <div class="card section-card">
             <div class="card-body">
-                <h1 class="h4">Publishing Sandbox</h1>
-                <p class="text-secondary">Preview the exact per-account payload shape, validate it, and compare it to expectations without hitting any live services.</p>
+                <h1 class="h4">Preview Studio</h1>
+                <p class="text-secondary">Preview how each destination would receive a post without sending anything live.</p>
                 {% if sandbox_source_label %}
                 <div class="alert alert-info">{{ sandbox_source_label }}</div>
                 {% endif %}
@@ -38,7 +38,7 @@
                         </select>
                     </div>
                     <div class="col-12">
-                        <label class="form-label">Attachment Preview Inputs</label>
+                        <label class="form-label">Attachment Preview</label>
                         <input class="form-control" id="sandbox-uploads" name="uploads" type="file" multiple>
                         <div id="sandbox-attachment-list" class="mt-2"></div>
                         <button class="btn btn-sm btn-outline-secondary mt-2 d-none" type="button" id="clear-saved-attachments-button">Clear Saved Attachments</button>
@@ -49,10 +49,10 @@
                     </div>
                     <div class="col-12">
                         <div class="border rounded p-3 bg-light-subtle">
-                            <h2 class="h6 mb-3">Expectations</h2>
+                            <h2 class="h6 mb-3">Quick Checks</h2>
                             <div class="row g-3">
                                 <div class="col-md-6">
-                                    <label class="form-label">Expected Target Count</label>
+                                    <label class="form-label">Expected Destinations</label>
                                     <input class="form-control" name="expected_target_count" type="number" min="0">
                                 </div>
                                 <div class="col-md-6">
@@ -90,7 +90,7 @@
                                     </select>
                                 </div>
                                 <div class="col-md-6">
-                                    <label class="form-label">Require Source Link In Payload</label>
+                                    <label class="form-label">Require Original Link</label>
                                     <select class="form-select" name="require_source_link_in_payload">
                                         <option value="">Ignore</option>
                                         <option value="true">Yes</option>
@@ -101,12 +101,12 @@
                         </div>
                     </div>
                     <div class="col-12 d-flex gap-2 flex-wrap">
-                        <button class="btn btn-primary" type="submit">Run Sandbox Preview</button>
-                        <a class="btn btn-outline-secondary" href="/scheduled-posts/page">Back To Scheduled Posts</a>
+                        <button class="btn btn-primary" type="submit">Run Preview</button>
+                        <a class="btn btn-outline-secondary" href="/scheduled-posts/page">Back To Planner</a>
                     </div>
                 </form>
                 {% else %}
-                <div class="alert alert-light border mb-0">Create a persona and at least one destination account before using the sandbox.</div>
+                <div class="alert alert-light border mb-0">Create a persona and at least one destination account before using Preview Studio.</div>
                 {% endif %}
             </div>
         </div>
@@ -116,12 +116,12 @@
             <div class="card-body">
                 <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
                     <div>
-                        <h2 class="h5 mb-1">Dry-Run Results</h2>
-                        <p class="text-secondary mb-0">Every preview here is generated locally from the adapter translation rules. No publish calls or live uploads are performed.</p>
+                        <h2 class="h5 mb-1">Preview Results</h2>
+                        <p class="text-secondary mb-0">Everything here is generated locally. No posts, uploads, or live API calls leave lynxposter.</p>
                     </div>
-                    <span class="badge soft-badge rounded-pill" id="sandbox-result-badge">Waiting for preview</span>
+                    <span class="badge soft-badge rounded-pill" id="sandbox-result-badge">Waiting to preview</span>
                 </div>
-                <div id="sandbox-summary" class="mb-3 text-secondary">Run a sandbox preview to inspect the payload shape for each selected account.</div>
+                <div id="sandbox-summary" class="mb-3 text-secondary">Run a preview to inspect what each selected destination would receive.</div>
                 <div id="sandbox-results" class="d-grid gap-3"></div>
             </div>
         </div>
@@ -182,7 +182,7 @@ function buildAttachmentInputs() {
 function renderAttachmentList() {
   const attachments = buildAttachmentInputs();
   if (!attachments.length) {
-    attachmentList.innerHTML = '<div class="small text-secondary">No attachment metadata loaded into the sandbox yet.</div>';
+    attachmentList.innerHTML = '<div class="small text-secondary">No attachment details loaded yet.</div>';
     clearSavedAttachmentsButton?.classList.add("d-none");
     return;
   }
@@ -214,7 +214,7 @@ function renderTargetAccounts() {
   const selectedIds = selectedTargetIdsFromSeed(accounts);
   targetAccountList.innerHTML = "";
   if (!accounts.length) {
-    targetAccountList.innerHTML = '<div class="col-12"><div class="alert alert-light border mb-0">This persona has no enabled destination accounts yet.</div></div>';
+    targetAccountList.innerHTML = '<div class="col-12"><div class="alert alert-light border mb-0">This persona does not have any ready destination accounts yet.</div></div>';
     return;
   }
   for (const account of accounts) {
@@ -320,7 +320,7 @@ function renderPreviewResults(result) {
             ${renderChecks(preview.expectation_checks)}
           </div>
           <div class="col-12">
-            <div class="small text-secondary mb-1">Request Shape${preview.endpoint_label ? ` • ${escapeHtml(preview.endpoint_label)}` : ""}</div>
+            <div class="small text-secondary mb-1">Payload Preview${preview.endpoint_label ? ` • ${escapeHtml(preview.endpoint_label)}` : ""}</div>
             <pre class="bg-light border rounded p-3 mb-0"><code>${escapeHtml(JSON.stringify(preview.request_shape, null, 2))}</code></pre>
           </div>
           <div class="col-12">
@@ -371,7 +371,7 @@ function buildPayload() {
 async function runSandboxPreview() {
   resultBadge.textContent = "Running preview";
   resultBadge.className = "badge rounded-pill text-bg-primary";
-  summaryEl.textContent = "Generating sandbox preview...";
+  summaryEl.textContent = "Generating your preview...";
   resultsEl.innerHTML = "";
   const response = await fetch("/sandbox/preview", {
     method: "POST",
@@ -379,7 +379,7 @@ async function runSandboxPreview() {
     body: JSON.stringify(buildPayload()),
   });
   if (!response.ok) {
-    summaryEl.textContent = await response.text();
+    summaryEl.textContent = await window.readApiMessage(response);
     resultBadge.textContent = "Preview failed";
     resultBadge.className = "badge rounded-pill text-bg-danger";
     return;

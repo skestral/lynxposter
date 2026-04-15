@@ -7,14 +7,14 @@
             <div class="card-body p-4">
                 <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
                     <div>
-                        <h1 class="h3 mb-2">Crossposting and scheduling for all your personas</h1>
-                        <p class="mb-0 text-secondary">Manage accounts, routing, queued work, and operational logs from one local service.</p>
+                        <h1 class="h3 mb-2">Welcome to your posting den</h1>
+                        <p class="mb-0 text-secondary">Keep personas, post plans, and activity in one tidy spot while lynxposter handles the wandering.</p>
                         {% if current_principal.is_admin %}
-                        <p class="mb-0 small text-secondary mt-2">Admin controls stay available here too, including user management, app settings, and automation controls.</p>
+                        <p class="mb-0 small text-secondary mt-2">Admin tools still stay close at paw, including people, instance settings, and automation controls.</p>
                         {% endif %}
                     </div>
                     <div class="d-flex gap-2 flex-wrap">
-                        <span class="badge rounded-pill text-bg-light border px-3 py-2" id="dashboard-live-update-status">Live updates on</span>
+                        <span class="badge rounded-pill text-bg-light border px-3 py-2" id="dashboard-live-update-status">Live updates purring</span>
                         {% if current_principal.is_user %}
                         <span class="badge rounded-pill soft-badge px-3 py-2">{{ personas|length }} personas</span>
                         <span class="badge rounded-pill soft-badge px-3 py-2">{{ account_count }} accounts</span>
@@ -30,8 +30,8 @@
                 <div class="mt-4 d-flex gap-2 flex-wrap">
                     {% if current_principal.is_user %}
                     <a class="btn btn-primary" href="/personas/page">Manage Personas</a>
-                    <a class="btn btn-outline-primary" href="/scheduled-posts/page">Open Composer</a>
-                    <a class="btn btn-outline-secondary" href="/logs/page">View Logs</a>
+                    <a class="btn btn-outline-primary" href="/scheduled-posts/page">Open Planner</a>
+                    <a class="btn btn-outline-secondary" href="/logs/page">View Activity</a>
                     {% endif %}
                     {% if current_principal.is_admin %}
                     <a class="btn btn-primary" href="/admin/users/page">Manage Users</a>
@@ -55,8 +55,8 @@
             <div class="card-body">
                 <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
                     <div>
-                        <h2 class="h5 mb-1">Automation Control</h2>
-                        <p class="text-secondary mb-0">Autorun now operates as one full cycle every {{ scheduler_status.autorun_interval_seconds // 60 }} minutes, writes start and completion logs, and will not perform first-sync historical imports. Any intentional backfill must be run manually.</p>
+                        <h2 class="h5 mb-1">Automation Watch</h2>
+                        <p class="text-secondary mb-0">Autorun makes one full pass every {{ scheduler_status.autorun_interval_seconds // 60 }} minutes, logs both the start and finish, and only handles fresh content unless you intentionally run a backfill yourself.</p>
                     </div>
                     <div class="d-flex gap-2 flex-wrap align-items-center">
                         {% if scheduler_status.automation_enabled %}
@@ -97,7 +97,7 @@
                     {% endif %}
                 </div>
                 {% else %}
-                <div class="mt-3 small text-secondary">Automation controls are restricted to admins in multi-user mode.</div>
+                <div class="mt-3 small text-secondary">Automation controls stay admin-only when more than one person uses the app.</div>
                 {% endif %}
                 <div id="scheduler-feedback" class="small-muted mt-3"></div>
             </div>
@@ -130,7 +130,7 @@
                                 </td>
                             </tr>
                         {% else %}
-                            <tr><td colspan="3" class="text-secondary">No personas yet.</td></tr>
+                            <tr><td colspan="3" class="text-secondary">No personas yet. Create one to start prowling.</td></tr>
                         {% endfor %}
                         </tbody>
                     </table>
@@ -147,7 +147,7 @@
                     <div class="d-flex gap-2 flex-wrap">
                         {% if alert_events %}
                         <form method="post" action="/dashboard/alerts/clear" class="m-0">
-                            <button class="btn btn-sm btn-outline-danger" type="submit">Clear Dashboard List</button>
+                            <button class="btn btn-sm btn-outline-danger" type="submit">Clear Dashboard Alerts</button>
                         </form>
                         {% endif %}
                         <a href="/logs/page" class="btn btn-sm btn-outline-secondary">Inspect</a>
@@ -174,7 +174,7 @@
                                 <td class="text-danger">{{ alert.message }}</td>
                             </tr>
                         {% else %}
-                            <tr><td colspan="4" class="text-secondary">No alert events recorded yet.</td></tr>
+                            <tr><td colspan="4" class="text-secondary">No alerts right now.</td></tr>
                         {% endfor %}
                         </tbody>
                     </table>
@@ -190,9 +190,9 @@
         <div class="card section-card">
             <div class="card-body">
                 {% set instagram_webhook_panel_title = "Instagram Webhooks" %}
-                {% set instagram_webhook_panel_subtitle = "This is where incoming Meta test deliveries and live giveaway evidence land. Expand any event to inspect the full payload shape." %}
+                {% set instagram_webhook_panel_subtitle = "Incoming Meta test deliveries and live giveaway evidence land here. Expand any event to inspect the payload." %}
                 {% set instagram_webhook_panel_cta_href = "/logs/page#instagram-webhooks" %}
-                {% set instagram_webhook_panel_cta_label = "Open Full Logs" %}
+                {% set instagram_webhook_panel_cta_label = "Open Full Activity" %}
                 {% include "_instagram_webhook_observability.html" %}
             </div>
         </div>
@@ -206,7 +206,7 @@
         <div class="card section-card h-100">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h2 class="h5 mb-0">Recent Scheduled Posts</h2>
+                    <h2 class="h5 mb-0">Recent Post Plans</h2>
                     <a href="/scheduled-posts/page" class="btn btn-sm btn-outline-secondary">Open</a>
                 </div>
                 <div class="table-responsive">
@@ -225,7 +225,7 @@
                                 <td>{{ post.scheduled_for|datetime_display if post.scheduled_for else "-" }}</td>
                             </tr>
                         {% else %}
-                            <tr><td colspan="3" class="text-secondary">No scheduled posts yet.</td></tr>
+                            <tr><td colspan="3" class="text-secondary">No post plans yet.</td></tr>
                         {% endfor %}
                         </tbody>
                     </table>
@@ -238,7 +238,7 @@
         <div class="card section-card h-100">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h2 class="h5 mb-0">Recent Worker Events</h2>
+                    <h2 class="h5 mb-0">Recent Automation Runs</h2>
                     <a href="/logs/page" class="btn btn-sm btn-outline-secondary">Inspect</a>
                 </div>
                 <div class="d-flex flex-column gap-3">
@@ -270,7 +270,7 @@
                         <div class="mt-3 d-flex flex-column gap-3">
                             {% if run.system_events %}
                             <div>
-                                <div class="small fw-semibold text-secondary mb-2">Run-wide events</div>
+                                <div class="small fw-semibold text-secondary mb-2">App-wide notes</div>
                                 <div class="d-flex flex-column gap-2">
                                     {% for event in run.system_events %}
                                     <div class="border rounded p-2 bg-white">
@@ -313,7 +313,7 @@
                         </div>
                     </details>
                     {% else %}
-                    <div class="text-secondary">No worker events yet.</div>
+                    <div class="text-secondary">No automation activity yet.</div>
                     {% endfor %}
                 </div>
             </div>
@@ -327,7 +327,7 @@
 window.registerLiveUpdates?.({
   topics: {{ (["run_events", "alert_events", "scheduled_posts"] + (["instagram_webhooks"] if current_principal.is_admin else [])) | tojson }},
   statusElementId: "dashboard-live-update-status",
-  readyLabel: "Live updates on",
+  readyLabel: "Live updates purring",
   updatingLabel: "Refreshing…",
 });
 
@@ -336,7 +336,7 @@ async function postSchedulerAction(url) {
   feedback.textContent = "Working...";
   const response = await fetch(url, {method: "POST"});
   if (!response.ok) {
-    feedback.textContent = await response.text();
+    feedback.textContent = await window.readApiMessage(response);
     return;
   }
   const result = await response.json();
