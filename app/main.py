@@ -889,6 +889,27 @@ def scheduled_posts_page(request: Request) -> HTMLResponse:
         )
 
 
+@app.get("/scheduled-posts/new/page", response_class=HTMLResponse)
+def scheduled_post_create_page(request: Request) -> HTMLResponse:
+    guarded = _page_guard(request, role="user")
+    if isinstance(guarded, RedirectResponse):
+        return guarded
+    principal = guarded
+    with db_session() as session:
+        owner_user_id = _owner_user_id_for_principal(principal)
+        personas = list_personas(session, owner_user_id=owner_user_id)
+        return templates.TemplateResponse(
+            name="scheduled_post_create.html",
+            request=request,
+            context=_template_context(
+                request,
+                personas=personas,
+                persona_targets=_persona_targets_context(personas),
+                service_post_guidance=service_composer_constraints_context(),
+            ),
+        )
+
+
 @app.get("/scheduled-posts/{post_id}/page", response_class=HTMLResponse)
 def scheduled_post_detail_page(post_id: str, request: Request) -> HTMLResponse:
     guarded = _page_guard(request, role="user")

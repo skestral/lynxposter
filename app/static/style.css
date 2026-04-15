@@ -909,6 +909,130 @@ details > summary::-webkit-details-marker {
     background: rgba(var(--lp-shadow-rgb), 0.08);
 }
 
+.planner-card {
+    padding: 0.85rem 0.9rem;
+    border: 1px solid rgba(var(--lp-shadow-rgb), 0.08);
+    border-radius: 1rem;
+    background: linear-gradient(180deg, var(--lp-elevated), var(--lp-elevated-soft));
+    box-shadow: 0 14px 30px rgba(var(--lp-shadow-rgb), 0.08);
+    transition:
+        transform var(--lp-transition),
+        box-shadow var(--lp-transition),
+        opacity var(--lp-transition),
+        border-color var(--lp-transition);
+}
+
+.planner-card.is-draggable {
+    cursor: grab;
+}
+
+.planner-card.is-locked {
+    opacity: 0.9;
+}
+
+.planner-card.is-dragging {
+    opacity: 0.45;
+    transform: rotate(-1.5deg) scale(0.98);
+    cursor: grabbing;
+}
+
+.planner-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 18px 38px rgba(var(--lp-shadow-rgb), 0.1);
+}
+
+.planner-card-compact {
+    padding: 0.72rem 0.78rem;
+}
+
+.planner-card-title {
+    font-weight: 650;
+    color: var(--lp-ink);
+    line-height: 1.35;
+}
+
+.planner-card-copy {
+    margin-top: 0.35rem;
+    color: var(--lp-ink);
+    font-size: 0.9rem;
+    line-height: 1.45;
+}
+
+.planner-card-meta {
+    margin-top: 0.45rem;
+    color: var(--lp-ink-soft);
+    font-size: 0.82rem;
+}
+
+.planner-drop-zone {
+    transition:
+        border-color var(--lp-transition),
+        background-color var(--lp-transition),
+        box-shadow var(--lp-transition);
+}
+
+.planner-drop-zone.is-active-drop {
+    border-color: rgba(var(--lp-accent-rgb), 0.38) !important;
+    background: linear-gradient(180deg, rgba(var(--lp-accent-rgb), 0.08), rgba(255, 255, 255, 0.7));
+    box-shadow:
+        inset 0 0 0 1px rgba(var(--lp-accent-rgb), 0.18),
+        0 18px 36px rgba(var(--lp-shadow-rgb), 0.12);
+}
+
+.scheduled-kanban-lane.is-readonly {
+    background: linear-gradient(180deg, rgba(var(--lp-shadow-rgb), 0.05), var(--lp-elevated-soft));
+}
+
+.composer-preview-shell {
+    position: sticky;
+    top: 1.5rem;
+}
+
+.composer-preview-phone {
+    border: 1px solid rgba(var(--lp-shadow-rgb), 0.08);
+    border-radius: 1.4rem;
+    background:
+        radial-gradient(circle at top right, rgba(var(--lp-accent-rgb), 0.14), transparent 38%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(250, 246, 240, 0.92));
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.6),
+        0 18px 42px rgba(var(--lp-shadow-rgb), 0.12);
+    padding: 1rem;
+}
+
+.composer-preview-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+}
+
+.composer-preview-body {
+    min-height: 9rem;
+    color: var(--lp-ink);
+    line-height: 1.55;
+    white-space: pre-wrap;
+}
+
+.composer-preview-media {
+    margin-top: 1rem;
+    padding: 0.85rem;
+    border: 1px dashed rgba(var(--lp-shadow-rgb), 0.16);
+    border-radius: 1rem;
+    color: var(--lp-ink-soft);
+    background: rgba(var(--lp-shadow-rgb), 0.04);
+}
+
+.composer-preview-footer {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-top: 1rem;
+    color: var(--lp-ink-soft);
+    font-size: 0.88rem;
+}
+
 .theme-picker-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -1196,6 +1320,10 @@ body[data-ui-mode="dark"] .alert-warning {
 
     .scheduled-kanban-board {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .composer-preview-shell {
+        position: static;
     }
 }
 

@@ -304,7 +304,7 @@ def update_scheduled_post(
         post.publish_overrides_json = payload.publish_overrides_json
     if payload.metadata_json is not None:
         post.metadata_json = payload.metadata_json
-    if payload.scheduled_for is not None:
+    if "scheduled_for" in payload.model_fields_set:
         post.scheduled_for = normalize_datetime(payload.scheduled_for)
 
     next_sort_order = len(post.attachments)

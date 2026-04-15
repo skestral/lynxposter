@@ -218,6 +218,60 @@ def test_update_scheduled_post_api_appends_multipart_attachments(api_stack, tmp_
         assert saved.attachments[1].alt_text == "New image"
 
 
+def test_update_scheduled_post_api_accepts_json_schedule_moves(api_stack):
+    api_client, SessionLocal = api_stack
+    with SessionLocal() as session:
+        persona = _create_persona(session, slug="scheduled-post-api-json-update")
+        destination = _create_destination_account(session, persona)
+        post = create_scheduled_post(
+            session,
+            ScheduledPostCreate.model_validate(
+                {
+                    "persona_id": persona.id,
+                    "body": "Ready to move",
+                    "status": "draft",
+                    "target_account_ids": [destination.id],
+                    "publish_overrides_json": {},
+                    "metadata_json": {},
+                    "scheduled_for": None,
+                }
+            ),
+            [],
+        )
+        session.commit()
+        post_id = post.id
+
+    schedule_response = api_client.put(
+        f"/scheduled-posts/{post_id}",
+        json={
+            "status": "scheduled",
+            "scheduled_for": "2026-04-15T14:30",
+        },
+    )
+
+    assert schedule_response.status_code == 200
+    assert schedule_response.json()["status"] == "scheduled"
+    assert schedule_response.json()["scheduled_for"] == "2026-04-15T14:30:00"
+
+    clear_response = api_client.put(
+        f"/scheduled-posts/{post_id}",
+        json={
+            "status": "draft",
+            "scheduled_for": None,
+        },
+    )
+
+    assert clear_response.status_code == 200
+    assert clear_response.json()["status"] == "draft"
+    assert clear_response.json()["scheduled_for"] is None
+
+    with SessionLocal() as session:
+        saved = get_post(session, post_id)
+        assert saved is not None
+        assert saved.status == "draft"
+        assert saved.scheduled_for is None
+
+
 def test_scheduled_post_api_exposes_delivery_outcome_breakdown(api_stack):
     api_client, SessionLocal = api_stack
     with SessionLocal() as session:

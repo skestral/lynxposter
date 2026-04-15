@@ -1,30 +1,53 @@
 {% extends "base.html" %}
-{% import "_delivery_summary_pills.html" as delivery_ui %}
 {% block content %}
-<div class="card hero-card section-card">
+<div class="card hero-card section-card mb-4">
     <div class="card-body p-4">
-        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+        <div class="d-flex flex-column flex-xl-row justify-content-between align-items-xl-center gap-3">
             <div>
                 <div class="section-kicker mb-2">Planner</div>
                 <h1 class="h4 mb-1">Post Planner</h1>
-                <p class="text-secondary mb-0">Draft once, map out the calendar, and keep an eye on every post plan from one page.</p>
+                <p class="text-secondary mb-0">See the full queue at a glance, drag plans into place, and keep every post lined up for its next pounce.</p>
             </div>
             <div class="d-flex gap-2 flex-wrap">
-                <span class="badge soft-badge rounded-pill px-3 py-2">{{ posts|length }} posts in view</span>
-                <span class="badge soft-badge rounded-pill px-3 py-2">{{ persona_targets|length }} personas ready</span>
+                <a class="btn btn-primary" href="/scheduled-posts/new/page">Create Post</a>
+                <a class="btn btn-outline-secondary" href="/sandbox/page">Open Preview Studio</a>
+            </div>
+        </div>
+        <div class="d-flex gap-2 flex-wrap mt-4">
+            <span class="badge soft-badge rounded-pill px-3 py-2" id="planner-total-count">{{ posts|length }} posts in view</span>
+            <span class="badge soft-badge rounded-pill px-3 py-2" id="planner-scheduled-count">0 scheduled</span>
+            <span class="badge soft-badge rounded-pill px-3 py-2" id="planner-attention-count">0 need attention</span>
+            <span class="badge soft-badge rounded-pill px-3 py-2" id="planner-persona-count">{{ persona_name_by_id|length }} personas ready</span>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-12 col-xl-7">
+        <div class="card section-card h-100">
+            <div class="card-body">
+                <div class="section-kicker mb-2">Quick Moves</div>
+                <h2 class="h5 mb-2">Drag, drop, and tidy the queue</h2>
+                <p class="text-secondary mb-0">Drop a card onto a calendar day to reschedule it, or move it between board lanes to draft it, schedule it, or queue it up right meow.</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-xl-5">
+        <div class="card section-card h-100">
+            <div class="card-body">
+                <div class="section-kicker mb-2">Heads Up</div>
+                <h2 class="h5 mb-2">System lanes stay honest</h2>
+                <p class="text-secondary mb-0">Needs Attention and Completed reflect delivery results. They show what happened in the wild, while the other lanes are your editing playground.</p>
             </div>
         </div>
     </div>
 </div>
 
-<div class="card section-card mt-4">
+<div class="card section-card">
     <div class="card-body">
         <ul class="nav nav-pills glass-tabs" id="scheduled-workspace-tabs" role="tablist">
             <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="workspace-new-post-tab" data-bs-toggle="tab" data-bs-target="#workspace-new-post-pane" type="button" role="tab">New Post</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="workspace-calendar-tab" data-bs-toggle="tab" data-bs-target="#workspace-calendar-pane" type="button" role="tab">Calendar</button>
+                <button class="nav-link active" id="workspace-calendar-tab" data-bs-toggle="tab" data-bs-target="#workspace-calendar-pane" type="button" role="tab">Calendar</button>
             </li>
             <li class="nav-item" role="presentation">
                 <button class="nav-link" id="workspace-kanban-tab" data-bs-toggle="tab" data-bs-target="#workspace-kanban-pane" type="button" role="tab">Board</button>
@@ -32,236 +55,12 @@
         </ul>
 
         <div class="tab-content tab-pane-stack mt-4">
-            <div class="tab-pane fade show active" id="workspace-new-post-pane" role="tabpanel" aria-labelledby="workspace-new-post-tab" tabindex="0">
-                <div class="row g-4">
-                    <div class="col-12 col-xl-5">
-                        <div class="card section-card h-100">
-                            <div class="card-body">
-                                <div class="d-flex justify-content-between align-items-start gap-3 mb-4">
-                                    <div>
-                                        <div class="section-kicker mb-2">Composer</div>
-                                        <h2 class="h5 mb-1">Build a post plan</h2>
-                                        <p class="text-secondary mb-0">Draft once and choose exactly where it should go.</p>
-                                    </div>
-                                    <span class="badge soft-badge rounded-pill px-3 py-2">Guided flow</span>
-                                </div>
-                                <form id="scheduled-post-form" class="tab-pane-stack">
-                                    <ul class="nav nav-pills glass-tabs" id="compose-tabs" role="tablist">
-                                        <li class="nav-item" role="presentation">
-                                            <button class="nav-link active" id="compose-basics-tab" data-bs-toggle="tab" data-bs-target="#compose-basics-pane" type="button" role="tab">Basics</button>
-                                        </li>
-                                        <li class="nav-item" role="presentation">
-                                            <button class="nav-link" id="compose-giveaway-tab" data-bs-toggle="tab" data-bs-target="#compose-giveaway-pane" type="button" role="tab">Giveaway</button>
-                                        </li>
-                                        <li class="nav-item" role="presentation">
-                                            <button class="nav-link" id="compose-media-tab" data-bs-toggle="tab" data-bs-target="#compose-media-pane" type="button" role="tab">Media</button>
-                                        </li>
-                                        <li class="nav-item" role="presentation">
-                                            <button class="nav-link" id="compose-targets-tab" data-bs-toggle="tab" data-bs-target="#compose-targets-pane" type="button" role="tab">Targets</button>
-                                        </li>
-                                    </ul>
-
-                                    <div class="tab-content tab-pane-stack">
-                                        <div class="tab-pane fade show active" id="compose-basics-pane" role="tabpanel" aria-labelledby="compose-basics-tab" tabindex="0">
-                                            <div class="surface-panel">
-                                                <div class="row g-3">
-                                                    <div class="col-12">
-                                                        <label class="form-label">Persona</label>
-                                                        <select class="form-select" name="persona_id" id="persona-select">
-                                                            {% for persona in personas %}
-                                                            <option value="{{ persona.id }}">{{ persona.name }}</option>
-                                                            {% endfor %}
-                                                        </select>
-                                                    </div>
-                                                    <div class="col-12">
-                                                        <div class="d-flex justify-content-between align-items-center gap-3">
-                                                            <label class="form-label mb-0">Body</label>
-                                                            <span class="small text-secondary" id="body-length-indicator">0 chars</span>
-                                                        </div>
-                                                        <textarea class="form-control" name="body" rows="6"></textarea>
-                                                    </div>
-                                                    <div class="col-md-6">
-                                                        <label class="form-label">Post Type</label>
-                                                        <select class="form-select" name="post_type" id="post-type-select">
-                                                            <option value="standard">Standard Post</option>
-                                                            <option value="instagram_giveaway">Instagram Giveaway</option>
-                                                        </select>
-                                                    </div>
-                                                    <div class="col-md-6">
-                                                        <label class="form-label">Status</label>
-                                                        <select class="form-select" name="status">
-                                                            <option value="draft">Draft</option>
-                                                            <option value="scheduled">Scheduled</option>
-                                                        </select>
-                                                    </div>
-                                                    <div class="col-md-6">
-                                                        <label class="form-label">Scheduled For</label>
-                                                        <input class="form-control" name="scheduled_for" type="datetime-local">
-                                                    </div>
-                                                    <div class="col-md-6">
-                                                        <label class="form-label">Original Link</label>
-                                                        <input class="form-control" name="source_link">
-                                                    </div>
-                                                    <div class="col-md-6">
-                                                        <label class="form-label">Visibility</label>
-                                                        <select class="form-select" name="visibility">
-                                                            <option value="">Use persona default</option>
-                                                            <option value="public">Public</option>
-                                                            <option value="unlisted">Unlisted</option>
-                                                            <option value="private">Private</option>
-                                                            <option value="direct">Direct</option>
-                                                        </select>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div class="tab-pane fade" id="compose-giveaway-pane" role="tabpanel" aria-labelledby="compose-giveaway-tab" tabindex="0">
-                                            <div class="surface-panel giveaway-only d-none" id="giveaway-config-panel">
-                                                <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
-                                                    <div>
-                                                        <div class="fw-semibold">Instagram Giveaway Rules</div>
-                                                        <div class="small text-secondary">Giveaways need exactly one Instagram destination. Shares are treated as story mentions captured while the giveaway is live.</div>
-                                                    </div>
-                                                    <span class="badge text-bg-light border">One winner</span>
-                                                </div>
-                                                <div class="row g-3">
-                                                    <div class="col-md-6">
-                                                        <label class="form-label">Giveaway End Time</label>
-                                                        <input class="form-control" name="giveaway_end_at" type="datetime-local">
-                                                    </div>
-                                                    <div class="col-md-6">
-                                                        <label class="form-label">Friend Mentions Required</label>
-                                                        <input class="form-control" name="giveaway_min_friend_mentions" type="number" min="0" max="20" value="1">
-                                                    </div>
-                                                    <div class="col-md-6">
-                                                        <label class="form-label">Required Keywords</label>
-                                                        <input class="form-control" name="giveaway_required_keywords" placeholder="launch, giveaway">
-                                                        <div class="form-text">Optional comma-separated keywords that must appear in the entrant's comment.</div>
-                                                    </div>
-                                                    <div class="col-md-6">
-                                                        <label class="form-label">Required Hashtags</label>
-                                                        <input class="form-control" name="giveaway_required_hashtags" placeholder="#giveaway, #launch">
-                                                        <div class="form-text">Optional comma-separated hashtags.</div>
-                                                    </div>
-                                                    <div class="col-md-4">
-                                                        <div class="form-check mt-2">
-                                                            <input class="form-check-input" type="checkbox" name="giveaway_require_story_mention" checked>
-                                                            <label class="form-check-label">Require story mention</label>
-                                                        </div>
-                                                    </div>
-                                                    <div class="col-md-4">
-                                                        <div class="form-check mt-2">
-                                                            <input class="form-check-input" type="checkbox" name="giveaway_require_like">
-                                                            <label class="form-check-label">Require like</label>
-                                                        </div>
-                                                    </div>
-                                                    <div class="col-md-4">
-                                                        <div class="form-check mt-2">
-                                                            <input class="form-check-input" type="checkbox" name="giveaway_require_follow">
-                                                            <label class="form-check-label">Require follow</label>
-                                                        </div>
-                                                    </div>
-                                                    <div class="col-12">
-                                                        <div class="small text-secondary" id="giveaway-target-hint">Select exactly one Instagram destination account for giveaway posts.</div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <div class="surface-panel-soft">
-                                                <div class="small text-secondary">This tab wakes up when the post type is <strong>Instagram Giveaway</strong>.</div>
-                                            </div>
-                                        </div>
-
-                                        <div class="tab-pane fade" id="compose-media-pane" role="tabpanel" aria-labelledby="compose-media-tab" tabindex="0">
-                                            <div class="surface-panel">
-                                                <label class="form-label">Uploads</label>
-                                                <input class="form-control" name="uploads" type="file" multiple>
-                                                <div class="form-text" id="upload-summary">Selected images and videos will travel with this post plan.</div>
-                                                <div id="upload-preview-list" class="row g-3 mt-1"></div>
-                                            </div>
-                                            <div class="surface-panel-soft">
-                                                <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
-                                                    <div>
-                                                        <div class="fw-semibold">Post Snapshot</div>
-                                                        <div class="small text-secondary">Live counts for the current body, attachments, and selected destinations.</div>
-                                                    </div>
-                                                    <div class="d-flex gap-2 flex-wrap">
-                                                        <span class="badge text-bg-light border" id="snapshot-body-length">0 chars</span>
-                                                        <span class="badge text-bg-light border" id="snapshot-attachments">0 attachments</span>
-                                                        <span class="badge text-bg-light border" id="snapshot-targets">0 targets</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div class="tab-pane fade" id="compose-targets-pane" role="tabpanel" aria-labelledby="compose-targets-tab" tabindex="0">
-                                            <div class="surface-panel">
-                                                <label class="form-label">Destination Accounts</label>
-                                                <div id="target-account-list" class="row g-2"></div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div class="d-flex gap-2 flex-wrap">
-                                        <button class="btn btn-primary" type="submit">Save Post Plan</button>
-                                        <a class="btn btn-outline-secondary" href="/sandbox/page">Open Preview Studio</a>
-                                    </div>
-                                </form>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-12 col-xl-7">
-                        <div class="card section-card h-100">
-                            <div class="card-body">
-                                <div class="d-flex justify-content-between align-items-center mb-3">
-                                    <div>
-                                        <div class="section-kicker mb-2">Queue</div>
-                                        <h2 class="h5 mb-0">Recent Post Plans</h2>
-                                    </div>
-                                    <span class="badge soft-badge rounded-pill px-3 py-2">{{ posts|length }} recent</span>
-                                </div>
-                                <div class="table-responsive">
-                                    <table class="table align-middle mb-0">
-                                        <thead>
-                                            <tr><th>Status</th><th>Persona</th><th>Targets</th><th>Attachments</th><th>Scheduled</th><th></th></tr>
-                                        </thead>
-                                        <tbody>
-                                        {% for post in posts %}
-                                            <tr>
-                                                <td>
-                                                    {% if post.post_type == "instagram_giveaway" %}
-                                                    <div><span class="badge text-bg-warning-subtle border text-dark mb-2">Instagram Giveaway</span></div>
-                                                    {% endif %}
-                                                    <div>{{ post.display_status|replace('_', ' ')|title }}</div>
-                                                    {% if post.giveaway %}
-                                                    <div class="small text-secondary mt-1">Giveaway: {{ post.giveaway.status|replace('_', ' ')|title }}{% if post.giveaway.giveaway_end_at %} • ends {{ post.giveaway.giveaway_end_at|datetime_display }}{% endif %}</div>
-                                                    {% endif %}
-                                                    {{ delivery_ui.render(post) }}
-                                                </td>
-                                                <td>{{ persona_name_by_id.get(post.persona_id, post.persona_id) }}</td>
-                                                <td>{{ post.target_account_ids|length }}</td>
-                                                <td>{{ post.attachments|length }}</td>
-                                                <td>{{ post.scheduled_for|datetime_display if post.scheduled_for else "-" }}</td>
-                                                <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="/scheduled-posts/{{ post.id }}/page">Open</a></td>
-                                            </tr>
-                                        {% else %}
-                                            <tr><td colspan="6" class="text-secondary">No post plans yet.</td></tr>
-                                        {% endfor %}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="tab-pane fade" id="workspace-calendar-pane" role="tabpanel" aria-labelledby="workspace-calendar-tab" tabindex="0">
+            <div class="tab-pane fade show active" id="workspace-calendar-pane" role="tabpanel" aria-labelledby="workspace-calendar-tab" tabindex="0">
                 <div class="d-flex flex-column flex-xl-row justify-content-between align-items-xl-center gap-3 mb-4">
                     <div>
                         <div class="section-kicker mb-2">Planner</div>
                         <h2 class="h5 mb-1">Calendar View</h2>
-                        <p class="text-secondary mb-0">Switch between month and week to see what is going out, then open any card to edit it.</p>
+                        <p class="text-secondary mb-0">Drop cards onto a day, then pick the exact time in the quick pop-up.</p>
                     </div>
                     <div class="d-flex flex-wrap gap-2 align-items-center">
                         <div class="btn-group" role="group" aria-label="Calendar view switcher">
@@ -276,7 +75,7 @@
                 <div class="surface-panel-soft d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
                     <div>
                         <div class="fw-semibold" id="calendar-range-label">Loading calendar...</div>
-                        <div class="small text-secondary">Only posts with a scheduled time appear here. Drafts without a date stay on the board.</div>
+                        <div class="small text-secondary">Only posts with a scheduled time appear here. Drafts stay on the board until they are ready for the spotlight.</div>
                     </div>
                     <div class="d-flex gap-2 flex-wrap">
                         <span class="badge text-bg-light border" id="calendar-summary-total">0 scheduled</span>
@@ -288,9 +87,9 @@
                     <div class="scheduled-calendar-grid" id="scheduled-calendar-grid"></div>
                 </div>
                 <div class="scheduled-calendar-empty d-none" id="scheduled-calendar-empty">
-                        <div class="surface-panel text-center">
+                    <div class="surface-panel text-center">
                         <div class="fw-semibold mb-2">No post plans in this range</div>
-                        <div class="text-secondary">Move to a different month or week, or create one from the New Post tab.</div>
+                        <div class="text-secondary">Hop to another week or month, or create a fresh post plan.</div>
                     </div>
                 </div>
             </div>
@@ -300,9 +99,9 @@
                     <div>
                         <div class="section-kicker mb-2">Workflow</div>
                         <h2 class="h5 mb-1">Board View</h2>
-                        <p class="text-secondary mb-0">Watch plans move from draft to done, with a dedicated lane for anything that needs attention.</p>
+                        <p class="text-secondary mb-0">Use the first three lanes to shape the plan. The last two lanes report back on how the post actually landed.</p>
                     </div>
-                    <span class="badge soft-badge rounded-pill px-3 py-2">Grouped by status</span>
+                    <span class="badge soft-badge rounded-pill px-3 py-2">Drag cards between editable lanes</span>
                 </div>
                 <div class="scheduled-kanban-board" id="scheduled-kanban-board">
                     <div class="scheduled-kanban-lane" data-kanban-bucket="drafts">
@@ -313,29 +112,29 @@
                             </div>
                             <span class="badge text-bg-light border" id="kanban-count-drafts">0</span>
                         </div>
-                        <div class="scheduled-kanban-list" id="kanban-lane-drafts"></div>
+                        <div class="scheduled-kanban-list planner-drop-zone" id="kanban-lane-drafts" data-drop-type="bucket" data-drop-bucket="drafts"></div>
                     </div>
                     <div class="scheduled-kanban-lane" data-kanban-bucket="scheduled">
                         <div class="scheduled-kanban-lane-header">
                             <div>
                                 <div class="fw-semibold">Scheduled</div>
-                                <div class="small text-secondary">Ready and waiting for publish time.</div>
+                                <div class="small text-secondary">Ready and waiting for go time.</div>
                             </div>
                             <span class="badge text-bg-light border" id="kanban-count-scheduled">0</span>
                         </div>
-                        <div class="scheduled-kanban-list" id="kanban-lane-scheduled"></div>
+                        <div class="scheduled-kanban-list planner-drop-zone" id="kanban-lane-scheduled" data-drop-type="bucket" data-drop-bucket="scheduled"></div>
                     </div>
                     <div class="scheduled-kanban-lane" data-kanban-bucket="running">
                         <div class="scheduled-kanban-lane-header">
                             <div>
-                                <div class="fw-semibold">In Progress</div>
-                                <div class="small text-secondary">Posts actively moving through delivery.</div>
+                                <div class="fw-semibold">Queue Now</div>
+                                <div class="small text-secondary">Drop here to nudge the next send cycle.</div>
                             </div>
                             <span class="badge text-bg-light border" id="kanban-count-running">0</span>
                         </div>
-                        <div class="scheduled-kanban-list" id="kanban-lane-running"></div>
+                        <div class="scheduled-kanban-list planner-drop-zone" id="kanban-lane-running" data-drop-type="bucket" data-drop-bucket="running"></div>
                     </div>
-                    <div class="scheduled-kanban-lane" data-kanban-bucket="attention">
+                    <div class="scheduled-kanban-lane is-readonly" data-kanban-bucket="attention">
                         <div class="scheduled-kanban-lane-header">
                             <div>
                                 <div class="fw-semibold">Needs Attention</div>
@@ -345,11 +144,11 @@
                         </div>
                         <div class="scheduled-kanban-list" id="kanban-lane-attention"></div>
                     </div>
-                    <div class="scheduled-kanban-lane" data-kanban-bucket="done">
+                    <div class="scheduled-kanban-lane is-readonly" data-kanban-bucket="done">
                         <div class="scheduled-kanban-lane-header">
                             <div>
                                 <div class="fw-semibold">Completed</div>
-                                <div class="small text-secondary">Successfully delivered posts.</div>
+                                <div class="small text-secondary">Delivered successfully.</div>
                             </div>
                             <span class="badge text-bg-light border" id="kanban-count-done">0</span>
                         </div>
@@ -360,43 +159,84 @@
         </div>
     </div>
 </div>
+
+<div class="modal fade" id="planner-move-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form id="planner-move-form">
+                <div class="modal-header">
+                    <div>
+                        <div class="section-kicker mb-2">Quick Edit</div>
+                        <h2 class="h5 mb-0" id="planner-move-title">Move post</h2>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body tab-pane-stack">
+                    <div class="surface-panel-soft">
+                        <div class="fw-semibold" id="planner-move-target-label"></div>
+                        <div class="small text-secondary mt-1" id="planner-move-description"></div>
+                    </div>
+                    <div class="surface-panel-soft">
+                        <div class="small text-secondary">Post</div>
+                        <div class="fw-semibold" id="planner-move-post-label"></div>
+                        <div class="small text-secondary mt-1" id="planner-move-post-copy"></div>
+                    </div>
+                    <div class="alert alert-danger d-none mb-0" id="planner-move-error"></div>
+                    <div class="d-none" id="planner-move-scheduled-group">
+                        <label class="form-label" for="planner-move-scheduled-for">Scheduled For</label>
+                        <input class="form-control" id="planner-move-scheduled-for" type="datetime-local">
+                        <div class="form-text">Choose when this post should appear on the calendar.</div>
+                    </div>
+                    <div class="form-check d-none" id="planner-move-clear-schedule-wrap">
+                        <input class="form-check-input" type="checkbox" id="planner-move-clear-schedule">
+                        <label class="form-check-label" for="planner-move-clear-schedule">Clear the saved scheduled time while moving back to drafts</label>
+                    </div>
+                    <div class="d-none" id="planner-move-giveaway-group">
+                        <label class="form-label" for="planner-move-giveaway-end">Giveaway End Time</label>
+                        <input class="form-control" id="planner-move-giveaway-end" type="datetime-local">
+                        <div class="form-text">Giveaway posts need an end time before they can go live.</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Cancel</button>
+                    <button class="btn btn-primary" type="submit" id="planner-move-submit">Save Move</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-const personaTargets = {{ persona_targets | tojson }};
-const servicePostGuidance = {{ service_post_guidance | tojson }};
-const personaSelect = document.getElementById("persona-select");
-const targetAccountList = document.getElementById("target-account-list");
-const bodyTextarea = document.querySelector("textarea[name='body']");
-const uploadsInput = document.querySelector("input[name='uploads']");
-const uploadPreviewList = document.getElementById("upload-preview-list");
-const uploadSummary = document.getElementById("upload-summary");
-const bodyLengthIndicator = document.getElementById("body-length-indicator");
-const snapshotBodyLength = document.getElementById("snapshot-body-length");
-const snapshotAttachments = document.getElementById("snapshot-attachments");
-const snapshotTargets = document.getElementById("snapshot-targets");
-const postTypeSelect = document.getElementById("post-type-select");
-const giveawayConfigPanel = document.getElementById("giveaway-config-panel");
-const giveawayTargetHint = document.getElementById("giveaway-target-hint");
+const personaNameById = {{ persona_name_by_id | tojson }};
 const scheduledPostsPlannerData = [
 {% for post in posts %}
   {
     id: {{ post.id|tojson }},
     href: {{ ("/scheduled-posts/" ~ post.id ~ "/page")|tojson }},
+    personaId: {{ post.persona_id|tojson }},
     personaName: {{ persona_name_by_id.get(post.persona_id, post.persona_id)|tojson }},
     body: {{ post.body|default("", true)|tojson }},
     status: {{ post.status|tojson }},
     displayStatus: {{ post.display_status|tojson }},
     scheduledFor: {{ (post.scheduled_for.isoformat() if post.scheduled_for else None)|tojson }},
-    scheduledLabel: {{ (post.scheduled_for|datetime_display if post.scheduled_for else "Unscheduled")|tojson }},
     attachmentCount: {{ post.attachments|length }},
     targetCount: {{ post.target_account_ids|length }},
     postType: {{ post.post_type|tojson }},
     lastError: {{ post.last_error|tojson }},
     successCount: {{ post.delivery_breakdown.succeeded|length }},
     failureCount: {{ post.delivery_breakdown.failed|length }},
-    cancelledCount: {{ post.delivery_breakdown.cancelled|length }}
+    cancelledCount: {{ post.delivery_breakdown.cancelled|length }},
+    giveawayConfig: {% if post.giveaway %}{
+      giveaway_end_at: {{ (post.giveaway.giveaway_end_at.isoformat() if post.giveaway.giveaway_end_at else None)|tojson }},
+      min_friend_mentions: {{ post.giveaway.rules.min_friend_mentions|tojson }},
+      required_keywords: {{ post.giveaway.rules.required_keywords|tojson }},
+      required_hashtags: {{ post.giveaway.rules.required_hashtags|tojson }},
+      require_story_mention: {{ post.giveaway.rules.require_story_mention|tojson }},
+      require_like: {{ post.giveaway.rules.require_like|tojson }},
+      require_follow: {{ post.giveaway.rules.require_follow|tojson }}
+    }{% else %}null{% endif %}
   }{% if not loop.last %},{% endif %}
 {% endfor %}
 ];
@@ -411,6 +251,9 @@ const calendarPrevButton = document.getElementById("calendar-prev-button");
 const calendarNextButton = document.getElementById("calendar-next-button");
 const calendarTodayButton = document.getElementById("calendar-today-button");
 const calendarViewButtons = Array.from(document.querySelectorAll("[data-calendar-view]"));
+const plannerTotalCount = document.getElementById("planner-total-count");
+const plannerScheduledCount = document.getElementById("planner-scheduled-count");
+const plannerAttentionCount = document.getElementById("planner-attention-count");
 const kanbanLaneIds = {
   drafts: "kanban-lane-drafts",
   scheduled: "kanban-lane-scheduled",
@@ -429,6 +272,30 @@ const plannerState = {
   viewMode: "month",
   anchorDate: new Date(),
 };
+const plannerMoveModalElement = document.getElementById("planner-move-modal");
+const plannerMoveModal = new bootstrap.Modal(plannerMoveModalElement);
+const plannerMoveForm = document.getElementById("planner-move-form");
+const plannerMoveTitle = document.getElementById("planner-move-title");
+const plannerMoveTargetLabel = document.getElementById("planner-move-target-label");
+const plannerMoveDescription = document.getElementById("planner-move-description");
+const plannerMovePostLabel = document.getElementById("planner-move-post-label");
+const plannerMovePostCopy = document.getElementById("planner-move-post-copy");
+const plannerMoveError = document.getElementById("planner-move-error");
+const plannerMoveScheduledGroup = document.getElementById("planner-move-scheduled-group");
+const plannerMoveScheduledFor = document.getElementById("planner-move-scheduled-for");
+const plannerMoveClearScheduleWrap = document.getElementById("planner-move-clear-schedule-wrap");
+const plannerMoveClearSchedule = document.getElementById("planner-move-clear-schedule");
+const plannerMoveGiveawayGroup = document.getElementById("planner-move-giveaway-group");
+const plannerMoveGiveawayEnd = document.getElementById("planner-move-giveaway-end");
+const plannerMoveSubmit = document.getElementById("planner-move-submit");
+
+let plannerPosts = scheduledPostsPlannerData.map(normalizePlannerPost);
+let activeDragPostId = null;
+let currentMoveContext = null;
+
+if (plannerPosts.find((post) => post.scheduledDate)) {
+  plannerState.anchorDate = new Date(plannerPosts.find((post) => post.scheduledDate).scheduledDate);
+}
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -439,309 +306,45 @@ function escapeHtml(value) {
     .replaceAll("'", "&#39;");
 }
 
-function attachmentSnapshot(files) {
-  const items = Array.from(files || []);
-  const images = items.filter((item) => (item.type || "").startsWith("image/"));
-  const videos = items.filter((item) => (item.type || "").startsWith("video/"));
-  const others = items.filter((item) => !(item.type || "").startsWith("image/") && !(item.type || "").startsWith("video/"));
-  return {
-    total: items.length,
-    images: images.length,
-    videos: videos.length,
-    others: others.length,
-    imageMimeTypes: images.map((item) => String(item.type || "").toLowerCase()).filter(Boolean),
+function normalizePlannerPost(post) {
+  const scheduledDate = post.scheduledFor ? new Date(post.scheduledFor) : null;
+  const normalized = {
+    ...post,
+    scheduledDate: scheduledDate && !Number.isNaN(scheduledDate.getTime()) ? scheduledDate : null,
   };
+  normalized.bucket = statusBucket(normalized.displayStatus);
+  normalized.isLocked = normalized.bucket === "done" || ["posting", "in_progress"].includes(normalized.displayStatus);
+  normalized.canDrag = !normalized.isLocked;
+  return normalized;
 }
 
-function describeAttachmentSnapshot(snapshot) {
-  const pieces = [
-    `${snapshot.total} attachment${snapshot.total === 1 ? "" : "s"}`,
-    `${snapshot.images} image${snapshot.images === 1 ? "" : "s"}`,
-    `${snapshot.videos} video${snapshot.videos === 1 ? "" : "s"}`,
-  ];
-  if (snapshot.others) {
-    pieces.push(`${snapshot.others} other file${snapshot.others === 1 ? "" : "s"}`);
-  }
-  return pieces.join(" • ");
-}
-
-function describeServiceGuidance(rule) {
-  if (!rule) return "No structured posting guidance is available for this service yet.";
-  const parts = [];
-  if (rule.requires_media) parts.push("media required");
-  if (rule.requires_body_or_media) parts.push("needs text or media");
-  if (rule.body_limit != null && rule.body_limit_with_media != null && rule.body_limit_with_media !== rule.body_limit) {
-    parts.push(`${rule.body_limit} chars text-only`);
-    parts.push(`${rule.body_limit_with_media} chars with media`);
-  } else if (rule.body_limit != null) {
-    parts.push(`${rule.body_limit} chars`);
-  }
-  if (rule.max_attachments != null) parts.push(`up to ${rule.max_attachments} attachments`);
-  if (rule.max_images != null && rule.max_videos != null && rule.single_video_only) {
-    parts.push(`up to ${rule.max_images} images or ${rule.max_videos} video`);
-  } else {
-    if (rule.max_images != null) parts.push(`up to ${rule.max_images} images`);
-    if (rule.max_videos != null) parts.push(`up to ${rule.max_videos} video${rule.max_videos === 1 ? "" : "s"}`);
-  }
-  if (rule.multi_attachment_images_only) parts.push("image albums only for multi-attachment posts");
-  if (rule.allowed_image_mime_types?.length) parts.push("JPEG images only");
-  if (!parts.length && rule.notes?.length) return rule.notes[0];
-  return parts.join(" • ");
-}
-
-function evaluateServiceGuidance(rule, bodyText, snapshot) {
-  const issues = [];
-  const lines = [];
-  const activeBodyLimit = snapshot.total > 0 && rule?.body_limit_with_media != null ? rule.body_limit_with_media : rule?.body_limit;
-  const bodyLength = bodyText.length;
-
-  lines.push(activeBodyLimit != null ? `Body: ${bodyLength}/${activeBodyLimit} characters` : `Body: ${bodyLength} characters`);
-  lines.push(`Media: ${describeAttachmentSnapshot(snapshot)}`);
-
-  if (!rule) {
-    return {
-      tone: "warning",
-      lines: lines.concat(["No structured post guidance is available for this service yet."]),
-    };
-  }
-
-  if (rule.requires_body_or_media && !bodyText.trim() && snapshot.total === 0) {
-    issues.push("This service needs text or at least one attachment.");
-  }
-  if (rule.requires_media && snapshot.total === 0) {
-    issues.push("This service requires at least one image or video attachment.");
-  }
-  if (activeBodyLimit != null && bodyLength > activeBodyLimit) {
-    issues.push(`Body exceeds the current ${activeBodyLimit}-character limit.`);
-  }
-  if (rule.max_attachments != null && snapshot.total > rule.max_attachments) {
-    issues.push(`Attachment count exceeds the ${rule.max_attachments}-attachment limit.`);
-  }
-  if (rule.max_images != null && snapshot.images > rule.max_images) {
-    issues.push(`Image count exceeds the ${rule.max_images}-image limit.`);
-  }
-  if (rule.max_videos != null && snapshot.videos > rule.max_videos) {
-    issues.push(`Video count exceeds the ${rule.max_videos}-video limit.`);
-  }
-  if (rule.single_video_only && snapshot.videos > 0 && snapshot.total > 1) {
-    issues.push("This service currently supports either images or one video, not mixed or multi-video posts.");
-  }
-  if (rule.multi_attachment_images_only && snapshot.total > 1 && snapshot.images !== snapshot.total) {
-    issues.push("Multiple attachments must all be images for this service.");
-  }
-  if (
-    rule.allowed_image_mime_types?.length &&
-    snapshot.imageMimeTypes.some((mimeType) => !rule.allowed_image_mime_types.includes(mimeType))
-  ) {
-    issues.push(`Image uploads must use one of: ${rule.allowed_image_mime_types.join(", ")}.`);
-  }
-  if (
-    Array.isArray(rule.supported_attachment_kinds) &&
-    !rule.supported_attachment_kinds.includes("other") &&
-    snapshot.others > 0
-  ) {
-    issues.push("One or more selected attachments are not image or video media.");
-  }
-
-  if (!issues.length) {
-    const okLines = ["Current post fits this service's known app limits."];
-    if (rule.notes?.length) okLines.push(...rule.notes);
-    return {tone: "ok", lines: lines.concat(okLines)};
-  }
-
-  return {tone: "danger", lines: lines.concat(issues)};
-}
-
-function renderGuidanceLines(container, lines, tone) {
-  container.innerHTML = "";
-  lines.forEach((line, index) => {
-    const row = document.createElement("div");
-    row.className = index < 2 ? "text-secondary" : tone === "danger" ? "text-danger" : "text-secondary";
-    row.textContent = line;
-    container.appendChild(row);
+function normalizeApiPost(post) {
+  return normalizePlannerPost({
+    id: post.id,
+    href: `/scheduled-posts/${post.id}/page`,
+    personaId: post.persona_id,
+    personaName: personaNameById[post.persona_id] || post.persona_id,
+    body: post.body || "",
+    status: post.status,
+    displayStatus: post.display_status,
+    scheduledFor: post.scheduled_for,
+    attachmentCount: (post.attachments || []).length,
+    targetCount: (post.target_account_ids || []).length,
+    postType: post.post_type,
+    lastError: post.last_error,
+    successCount: (post.delivery_breakdown?.succeeded || []).length,
+    failureCount: (post.delivery_breakdown?.failed || []).length,
+    cancelledCount: (post.delivery_breakdown?.cancelled || []).length,
+    giveawayConfig: post.giveaway ? {
+      giveaway_end_at: post.giveaway.giveaway_end_at,
+      min_friend_mentions: post.giveaway.rules.min_friend_mentions,
+      required_keywords: post.giveaway.rules.required_keywords,
+      required_hashtags: post.giveaway.rules.required_hashtags,
+      require_story_mention: post.giveaway.rules.require_story_mention,
+      require_like: post.giveaway.rules.require_like,
+      require_follow: post.giveaway.rules.require_follow,
+    } : null,
   });
-}
-
-function renderTargetAccounts() {
-  const accounts = personaTargets[personaSelect.value] || [];
-  targetAccountList.innerHTML = "";
-  if (!accounts.length) {
-    targetAccountList.innerHTML = '<div class="col-12"><div class="alert alert-light border mb-0">This persona does not have any ready destination accounts yet.</div></div>';
-    return;
-  }
-  for (const account of accounts) {
-    const wrapper = document.createElement("div");
-    wrapper.className = "col-12";
-    wrapper.dataset.accountService = account.service;
-    wrapper.innerHTML = `
-      <div class="border rounded p-3 bg-white">
-        <div class="form-check">
-          <input class="form-check-input target-checkbox" type="checkbox" value="${account.id}" id="target-${account.id}" checked>
-          <label class="form-check-label fw-semibold" for="target-${account.id}">${account.label}</label>
-          <span class="small-muted ms-2">${account.service}</span>
-        </div>
-        <div class="small text-secondary mt-2">${escapeHtml(describeServiceGuidance(servicePostGuidance[account.service]))}</div>
-        <div class="mt-2">
-          <label class="form-label small-muted mb-1">Optional override body</label>
-          <textarea class="form-control override-body" data-account-id="${account.id}" rows="2"></textarea>
-        </div>
-        <div class="post-guidance-panel border rounded p-2 bg-body-tertiary mt-3" data-account-id="${account.id}">
-          <div class="fw-semibold small">Delivery Notes</div>
-          <div class="small text-secondary post-guidance-summary"></div>
-          <div class="small mt-2 post-guidance-status"></div>
-        </div>
-      </div>
-    `;
-    targetAccountList.appendChild(wrapper);
-  }
-  refreshPostGuidance();
-}
-
-function parseCommaSeparated(value) {
-  return String(value || "")
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function buildGiveawayPayload(form) {
-  if (postTypeSelect.value !== "instagram_giveaway") {
-    return null;
-  }
-  return {
-    giveaway_end_at: form.giveaway_end_at.value || null,
-    min_friend_mentions: Number.parseInt(form.giveaway_min_friend_mentions.value || "0", 10) || 0,
-    required_keywords: parseCommaSeparated(form.giveaway_required_keywords.value),
-    required_hashtags: parseCommaSeparated(form.giveaway_required_hashtags.value),
-    require_story_mention: form.giveaway_require_story_mention.checked,
-    require_like: form.giveaway_require_like.checked,
-    require_follow: form.giveaway_require_follow.checked,
-  };
-}
-
-function refreshGiveawayState() {
-  const isGiveaway = postTypeSelect.value === "instagram_giveaway";
-  giveawayConfigPanel.classList.toggle("d-none", !isGiveaway);
-  giveawayConfigPanel.classList.toggle("giveaway-only", isGiveaway);
-  const selectedInstagramTargets = Array.from(targetAccountList.querySelectorAll(".target-checkbox"))
-    .filter((checkbox) => checkbox.checked)
-    .map((checkbox) => checkbox.closest("[data-account-service]"))
-    .filter((wrapper) => wrapper?.dataset.accountService === "instagram").length;
-  if (isGiveaway) {
-    giveawayTargetHint.className = selectedInstagramTargets === 1
-      ? "small text-success"
-      : "small text-danger";
-    giveawayTargetHint.textContent = selectedInstagramTargets === 1
-      ? "Exactly one Instagram destination is selected."
-      : "Instagram giveaway posts must target exactly one Instagram destination account.";
-  }
-}
-
-personaSelect.addEventListener("change", renderTargetAccounts);
-renderTargetAccounts();
-
-function formatFileSize(bytes) {
-  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
-  const units = ["B", "KB", "MB", "GB"];
-  let value = bytes;
-  let unitIndex = 0;
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024;
-    unitIndex += 1;
-  }
-  return `${value.toFixed(value >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
-}
-
-function renderUploadPreviews() {
-  const files = Array.from(uploadsInput.files || []);
-  uploadPreviewList.innerHTML = "";
-  if (!files.length) {
-    uploadPreviewList.innerHTML = '<div class="col-12"><div class="small text-secondary">No files selected yet.</div></div>';
-    return;
-  }
-  for (const file of files) {
-    const item = document.createElement("div");
-    item.className = "col-12";
-    const preview = file.type.startsWith("image/")
-      ? `<img src="${URL.createObjectURL(file)}" alt="${file.name}" class="img-fluid rounded border" style="max-height: 220px;">`
-      : `<div class="border rounded bg-light px-3 py-4 text-secondary text-center">${file.type || "Attachment"}</div>`;
-    item.innerHTML = `
-      <div class="border rounded p-3 bg-white h-100">
-        <div class="row g-3 align-items-center">
-          <div class="col-md-4">
-            ${preview}
-          </div>
-          <div class="col-md-8">
-            <div class="fw-semibold">${file.name}</div>
-            <div class="small text-secondary">${file.type || "Unknown type"} • ${formatFileSize(file.size)}</div>
-          </div>
-        </div>
-      </div>
-    `;
-    uploadPreviewList.appendChild(item);
-  }
-}
-
-function refreshPostGuidance() {
-  const snapshot = attachmentSnapshot(uploadsInput.files || []);
-  const selectedTargets = Array.from(targetAccountList.querySelectorAll(".target-checkbox")).filter((checkbox) => checkbox.checked).length;
-
-  bodyLengthIndicator.textContent = `${bodyTextarea.value.length} chars`;
-  uploadSummary.textContent = snapshot.total
-    ? `${describeAttachmentSnapshot(snapshot)} will travel with this post plan.`
-    : "Selected images and videos will travel with this post plan.";
-  snapshotBodyLength.textContent = `${bodyTextarea.value.length} chars`;
-  snapshotAttachments.textContent = `${snapshot.total} attachment${snapshot.total === 1 ? "" : "s"}`;
-  snapshotTargets.textContent = `${selectedTargets} target${selectedTargets === 1 ? "" : "s"}`;
-  refreshGiveawayState();
-
-  targetAccountList.querySelectorAll(".col-12[data-account-service]").forEach((wrapper) => {
-    const checkbox = wrapper.querySelector(".target-checkbox");
-    const panel = wrapper.querySelector(".post-guidance-panel");
-    const summary = wrapper.querySelector(".post-guidance-summary");
-    const status = wrapper.querySelector(".post-guidance-status");
-    const service = wrapper.dataset.accountService;
-    const rule = servicePostGuidance[service];
-    const override = wrapper.querySelector(".override-body")?.value.trim() || "";
-
-    summary.textContent = describeServiceGuidance(rule);
-    panel.classList.remove("is-ok", "is-warning", "is-danger");
-
-    if (!checkbox.checked) {
-      panel.classList.add("is-warning");
-      renderGuidanceLines(status, ["This destination is not selected for the current post."], "warning");
-      return;
-    }
-
-    const evaluation = evaluateServiceGuidance(rule, override || bodyTextarea.value, snapshot);
-    panel.classList.add(`is-${evaluation.tone}`);
-    renderGuidanceLines(status, evaluation.lines, evaluation.tone);
-  });
-}
-
-uploadsInput.addEventListener("change", () => {
-  renderUploadPreviews();
-  refreshPostGuidance();
-});
-bodyTextarea.addEventListener("input", refreshPostGuidance);
-targetAccountList.addEventListener("input", refreshPostGuidance);
-targetAccountList.addEventListener("change", refreshPostGuidance);
-postTypeSelect.addEventListener("change", refreshPostGuidance);
-renderUploadPreviews();
-refreshPostGuidance();
-
-const plannerPosts = scheduledPostsPlannerData.map((post) => ({
-  ...post,
-  scheduledDate: post.scheduledFor ? new Date(post.scheduledFor) : null,
-})).sort((left, right) => {
-  if (!left.scheduledDate && !right.scheduledDate) return 0;
-  if (!left.scheduledDate) return 1;
-  if (!right.scheduledDate) return -1;
-  return left.scheduledDate - right.scheduledDate;
-});
-
-if (plannerPosts.find((post) => post.scheduledDate)) {
-  plannerState.anchorDate = new Date(plannerPosts.find((post) => post.scheduledDate).scheduledDate);
 }
 
 function startOfLocalDay(value) {
@@ -769,10 +372,20 @@ function formatDayLabel(date, options) {
   return new Intl.DateTimeFormat(undefined, options).format(date);
 }
 
+function formatDateTime(date) {
+  if (!date) return "Unscheduled";
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+}
+
 function summarizeBody(body) {
   const normalized = String(body || "").trim().replace(/\s+/g, " ");
   if (!normalized) return "No text body";
-  return normalized.length > 72 ? `${normalized.slice(0, 69)}...` : normalized;
+  return normalized.length > 84 ? `${normalized.slice(0, 81)}...` : normalized;
 }
 
 function statusBucket(displayStatus) {
@@ -809,8 +422,112 @@ function statusBadgeClass(displayStatus) {
   }
 }
 
+function statusLabel(displayStatus) {
+  return String(displayStatus || "").replaceAll("_", " ");
+}
+
+function sortPlannerPosts() {
+  plannerPosts = plannerPosts.slice().sort((left, right) => {
+    if (left.scheduledDate && right.scheduledDate) {
+      return left.scheduledDate - right.scheduledDate;
+    }
+    if (left.scheduledDate) return -1;
+    if (right.scheduledDate) return 1;
+    return left.personaName.localeCompare(right.personaName);
+  });
+}
+
+function isCalendarPost(post) {
+  return Boolean(post.scheduledDate) && statusBucket(post.displayStatus) !== "drafts";
+}
+
 function postsForDay(day) {
-  return plannerPosts.filter((post) => post.scheduledDate && isSameDay(post.scheduledDate, day));
+  return plannerPosts.filter((post) => isCalendarPost(post) && isSameDay(post.scheduledDate, day));
+}
+
+function toDateKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function parseDateKey(dateKey) {
+  const [year, month, day] = dateKey.split("-").map((value) => Number.parseInt(value, 10));
+  return new Date(year, month - 1, day);
+}
+
+function toDatetimeLocalValue(date) {
+  if (!date || Number.isNaN(date.getTime())) return "";
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+function suggestedScheduleValue(post, targetDateKey = null) {
+  if (targetDateKey) {
+    const targetDate = parseDateKey(targetDateKey);
+    if (post.scheduledDate) {
+      targetDate.setHours(post.scheduledDate.getHours(), post.scheduledDate.getMinutes(), 0, 0);
+    } else {
+      targetDate.setHours(9, 0, 0, 0);
+    }
+    return toDatetimeLocalValue(targetDate);
+  }
+  if (post.scheduledDate) {
+    return toDatetimeLocalValue(post.scheduledDate);
+  }
+  const next = new Date();
+  next.setHours(next.getHours() + 1, 0, 0, 0);
+  return toDatetimeLocalValue(next);
+}
+
+function suggestedGiveawayEndValue(post, scheduledValue) {
+  if (post.giveawayConfig?.giveaway_end_at) {
+    const existing = new Date(post.giveawayConfig.giveaway_end_at);
+    if (!Number.isNaN(existing.getTime())) {
+      return toDatetimeLocalValue(existing);
+    }
+  }
+  const base = scheduledValue ? new Date(scheduledValue) : new Date();
+  if (Number.isNaN(base.getTime())) return "";
+  base.setDate(base.getDate() + 3);
+  return toDatetimeLocalValue(base);
+}
+
+function plannerCardMarkup(post, compact = false) {
+  const scheduledLabel = formatDateTime(post.scheduledDate);
+  const deliveryNote = post.failureCount
+    ? `${post.failureCount} failed`
+    : post.successCount
+      ? `${post.successCount} delivered`
+      : `${post.targetCount} target${post.targetCount === 1 ? "" : "s"}`;
+  const compactMeta = `${post.personaName} • ${deliveryNote}`;
+  const fullMeta = `${scheduledLabel} • ${post.attachmentCount} attachment${post.attachmentCount === 1 ? "" : "s"} • ${deliveryNote}`;
+  return `
+    <article
+      class="planner-card ${compact ? "planner-card-compact" : ""} ${post.canDrag ? "is-draggable" : "is-locked"}"
+      data-post-id="${post.id}"
+      ${post.canDrag ? 'draggable="true"' : ""}
+    >
+      <div class="d-flex justify-content-between align-items-start gap-2">
+        <div>
+          <div class="d-flex gap-1 flex-wrap mb-2">
+            <span class="badge ${statusBadgeClass(post.displayStatus)}">${escapeHtml(statusLabel(post.displayStatus))}</span>
+            ${post.postType === "instagram_giveaway" ? '<span class="badge text-bg-warning-subtle border text-dark">Giveaway</span>' : ""}
+          </div>
+          <div class="planner-card-title">${escapeHtml(compact ? summarizeBody(post.body) : post.personaName)}</div>
+          <div class="planner-card-copy">${escapeHtml(compact ? compactMeta : summarizeBody(post.body))}</div>
+          <div class="planner-card-meta">${escapeHtml(compact ? fullMeta : fullMeta)}</div>
+        </div>
+        <a class="btn btn-sm btn-outline-primary" href="${post.href}">Open</a>
+      </div>
+      ${post.lastError ? `<div class="small text-danger mt-2">${escapeHtml(post.lastError)}</div>` : ""}
+    </article>
+  `;
 }
 
 function setCalendarView(mode) {
@@ -832,21 +549,6 @@ function moveCalendar(direction) {
   renderCalendar();
 }
 
-function calendarEventMarkup(post, compact = false) {
-  const summary = compact && post.body ? summarizeBody(post.body) : post.personaName;
-  const meta = compact
-    ? `${post.personaName} • ${post.targetCount} target${post.targetCount === 1 ? "" : "s"}`
-    : `${post.scheduledLabel} • ${post.attachmentCount} attachment${post.attachmentCount === 1 ? "" : "s"}`;
-  return `
-    <a class="scheduled-calendar-event" href="${post.href}">
-      <span class="badge ${statusBadgeClass(post.displayStatus)}">${post.displayStatus.replaceAll("_", " ")}</span>
-      ${post.postType === "instagram_giveaway" ? '<span class="badge text-bg-warning-subtle border text-dark">Giveaway</span>' : ""}
-      <div class="scheduled-calendar-event-title">${escapeHtml(summary)}</div>
-      <div class="scheduled-calendar-event-meta">${escapeHtml(meta)}</div>
-    </a>
-  `;
-}
-
 function renderMonthCalendar() {
   const anchor = plannerState.anchorDate;
   const monthStart = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
@@ -865,14 +567,15 @@ function renderMonthCalendar() {
     const hiddenCount = Math.max(dayPosts.length - 3, 0);
     const visiblePosts = dayPosts.slice(0, 3);
     cells.push(`
-      <div class="scheduled-calendar-cell ${isOutsideMonth ? "is-muted" : ""}">
+      <div class="scheduled-calendar-cell planner-drop-zone ${isOutsideMonth ? "is-muted" : ""}" data-drop-type="day" data-drop-date="${toDateKey(day)}">
         <div class="scheduled-calendar-cell-head">
           <span class="scheduled-calendar-day-number">${day.getDate()}</span>
           ${dayPosts.length ? `<span class="small text-secondary">${dayPosts.length}</span>` : ""}
         </div>
         <div class="scheduled-calendar-cell-events">
-          ${visiblePosts.map((post) => calendarEventMarkup(post, true)).join("")}
+          ${visiblePosts.map((post) => plannerCardMarkup(post, true)).join("")}
           ${hiddenCount ? `<div class="scheduled-calendar-more">+${hiddenCount} more scheduled</div>` : ""}
+          ${!dayPosts.length ? '<div class="scheduled-calendar-placeholder">Drop a card here</div>' : ""}
         </div>
       </div>
     `);
@@ -898,11 +601,11 @@ function renderWeekCalendar() {
   calendarGrid.innerHTML = days.map((day) => {
     const dayPosts = postsForDay(day);
     return `
-      <div class="scheduled-calendar-column">
+      <div class="scheduled-calendar-column planner-drop-zone" data-drop-type="day" data-drop-date="${toDateKey(day)}">
         <div class="scheduled-calendar-column-events">
           ${dayPosts.length
-            ? dayPosts.map((post) => calendarEventMarkup(post)).join("")
-            : '<div class="scheduled-calendar-placeholder">No post plans</div>'}
+            ? dayPosts.map((post) => plannerCardMarkup(post)).join("")
+            : '<div class="scheduled-calendar-placeholder">Drop a card here</div>'}
         </div>
       </div>
     `;
@@ -913,7 +616,7 @@ function renderWeekCalendar() {
 }
 
 function renderCalendar() {
-  const visibleScheduled = plannerPosts.filter((post) => post.scheduledDate);
+  const visibleScheduled = plannerPosts.filter((post) => isCalendarPost(post));
   const visibleGiveaways = visibleScheduled.filter((post) => post.postType === "instagram_giveaway");
   calendarSummaryTotal.textContent = `${visibleScheduled.length} scheduled`;
   calendarSummaryGiveaways.textContent = `${visibleGiveaways.length} giveaways`;
@@ -922,6 +625,7 @@ function renderCalendar() {
     calendarRoot.classList.add("d-none");
     calendarEmpty.classList.remove("d-none");
     calendarRangeLabel.textContent = "No post plans yet";
+    bindPlannerInteractions();
     return;
   }
 
@@ -932,25 +636,7 @@ function renderCalendar() {
   } else {
     renderMonthCalendar();
   }
-}
-
-function kanbanCardMarkup(post) {
-  return `
-    <a class="scheduled-kanban-card" href="${post.href}">
-      <div class="d-flex justify-content-between align-items-start gap-2">
-        <div class="fw-semibold">${escapeHtml(post.personaName)}</div>
-        <span class="badge ${statusBadgeClass(post.displayStatus)}">${post.displayStatus.replaceAll("_", " ")}</span>
-      </div>
-      <div class="scheduled-kanban-card-body">${escapeHtml(summarizeBody(post.body))}</div>
-      <div class="scheduled-kanban-card-meta">
-        <span>${escapeHtml(post.scheduledLabel)}</span>
-        <span>${post.targetCount} target${post.targetCount === 1 ? "" : "s"}</span>
-        <span>${post.attachmentCount} attachment${post.attachmentCount === 1 ? "" : "s"}</span>
-      </div>
-      ${post.postType === "instagram_giveaway" ? '<div class="small text-warning-emphasis mt-2">Instagram giveaway</div>' : ""}
-      ${post.lastError ? `<div class="small text-danger mt-2">${escapeHtml(post.lastError)}</div>` : ""}
-    </a>
-  `;
+  bindPlannerInteractions();
 }
 
 function renderKanbanBoard() {
@@ -970,10 +656,237 @@ function renderKanbanBoard() {
     const count = document.getElementById(kanbanCountIds[bucket]);
     count.textContent = String(items.length);
     lane.innerHTML = items.length
-      ? items.map((post) => kanbanCardMarkup(post)).join("")
-      : '<div class="scheduled-kanban-empty">No post plans in this lane.</div>';
+      ? items.map((post) => plannerCardMarkup(post)).join("")
+      : `<div class="scheduled-kanban-empty">${bucket === "attention" || bucket === "done" ? "Nothing to show here." : "Drop a card here."}</div>`;
+  });
+  bindPlannerInteractions();
+}
+
+function renderPlannerSummary() {
+  const scheduledCount = plannerPosts.filter((post) => isCalendarPost(post)).length;
+  const attentionCount = plannerPosts.filter((post) => statusBucket(post.displayStatus) === "attention").length;
+  plannerTotalCount.textContent = `${plannerPosts.length} post${plannerPosts.length === 1 ? "" : "s"} in view`;
+  plannerScheduledCount.textContent = `${scheduledCount} scheduled`;
+  plannerAttentionCount.textContent = `${attentionCount} need attention`;
+}
+
+function renderPlanner() {
+  sortPlannerPosts();
+  renderPlannerSummary();
+  renderCalendar();
+  renderKanbanBoard();
+}
+
+function buildMoveContext(post, target) {
+  if (!post || post.isLocked) return null;
+  if (target.type === "day") {
+    const targetDate = parseDateKey(target.dateKey);
+    return {
+      title: `Move to ${formatDayLabel(targetDate, {month: "long", day: "numeric"})}`,
+      targetLabel: "Schedule this post on the selected day",
+      description: "Pick the time and we will update the planner right away.",
+      submitLabel: "Save Schedule",
+      nextStatus: "scheduled",
+      requireSchedule: true,
+      suggestedSchedule: suggestedScheduleValue(post, target.dateKey),
+      allowClearSchedule: false,
+      showGiveawayEnd: post.postType === "instagram_giveaway",
+      suggestedGiveawayEnd: suggestedGiveawayEndValue(post, suggestedScheduleValue(post, target.dateKey)),
+    };
+  }
+  if (target.type === "bucket") {
+    if (target.bucket === "drafts") {
+      return {
+        title: "Move to Drafts",
+        targetLabel: "Pull this plan back into draft mode",
+        description: "Drafts disappear from the calendar until they are scheduled again.",
+        submitLabel: "Move to Drafts",
+        nextStatus: "draft",
+        requireSchedule: false,
+        suggestedSchedule: suggestedScheduleValue(post),
+        allowClearSchedule: Boolean(post.scheduledDate),
+        showGiveawayEnd: false,
+        suggestedGiveawayEnd: "",
+      };
+    }
+    if (target.bucket === "scheduled") {
+      return {
+        title: "Move to Scheduled",
+        targetLabel: "Give this post a place on the calendar",
+        description: "Choose the publish time and we will tuck it into the schedule.",
+        submitLabel: "Schedule Post",
+        nextStatus: "scheduled",
+        requireSchedule: true,
+        suggestedSchedule: suggestedScheduleValue(post),
+        allowClearSchedule: false,
+        showGiveawayEnd: post.postType === "instagram_giveaway",
+        suggestedGiveawayEnd: suggestedGiveawayEndValue(post, suggestedScheduleValue(post)),
+      };
+    }
+    if (target.bucket === "running") {
+      const suggestedNow = toDatetimeLocalValue(new Date());
+      return {
+        title: "Queue This Post",
+        targetLabel: "Nudge it into the next publish cycle",
+        description: "We will queue this post for delivery right meow.",
+        submitLabel: "Queue Post",
+        nextStatus: "queued",
+        requireSchedule: true,
+        suggestedSchedule: suggestedNow,
+        allowClearSchedule: false,
+        showGiveawayEnd: post.postType === "instagram_giveaway",
+        suggestedGiveawayEnd: suggestedGiveawayEndValue(post, suggestedNow),
+      };
+    }
+  }
+  return null;
+}
+
+function openMoveModal(post, target) {
+  const move = buildMoveContext(post, target);
+  if (!move) return;
+  currentMoveContext = {post, target, move};
+  plannerMoveTitle.textContent = move.title;
+  plannerMoveTargetLabel.textContent = move.targetLabel;
+  plannerMoveDescription.textContent = move.description;
+  plannerMovePostLabel.textContent = `${post.personaName} • ${statusLabel(post.displayStatus)}`;
+  plannerMovePostCopy.textContent = summarizeBody(post.body);
+  plannerMoveScheduledGroup.classList.toggle("d-none", !move.requireSchedule);
+  plannerMoveScheduledFor.value = move.suggestedSchedule || "";
+  plannerMoveClearScheduleWrap.classList.toggle("d-none", !move.allowClearSchedule);
+  plannerMoveClearSchedule.checked = move.allowClearSchedule;
+  plannerMoveGiveawayGroup.classList.toggle("d-none", !move.showGiveawayEnd);
+  plannerMoveGiveawayEnd.value = move.suggestedGiveawayEnd || "";
+  plannerMoveSubmit.textContent = move.submitLabel;
+  plannerMoveError.classList.add("d-none");
+  plannerMoveError.textContent = "";
+  plannerMoveModal.show();
+}
+
+function resetDragState() {
+  activeDragPostId = null;
+  document.querySelectorAll(".planner-drop-zone").forEach((zone) => zone.classList.remove("is-active-drop"));
+  document.querySelectorAll(".planner-card.is-dragging").forEach((card) => card.classList.remove("is-dragging"));
+}
+
+function bindPlannerInteractions() {
+  document.querySelectorAll(".planner-card[data-post-id]").forEach((card) => {
+    if (card.dataset.dragBound === "true") return;
+    card.dataset.dragBound = "true";
+    card.addEventListener("dragstart", (event) => {
+      if (!card.draggable) {
+        event.preventDefault();
+        return;
+      }
+      activeDragPostId = card.dataset.postId;
+      card.classList.add("is-dragging");
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", activeDragPostId);
+    });
+    card.addEventListener("dragend", resetDragState);
+  });
+
+  document.querySelectorAll(".planner-drop-zone").forEach((zone) => {
+    if (zone.dataset.dropBound === "true") return;
+    zone.dataset.dropBound = "true";
+    zone.addEventListener("dragover", (event) => {
+      if (!activeDragPostId) return;
+      event.preventDefault();
+      zone.classList.add("is-active-drop");
+      event.dataTransfer.dropEffect = "move";
+    });
+    zone.addEventListener("dragleave", () => zone.classList.remove("is-active-drop"));
+    zone.addEventListener("drop", (event) => {
+      if (!activeDragPostId) return;
+      event.preventDefault();
+      zone.classList.remove("is-active-drop");
+      const post = plannerPosts.find((item) => item.id === activeDragPostId);
+      if (!post) return;
+      if (zone.dataset.dropType === "day") {
+        openMoveModal(post, {type: "day", dateKey: zone.dataset.dropDate});
+      } else if (zone.dataset.dropType === "bucket") {
+        const currentBucket = statusBucket(post.displayStatus);
+        if (currentBucket === zone.dataset.dropBucket) {
+          resetDragState();
+          return;
+        }
+        openMoveModal(post, {type: "bucket", bucket: zone.dataset.dropBucket});
+      }
+      resetDragState();
+    });
   });
 }
+
+function upsertPlannerPost(updatedPost) {
+  const index = plannerPosts.findIndex((post) => post.id === updatedPost.id);
+  if (index === -1) {
+    plannerPosts = plannerPosts.concat(updatedPost);
+  } else {
+    plannerPosts = plannerPosts.map((post) => post.id === updatedPost.id ? updatedPost : post);
+  }
+  renderPlanner();
+}
+
+plannerMoveForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!currentMoveContext) return;
+  const {post, move} = currentMoveContext;
+  const payload = {
+    status: move.nextStatus,
+  };
+
+  if (move.requireSchedule) {
+    if (!plannerMoveScheduledFor.value) {
+      plannerMoveError.textContent = "Pick a scheduled time before saving the move.";
+      plannerMoveError.classList.remove("d-none");
+      return;
+    }
+    payload.scheduled_for = plannerMoveScheduledFor.value;
+  } else if (move.allowClearSchedule && plannerMoveClearSchedule.checked) {
+    payload.scheduled_for = null;
+  }
+
+  if (move.showGiveawayEnd) {
+    if (!plannerMoveGiveawayEnd.value) {
+      plannerMoveError.textContent = "Giveaway posts need an end time before they can move into this lane.";
+      plannerMoveError.classList.remove("d-none");
+      return;
+    }
+    payload.giveaway = {
+      ...(post.giveawayConfig || {
+        min_friend_mentions: 1,
+        required_keywords: [],
+        required_hashtags: [],
+        require_story_mention: true,
+        require_like: false,
+        require_follow: false,
+      }),
+      giveaway_end_at: plannerMoveGiveawayEnd.value,
+    };
+  }
+
+  plannerMoveSubmit.disabled = true;
+  plannerMoveError.classList.add("d-none");
+  plannerMoveError.textContent = "";
+
+  try {
+    const response = await fetch(`/scheduled-posts/${post.id}`, {
+      method: "PUT",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      plannerMoveError.textContent = await window.readApiMessage(response);
+      plannerMoveError.classList.remove("d-none");
+      return;
+    }
+    const updated = await response.json();
+    upsertPlannerPost(normalizeApiPost(updated));
+    plannerMoveModal.hide();
+  } finally {
+    plannerMoveSubmit.disabled = false;
+  }
+});
 
 calendarViewButtons.forEach((button) => {
   button.addEventListener("click", () => setCalendarView(button.dataset.calendarView));
@@ -985,63 +898,6 @@ calendarTodayButton.addEventListener("click", () => {
   renderCalendar();
 });
 
-renderCalendar();
-renderKanbanBoard();
-
-document.getElementById("scheduled-post-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const payload = new FormData();
-  const targetAccountIds = Array.from(form.querySelectorAll(".target-checkbox"))
-    .filter((checkbox) => checkbox.checked)
-    .map((checkbox) => checkbox.value);
-  const publishOverrides = {};
-  form.querySelectorAll(".override-body").forEach((textarea) => {
-    if (textarea.value.trim()) {
-      publishOverrides[textarea.dataset.accountId] = {body: textarea.value};
-    }
-  });
-  const metadata = {};
-  if (form.source_link.value.trim()) metadata.link = form.source_link.value.trim();
-  if (form.visibility.value) metadata.visibility = form.visibility.value;
-  const giveaway = buildGiveawayPayload(form);
-
-  if (postTypeSelect.value === "instagram_giveaway") {
-    const instagramTargetIds = Array.from(form.querySelectorAll(".target-checkbox"))
-      .filter((checkbox) => checkbox.checked)
-      .filter((checkbox) => checkbox.closest("[data-account-service]")?.dataset.accountService === "instagram")
-      .map((checkbox) => checkbox.value);
-    if (instagramTargetIds.length !== 1 || targetAccountIds.length !== 1) {
-      alert("Instagram giveaway posts need exactly one Instagram destination account.");
-      return;
-    }
-    if (!giveaway?.giveaway_end_at) {
-      alert("Instagram giveaway posts need an end time.");
-      return;
-    }
-  }
-
-  payload.append("persona_id", form.persona_id.value);
-  payload.append("body", form.body.value);
-  payload.append("post_type", postTypeSelect.value);
-  payload.append("status", form.status.value);
-  payload.append("target_account_ids", JSON.stringify(targetAccountIds));
-  payload.append("publish_overrides_json", JSON.stringify(publishOverrides));
-  payload.append("metadata_json", JSON.stringify(metadata));
-  payload.append("scheduled_for", form.scheduled_for.value);
-  payload.append("giveaway_json", JSON.stringify(giveaway));
-  payload.append("alt_texts", JSON.stringify([]));
-  for (const file of form.uploads.files) {
-    payload.append("uploads", file);
-  }
-
-  const response = await fetch("/scheduled-posts", {method: "POST", body: payload});
-  if (!response.ok) {
-    alert(await window.readApiMessage(response));
-    return;
-  }
-  const created = await response.json();
-  window.location.href = `/scheduled-posts/${created.id}/page`;
-});
+renderPlanner();
 </script>
 {% endblock %}

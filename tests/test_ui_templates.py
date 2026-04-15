@@ -235,7 +235,24 @@ def test_scheduled_post_templates_render_attachment_previews():
         service_post_guidance=service_composer_constraints_context(),
     )
 
-    list_html = templates.env.get_template("scheduled_posts.html").render(
+    create_html = templates.env.get_template("scheduled_post_create.html").render(
+        request=_request_with_principal(),
+        current_principal=SimpleNamespace(
+            is_authenticated=True,
+            is_user=True,
+            is_admin=False,
+            user_id="user-1",
+            display_name="Lynx",
+            role="user",
+            timezone="UTC",
+        ),
+        auth_enabled=False,
+        personas=[SimpleNamespace(id="persona-1", name="Savannah")],
+        persona_targets={"persona-1": []},
+        service_post_guidance=service_composer_constraints_context(),
+    )
+
+    planner_html = templates.env.get_template("scheduled_posts.html").render(
         request=_request_with_principal(),
         current_principal=SimpleNamespace(
             is_authenticated=True,
@@ -274,28 +291,32 @@ def test_scheduled_post_templates_render_attachment_previews():
     )
 
     assert '/media/attachments/attachment-1' in detail_html
-    assert 'upload-preview-list' in list_html
+    assert 'upload-preview-list' in create_html
     assert 'name="uploads"' in detail_html
-    assert 'Selected images and videos will travel with this post plan.' in list_html
+    assert 'Selected images and videos will travel with this post plan.' in create_html
     assert 'Post Snapshot' in detail_html
-    assert 'Post Snapshot' in list_html
-    assert 'id="compose-tabs"' in list_html
-    assert 'id="scheduled-workspace-tabs"' in list_html
-    assert 'workspace-calendar-pane' in list_html
-    assert 'workspace-kanban-pane' in list_html
-    assert 'calendar-view-month' in list_html
-    assert 'calendar-view-week' in list_html
-    assert 'scheduled-calendar-grid' in list_html
-    assert 'scheduled-kanban-board' in list_html
-    assert 'kanban-lane-drafts' in list_html
-    assert 'kanban-lane-attention' in list_html
-    assert 'scheduledPostsPlannerData' in list_html
+    assert 'Post Snapshot' in create_html
+    assert 'id="compose-tabs"' in create_html
+    assert 'preview-persona-name' in create_html
+    assert 'Create Post Plan' in create_html
+    assert 'id="scheduled-workspace-tabs"' in planner_html
+    assert 'workspace-calendar-pane' in planner_html
+    assert 'workspace-kanban-pane' in planner_html
+    assert 'calendar-view-month' in planner_html
+    assert 'calendar-view-week' in planner_html
+    assert 'scheduled-calendar-grid' in planner_html
+    assert 'scheduled-kanban-board' in planner_html
+    assert 'kanban-lane-drafts' in planner_html
+    assert 'kanban-lane-attention' in planner_html
+    assert 'planner-move-modal' in planner_html
+    assert 'Create Post' in planner_html
+    assert 'scheduledPostsPlannerData' in planner_html
     assert 'id="scheduled-detail-tabs"' in detail_html
     assert 'servicePostGuidance' in detail_html
-    assert 'servicePostGuidance' in list_html
+    assert 'servicePostGuidance' in create_html
     assert 'Delete Draft' in detail_html
     assert 'Post Type' in detail_html
-    assert 'Post Type' in list_html
+    assert 'Post Type' in create_html
     assert 'Last delivery hiccup' in detail_html
     assert 'Delivery Outcome' in detail_html
     assert 'Succeeded' in detail_html
@@ -304,11 +325,9 @@ def test_scheduled_post_templates_render_attachment_previews():
     assert 'Instagram session expired.' in detail_html
     assert 'Session ID expired.' in detail_html
     assert 'Partial Failure' in detail_html
-    assert 'Instagram session expired.' in list_html
-    assert 'delivery-summary-pill is-success' in list_html
-    assert 'delivery-summary-pill is-failure' in list_html
-    assert 'Success: Mastodon' in list_html
-    assert 'Failure: Instagram - Session ID expired.' in list_html
+    assert 'Instagram session expired.' in planner_html
+    assert 'Queue Now' in planner_html
+    assert 'Drag cards between editable lanes' in planner_html
 
 
 def test_scheduled_post_templates_render_instagram_giveaway_controls():

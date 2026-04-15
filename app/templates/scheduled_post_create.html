@@ -1,0 +1,663 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card hero-card section-card mb-4">
+    <div class="card-body p-4">
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+            <div>
+                <div class="section-kicker mb-2">Composer</div>
+                <h1 class="h4 mb-1">Create a post</h1>
+                <p class="text-secondary mb-0">Write once, line up the right destinations, and let lynxposter handle the tail-end details.</p>
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+                <a class="btn btn-outline-secondary" href="/scheduled-posts/page">Back to Planner</a>
+                <a class="btn btn-outline-secondary" href="/sandbox/page">Open Preview Studio</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if personas %}
+<div class="row g-4 align-items-start">
+    <div class="col-12 col-xl-8">
+        <div class="card section-card">
+            <div class="card-body">
+                <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
+                    <div>
+                        <div class="section-kicker mb-2">Draft Desk</div>
+                        <h2 class="h5 mb-1">Build your next post plan</h2>
+                        <p class="text-secondary mb-0">The flow is split into quick tabs so you can pounce from copy to media to destinations without losing your place.</p>
+                    </div>
+                    <span class="badge soft-badge rounded-pill px-3 py-2">{{ personas|length }} personas ready</span>
+                </div>
+
+                <form id="scheduled-post-form" class="tab-pane-stack">
+                    <ul class="nav nav-pills glass-tabs" id="compose-tabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="compose-basics-tab" data-bs-toggle="tab" data-bs-target="#compose-basics-pane" type="button" role="tab">Basics</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="compose-giveaway-tab" data-bs-toggle="tab" data-bs-target="#compose-giveaway-pane" type="button" role="tab">Giveaway</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="compose-media-tab" data-bs-toggle="tab" data-bs-target="#compose-media-pane" type="button" role="tab">Media</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="compose-targets-tab" data-bs-toggle="tab" data-bs-target="#compose-targets-pane" type="button" role="tab">Targets</button>
+                        </li>
+                    </ul>
+
+                    <div class="tab-content tab-pane-stack">
+                        <div class="tab-pane fade show active" id="compose-basics-pane" role="tabpanel" aria-labelledby="compose-basics-tab" tabindex="0">
+                            <div class="surface-panel">
+                                <div class="row g-3">
+                                    <div class="col-12">
+                                        <label class="form-label">Persona</label>
+                                        <select class="form-select" name="persona_id" id="persona-select">
+                                            {% for persona in personas %}
+                                            <option value="{{ persona.id }}">{{ persona.name }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="d-flex justify-content-between align-items-center gap-3">
+                                            <label class="form-label mb-0">Body</label>
+                                            <span class="small text-secondary" id="body-length-indicator">0 chars</span>
+                                        </div>
+                                        <textarea class="form-control" name="body" rows="7" placeholder="What is your post saying today?"></textarea>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Post Type</label>
+                                        <select class="form-select" name="post_type" id="post-type-select">
+                                            <option value="standard">Standard Post</option>
+                                            <option value="instagram_giveaway">Instagram Giveaway</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Status</label>
+                                        <select class="form-select" name="status" id="status-select">
+                                            <option value="draft">Draft</option>
+                                            <option value="scheduled">Scheduled</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Scheduled For</label>
+                                        <input class="form-control" name="scheduled_for" id="scheduled-for-input" type="datetime-local">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Original Link</label>
+                                        <input class="form-control" name="source_link" placeholder="Optional source or campaign link">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Visibility</label>
+                                        <select class="form-select" name="visibility">
+                                            <option value="">Use persona default</option>
+                                            <option value="public">Public</option>
+                                            <option value="unlisted">Unlisted</option>
+                                            <option value="private">Private</option>
+                                            <option value="direct">Direct</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="tab-pane fade" id="compose-giveaway-pane" role="tabpanel" aria-labelledby="compose-giveaway-tab" tabindex="0">
+                            <div class="surface-panel giveaway-only d-none" id="giveaway-config-panel">
+                                <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
+                                    <div>
+                                        <div class="fw-semibold">Instagram Giveaway Rules</div>
+                                        <div class="small text-secondary">Giveaways need exactly one Instagram destination. Shares count as story mentions while the giveaway is live.</div>
+                                    </div>
+                                    <span class="badge text-bg-light border">One lucky winner</span>
+                                </div>
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label">Giveaway End Time</label>
+                                        <input class="form-control" name="giveaway_end_at" type="datetime-local">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Friend Mentions Required</label>
+                                        <input class="form-control" name="giveaway_min_friend_mentions" type="number" min="0" max="20" value="1">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Required Keywords</label>
+                                        <input class="form-control" name="giveaway_required_keywords" placeholder="launch, giveaway">
+                                        <div class="form-text">Optional comma-separated keywords that must appear in the entrant's comment.</div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Required Hashtags</label>
+                                        <input class="form-control" name="giveaway_required_hashtags" placeholder="#giveaway, #launch">
+                                        <div class="form-text">Optional comma-separated hashtags.</div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="form-check mt-2">
+                                            <input class="form-check-input" type="checkbox" name="giveaway_require_story_mention" checked>
+                                            <label class="form-check-label">Require story mention</label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="form-check mt-2">
+                                            <input class="form-check-input" type="checkbox" name="giveaway_require_like">
+                                            <label class="form-check-label">Require like</label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="form-check mt-2">
+                                            <input class="form-check-input" type="checkbox" name="giveaway_require_follow">
+                                            <label class="form-check-label">Require follow</label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="small text-secondary" id="giveaway-target-hint">Select exactly one Instagram destination account for giveaway posts.</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="surface-panel-soft">
+                                <div class="small text-secondary">This tab wakes up when the post type is <strong>Instagram Giveaway</strong>.</div>
+                            </div>
+                        </div>
+
+                        <div class="tab-pane fade" id="compose-media-pane" role="tabpanel" aria-labelledby="compose-media-tab" tabindex="0">
+                            <div class="surface-panel">
+                                <label class="form-label">Uploads</label>
+                                <input class="form-control" name="uploads" type="file" multiple>
+                                <div class="form-text" id="upload-summary">Selected images and videos will travel with this post plan.</div>
+                                <div id="upload-preview-list" class="row g-3 mt-1"></div>
+                            </div>
+                            <div class="surface-panel-soft">
+                                <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+                                    <div>
+                                        <div class="fw-semibold">Post Snapshot</div>
+                                        <div class="small text-secondary">Live counts for the current body, attachments, and selected destinations.</div>
+                                    </div>
+                                    <div class="d-flex gap-2 flex-wrap">
+                                        <span class="badge text-bg-light border" id="snapshot-body-length">0 chars</span>
+                                        <span class="badge text-bg-light border" id="snapshot-attachments">0 attachments</span>
+                                        <span class="badge text-bg-light border" id="snapshot-targets">0 targets</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="tab-pane fade" id="compose-targets-pane" role="tabpanel" aria-labelledby="compose-targets-tab" tabindex="0">
+                            <div class="surface-panel">
+                                <label class="form-label">Destination Accounts</label>
+                                <div id="target-account-list" class="row g-2"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex gap-2 flex-wrap">
+                        <button class="btn btn-primary" type="submit">Create Post Plan</button>
+                        <a class="btn btn-outline-secondary" href="/scheduled-posts/page">Back to Planner</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-xl-4">
+        <div class="card section-card composer-preview-shell">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
+                    <div>
+                        <div class="section-kicker mb-2">Preview</div>
+                        <h2 class="h5 mb-0">Feed mockup</h2>
+                    </div>
+                    <span class="badge soft-badge rounded-pill px-3 py-2" id="preview-status-pill">Draft</span>
+                </div>
+                <div class="composer-preview-phone">
+                    <div class="composer-preview-header">
+                        <div>
+                            <div class="fw-semibold" id="preview-persona-name">{{ personas[0].name }}</div>
+                            <div class="small text-secondary" id="preview-schedule-label">Not scheduled yet</div>
+                        </div>
+                        <div class="small text-secondary">lynxposter</div>
+                    </div>
+                    <div class="composer-preview-body" id="preview-body-copy">Your post preview will stretch out here as you type.</div>
+                    <div class="composer-preview-media" id="preview-media-summary">No media selected yet.</div>
+                    <div class="composer-preview-footer">
+                        <span id="preview-target-count">0 targets</span>
+                        <span id="preview-attachment-count">0 attachments</span>
+                    </div>
+                </div>
+                <div class="surface-panel-soft mt-3">
+                    <div class="fw-semibold mb-2">Quick pep talk</div>
+                    <div class="small text-secondary mb-0">Keep the copy warm, pick the right destinations, and your next post will be ready to pounce into the planner.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="card section-card">
+    <div class="card-body text-center py-5">
+        <div class="section-kicker mb-2">Composer</div>
+        <h2 class="h4 mb-2">Add a persona before you create a post</h2>
+        <p class="text-secondary mb-4">lynxposter needs at least one persona with destination accounts before the composer can get to work.</p>
+        <div class="d-flex gap-2 justify-content-center flex-wrap">
+            <a class="btn btn-primary" href="/personas/page">Open Personas</a>
+            <a class="btn btn-outline-secondary" href="/scheduled-posts/page">Back to Planner</a>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if personas %}
+<script>
+const personaTargets = {{ persona_targets | tojson }};
+const servicePostGuidance = {{ service_post_guidance | tojson }};
+const personaSelect = document.getElementById("persona-select");
+const targetAccountList = document.getElementById("target-account-list");
+const bodyTextarea = document.querySelector("textarea[name='body']");
+const uploadsInput = document.querySelector("input[name='uploads']");
+const uploadPreviewList = document.getElementById("upload-preview-list");
+const uploadSummary = document.getElementById("upload-summary");
+const bodyLengthIndicator = document.getElementById("body-length-indicator");
+const snapshotBodyLength = document.getElementById("snapshot-body-length");
+const snapshotAttachments = document.getElementById("snapshot-attachments");
+const snapshotTargets = document.getElementById("snapshot-targets");
+const postTypeSelect = document.getElementById("post-type-select");
+const statusSelect = document.getElementById("status-select");
+const scheduledForInput = document.getElementById("scheduled-for-input");
+const giveawayConfigPanel = document.getElementById("giveaway-config-panel");
+const giveawayTargetHint = document.getElementById("giveaway-target-hint");
+const previewPersonaName = document.getElementById("preview-persona-name");
+const previewScheduleLabel = document.getElementById("preview-schedule-label");
+const previewBodyCopy = document.getElementById("preview-body-copy");
+const previewMediaSummary = document.getElementById("preview-media-summary");
+const previewTargetCount = document.getElementById("preview-target-count");
+const previewAttachmentCount = document.getElementById("preview-attachment-count");
+const previewStatusPill = document.getElementById("preview-status-pill");
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function attachmentSnapshot(files) {
+  const items = Array.from(files || []);
+  const images = items.filter((item) => (item.type || "").startsWith("image/"));
+  const videos = items.filter((item) => (item.type || "").startsWith("video/"));
+  const others = items.filter((item) => !(item.type || "").startsWith("image/") && !(item.type || "").startsWith("video/"));
+  return {
+    total: items.length,
+    images: images.length,
+    videos: videos.length,
+    others: others.length,
+    imageMimeTypes: images.map((item) => String(item.type || "").toLowerCase()).filter(Boolean),
+  };
+}
+
+function describeAttachmentSnapshot(snapshot) {
+  const pieces = [
+    `${snapshot.total} attachment${snapshot.total === 1 ? "" : "s"}`,
+    `${snapshot.images} image${snapshot.images === 1 ? "" : "s"}`,
+    `${snapshot.videos} video${snapshot.videos === 1 ? "" : "s"}`,
+  ];
+  if (snapshot.others) {
+    pieces.push(`${snapshot.others} other file${snapshot.others === 1 ? "" : "s"}`);
+  }
+  return pieces.join(" • ");
+}
+
+function describeServiceGuidance(rule) {
+  if (!rule) return "No structured posting guidance is available for this service yet.";
+  const parts = [];
+  if (rule.requires_media) parts.push("media required");
+  if (rule.requires_body_or_media) parts.push("needs text or media");
+  if (rule.body_limit != null && rule.body_limit_with_media != null && rule.body_limit_with_media !== rule.body_limit) {
+    parts.push(`${rule.body_limit} chars text-only`);
+    parts.push(`${rule.body_limit_with_media} chars with media`);
+  } else if (rule.body_limit != null) {
+    parts.push(`${rule.body_limit} chars`);
+  }
+  if (rule.max_attachments != null) parts.push(`up to ${rule.max_attachments} attachments`);
+  if (rule.max_images != null && rule.max_videos != null && rule.single_video_only) {
+    parts.push(`up to ${rule.max_images} images or ${rule.max_videos} video`);
+  } else {
+    if (rule.max_images != null) parts.push(`up to ${rule.max_images} images`);
+    if (rule.max_videos != null) parts.push(`up to ${rule.max_videos} video${rule.max_videos === 1 ? "" : "s"}`);
+  }
+  if (rule.multi_attachment_images_only) parts.push("image albums only for multi-attachment posts");
+  if (rule.allowed_image_mime_types?.length) parts.push("JPEG images only");
+  if (!parts.length && rule.notes?.length) return rule.notes[0];
+  return parts.join(" • ");
+}
+
+function evaluateServiceGuidance(rule, bodyText, snapshot) {
+  const issues = [];
+  const lines = [];
+  const activeBodyLimit = snapshot.total > 0 && rule?.body_limit_with_media != null ? rule.body_limit_with_media : rule?.body_limit;
+  const bodyLength = bodyText.length;
+
+  lines.push(activeBodyLimit != null ? `Body: ${bodyLength}/${activeBodyLimit} characters` : `Body: ${bodyLength} characters`);
+  lines.push(`Media: ${describeAttachmentSnapshot(snapshot)}`);
+
+  if (!rule) {
+    return {
+      tone: "warning",
+      lines: lines.concat(["No structured post guidance is available for this service yet."]),
+    };
+  }
+
+  if (rule.requires_body_or_media && !bodyText.trim() && snapshot.total === 0) {
+    issues.push("This service needs text or at least one attachment.");
+  }
+  if (rule.requires_media && snapshot.total === 0) {
+    issues.push("This service requires at least one image or video attachment.");
+  }
+  if (activeBodyLimit != null && bodyLength > activeBodyLimit) {
+    issues.push(`Body exceeds the current ${activeBodyLimit}-character limit.`);
+  }
+  if (rule.max_attachments != null && snapshot.total > rule.max_attachments) {
+    issues.push(`Attachment count exceeds the ${rule.max_attachments}-attachment limit.`);
+  }
+  if (rule.max_images != null && snapshot.images > rule.max_images) {
+    issues.push(`Image count exceeds the ${rule.max_images}-image limit.`);
+  }
+  if (rule.max_videos != null && snapshot.videos > rule.max_videos) {
+    issues.push(`Video count exceeds the ${rule.max_videos}-video limit.`);
+  }
+  if (rule.single_video_only && snapshot.videos > 0 && snapshot.total > 1) {
+    issues.push("This service currently supports either images or one video, not mixed or multi-video posts.");
+  }
+  if (rule.multi_attachment_images_only && snapshot.total > 1 && snapshot.images !== snapshot.total) {
+    issues.push("Multiple attachments must all be images for this service.");
+  }
+  if (
+    rule.allowed_image_mime_types?.length &&
+    snapshot.imageMimeTypes.some((mimeType) => !rule.allowed_image_mime_types.includes(mimeType))
+  ) {
+    issues.push(`Image uploads must use one of: ${rule.allowed_image_mime_types.join(", ")}.`);
+  }
+  if (
+    Array.isArray(rule.supported_attachment_kinds) &&
+    !rule.supported_attachment_kinds.includes("other") &&
+    snapshot.others > 0
+  ) {
+    issues.push("One or more selected attachments are not image or video media.");
+  }
+
+  if (!issues.length) {
+    const okLines = ["Current post fits this service's known app limits."];
+    if (rule.notes?.length) okLines.push(...rule.notes);
+    return {tone: "ok", lines: lines.concat(okLines)};
+  }
+
+  return {tone: "danger", lines: lines.concat(issues)};
+}
+
+function renderGuidanceLines(container, lines, tone) {
+  container.innerHTML = "";
+  lines.forEach((line, index) => {
+    const row = document.createElement("div");
+    row.className = index < 2 ? "text-secondary" : tone === "danger" ? "text-danger" : "text-secondary";
+    row.textContent = line;
+    container.appendChild(row);
+  });
+}
+
+function renderTargetAccounts() {
+  const accounts = personaTargets[personaSelect.value] || [];
+  targetAccountList.innerHTML = "";
+  if (!accounts.length) {
+    targetAccountList.innerHTML = '<div class="col-12"><div class="alert alert-light border mb-0">This persona does not have any ready destination accounts yet.</div></div>';
+    refreshComposerPreview();
+    return;
+  }
+  for (const account of accounts) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "col-12";
+    wrapper.dataset.accountService = account.service;
+    wrapper.innerHTML = `
+      <div class="border rounded p-3 bg-white">
+        <div class="form-check">
+          <input class="form-check-input target-checkbox" type="checkbox" value="${account.id}" id="target-${account.id}" checked>
+          <label class="form-check-label fw-semibold" for="target-${account.id}">${account.label}</label>
+          <span class="small-muted ms-2">${account.service}</span>
+        </div>
+        <div class="small text-secondary mt-2">${escapeHtml(describeServiceGuidance(servicePostGuidance[account.service]))}</div>
+        <div class="mt-2">
+          <label class="form-label small-muted mb-1">Optional override body</label>
+          <textarea class="form-control override-body" data-account-id="${account.id}" rows="2"></textarea>
+        </div>
+        <div class="post-guidance-panel border rounded p-2 bg-body-tertiary mt-3" data-account-id="${account.id}">
+          <div class="fw-semibold small">Delivery Notes</div>
+          <div class="small text-secondary post-guidance-summary"></div>
+          <div class="small mt-2 post-guidance-status"></div>
+        </div>
+      </div>
+    `;
+    targetAccountList.appendChild(wrapper);
+  }
+  refreshPostGuidance();
+}
+
+function parseCommaSeparated(value) {
+  return String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function buildGiveawayPayload(form) {
+  if (postTypeSelect.value !== "instagram_giveaway") {
+    return null;
+  }
+  return {
+    giveaway_end_at: form.giveaway_end_at.value || null,
+    min_friend_mentions: Number.parseInt(form.giveaway_min_friend_mentions.value || "0", 10) || 0,
+    required_keywords: parseCommaSeparated(form.giveaway_required_keywords.value),
+    required_hashtags: parseCommaSeparated(form.giveaway_required_hashtags.value),
+    require_story_mention: form.giveaway_require_story_mention.checked,
+    require_like: form.giveaway_require_like.checked,
+    require_follow: form.giveaway_require_follow.checked,
+  };
+}
+
+function refreshGiveawayState() {
+  const isGiveaway = postTypeSelect.value === "instagram_giveaway";
+  giveawayConfigPanel.classList.toggle("d-none", !isGiveaway);
+  giveawayConfigPanel.classList.toggle("giveaway-only", isGiveaway);
+  const selectedInstagramTargets = Array.from(targetAccountList.querySelectorAll(".target-checkbox"))
+    .filter((checkbox) => checkbox.checked)
+    .map((checkbox) => checkbox.closest("[data-account-service]"))
+    .filter((wrapper) => wrapper?.dataset.accountService === "instagram").length;
+  if (isGiveaway) {
+    giveawayTargetHint.className = selectedInstagramTargets === 1 ? "small text-success" : "small text-danger";
+    giveawayTargetHint.textContent = selectedInstagramTargets === 1
+      ? "Exactly one Instagram destination is selected."
+      : "Instagram giveaway posts must target exactly one Instagram destination account.";
+  }
+}
+
+function formatFileSize(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  let value = bytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  return `${value.toFixed(value >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+}
+
+function renderUploadPreviews() {
+  const files = Array.from(uploadsInput.files || []);
+  uploadPreviewList.innerHTML = "";
+  if (!files.length) {
+    uploadPreviewList.innerHTML = '<div class="col-12"><div class="small text-secondary">No files selected yet.</div></div>';
+    return;
+  }
+  for (const file of files) {
+    const item = document.createElement("div");
+    item.className = "col-12";
+    const preview = file.type.startsWith("image/")
+      ? `<img src="${URL.createObjectURL(file)}" alt="${file.name}" class="img-fluid rounded border" style="max-height: 220px;">`
+      : `<div class="border rounded bg-light px-3 py-4 text-secondary text-center">${file.type || "Attachment"}</div>`;
+    item.innerHTML = `
+      <div class="border rounded p-3 bg-white h-100">
+        <div class="row g-3 align-items-center">
+          <div class="col-md-4">
+            ${preview}
+          </div>
+          <div class="col-md-8">
+            <div class="fw-semibold">${file.name}</div>
+            <div class="small text-secondary">${file.type || "Unknown type"} • ${formatFileSize(file.size)}</div>
+          </div>
+        </div>
+      </div>
+    `;
+    uploadPreviewList.appendChild(item);
+  }
+}
+
+function formatScheduledPreview(value) {
+  if (!value) return "Not scheduled yet";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Not scheduled yet";
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function refreshComposerPreview() {
+  const snapshot = attachmentSnapshot(uploadsInput.files || []);
+  const selectedTargets = Array.from(targetAccountList.querySelectorAll(".target-checkbox")).filter((checkbox) => checkbox.checked).length;
+  const selectedPersonaLabel = personaSelect.options[personaSelect.selectedIndex]?.textContent || "Persona";
+  const bodyText = bodyTextarea.value.trim();
+
+  previewPersonaName.textContent = selectedPersonaLabel;
+  previewScheduleLabel.textContent = formatScheduledPreview(scheduledForInput.value);
+  previewBodyCopy.textContent = bodyText || "Your post preview will stretch out here as you type.";
+  previewMediaSummary.textContent = snapshot.total
+    ? `${describeAttachmentSnapshot(snapshot)} ready to ship.`
+    : "No media selected yet.";
+  previewTargetCount.textContent = `${selectedTargets} target${selectedTargets === 1 ? "" : "s"}`;
+  previewAttachmentCount.textContent = `${snapshot.total} attachment${snapshot.total === 1 ? "" : "s"}`;
+  previewStatusPill.textContent = statusSelect.value === "scheduled" ? "Scheduled" : "Draft";
+}
+
+function refreshPostGuidance() {
+  const snapshot = attachmentSnapshot(uploadsInput.files || []);
+  const selectedTargets = Array.from(targetAccountList.querySelectorAll(".target-checkbox")).filter((checkbox) => checkbox.checked).length;
+
+  bodyLengthIndicator.textContent = `${bodyTextarea.value.length} chars`;
+  uploadSummary.textContent = snapshot.total
+    ? `${describeAttachmentSnapshot(snapshot)} will travel with this post plan.`
+    : "Selected images and videos will travel with this post plan.";
+  snapshotBodyLength.textContent = `${bodyTextarea.value.length} chars`;
+  snapshotAttachments.textContent = `${snapshot.total} attachment${snapshot.total === 1 ? "" : "s"}`;
+  snapshotTargets.textContent = `${selectedTargets} target${selectedTargets === 1 ? "" : "s"}`;
+  refreshGiveawayState();
+  refreshComposerPreview();
+
+  targetAccountList.querySelectorAll(".col-12[data-account-service]").forEach((wrapper) => {
+    const checkbox = wrapper.querySelector(".target-checkbox");
+    const panel = wrapper.querySelector(".post-guidance-panel");
+    const summary = wrapper.querySelector(".post-guidance-summary");
+    const status = wrapper.querySelector(".post-guidance-status");
+    const service = wrapper.dataset.accountService;
+    const rule = servicePostGuidance[service];
+    const override = wrapper.querySelector(".override-body")?.value.trim() || "";
+
+    summary.textContent = describeServiceGuidance(rule);
+    panel.classList.remove("is-ok", "is-warning", "is-danger");
+
+    if (!checkbox.checked) {
+      panel.classList.add("is-warning");
+      renderGuidanceLines(status, ["This destination is not selected for the current post."], "warning");
+      return;
+    }
+
+    const evaluation = evaluateServiceGuidance(rule, override || bodyTextarea.value, snapshot);
+    panel.classList.add(`is-${evaluation.tone}`);
+    renderGuidanceLines(status, evaluation.lines, evaluation.tone);
+  });
+}
+
+personaSelect.addEventListener("change", renderTargetAccounts);
+renderTargetAccounts();
+
+uploadsInput.addEventListener("change", () => {
+  renderUploadPreviews();
+  refreshPostGuidance();
+});
+bodyTextarea.addEventListener("input", refreshPostGuidance);
+targetAccountList.addEventListener("input", refreshPostGuidance);
+targetAccountList.addEventListener("change", refreshPostGuidance);
+postTypeSelect.addEventListener("change", refreshPostGuidance);
+statusSelect.addEventListener("change", refreshComposerPreview);
+scheduledForInput.addEventListener("input", refreshComposerPreview);
+renderUploadPreviews();
+refreshPostGuidance();
+
+document.getElementById("scheduled-post-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const payload = new FormData();
+  const targetAccountIds = Array.from(form.querySelectorAll(".target-checkbox"))
+    .filter((checkbox) => checkbox.checked)
+    .map((checkbox) => checkbox.value);
+  const publishOverrides = {};
+  form.querySelectorAll(".override-body").forEach((textarea) => {
+    if (textarea.value.trim()) {
+      publishOverrides[textarea.dataset.accountId] = {body: textarea.value};
+    }
+  });
+  const metadata = {};
+  if (form.source_link.value.trim()) metadata.link = form.source_link.value.trim();
+  if (form.visibility.value) metadata.visibility = form.visibility.value;
+  const giveaway = buildGiveawayPayload(form);
+
+  if (postTypeSelect.value === "instagram_giveaway") {
+    const instagramTargetIds = Array.from(form.querySelectorAll(".target-checkbox"))
+      .filter((checkbox) => checkbox.checked)
+      .filter((checkbox) => checkbox.closest("[data-account-service]")?.dataset.accountService === "instagram")
+      .map((checkbox) => checkbox.value);
+    if (instagramTargetIds.length !== 1 || targetAccountIds.length !== 1) {
+      alert("Instagram giveaway posts need exactly one Instagram destination account.");
+      return;
+    }
+    if (!giveaway?.giveaway_end_at) {
+      alert("Instagram giveaway posts need an end time.");
+      return;
+    }
+  }
+
+  payload.append("persona_id", form.persona_id.value);
+  payload.append("body", form.body.value);
+  payload.append("post_type", postTypeSelect.value);
+  payload.append("status", form.status.value);
+  payload.append("target_account_ids", JSON.stringify(targetAccountIds));
+  payload.append("publish_overrides_json", JSON.stringify(publishOverrides));
+  payload.append("metadata_json", JSON.stringify(metadata));
+  payload.append("scheduled_for", form.scheduled_for.value);
+  payload.append("giveaway_json", JSON.stringify(giveaway));
+  payload.append("alt_texts", JSON.stringify([]));
+  for (const file of form.uploads.files) {
+    payload.append("uploads", file);
+  }
+
+  const response = await fetch("/scheduled-posts", {method: "POST", body: payload});
+  if (!response.ok) {
+    alert(await window.readApiMessage(response));
+    return;
+  }
+  const created = await response.json();
+  window.location.href = `/scheduled-posts/${created.id}/page`;
+});
+</script>
+{% endif %}
+{% endblock %}
