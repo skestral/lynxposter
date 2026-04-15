@@ -3,11 +3,11 @@
 <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
     <div>
         <div class="section-kicker mb-2">Instance Control</div>
-        <h1 class="h3 mb-1">App Settings</h1>
-        <div class="small text-secondary">A cleaner control surface for runtime config, authentication, webhooks, and automation.</div>
+        <h1 class="h3 mb-1">Instance Settings</h1>
+        <div class="small text-secondary">Tune how lynxposter behaves for everyone who shares this space.</div>
     </div>
     <div class="d-flex gap-2 flex-wrap">
-        <span class="badge text-bg-light border rounded-pill px-3 py-2">Env-backed settings</span>
+        <span class="badge text-bg-light border rounded-pill px-3 py-2">Saved to config</span>
         <span class="badge text-bg-light border rounded-pill px-3 py-2">Admin-only</span>
         {% if app_settings.auth_oidc_enabled %}
         <span class="badge text-bg-success rounded-pill px-3 py-2">OIDC enabled</span>
@@ -45,7 +45,7 @@
                 <div class="page-toolbar">
                     <div>
                         <div class="section-kicker mb-2">Control Tabs</div>
-                        <div class="text-secondary">Use the tabs to move through the instance settings without one endless wall of fields.</div>
+                        <div class="text-secondary">Move through the instance settings without one endless wall of fields.</div>
                     </div>
                     <div class="d-flex gap-2 flex-wrap">
                         <button class="btn btn-primary" type="submit">Save Settings</button>
@@ -82,18 +82,18 @@
                     <div class="tab-pane fade show active" id="settings-general-pane" role="tabpanel" aria-labelledby="settings-general-tab" tabindex="0">
                         <div class="surface-panel">
                             <div class="section-kicker mb-2">General</div>
-                            <h2 class="h5 mb-2">Core runtime values</h2>
-                            <div class="small text-secondary mb-3">Instance-wide values used across logs, health checks, callbacks, and the scheduler.</div>
+                            <h2 class="h5 mb-2">Core app settings</h2>
+                            <div class="small text-secondary mb-3">These instance-wide values are used for links, callbacks, health checks, and scheduling.</div>
                             <div class="row g-3">
                                 <div class="col-md-6">
                                     <label class="form-label">Instance Name</label>
                                     <input class="form-control" name="instance_name" value="{{ app_settings.instance_name }}">
-                                    <div class="form-text">Included in webhook payloads and health responses.</div>
+                                    <div class="form-text">Shown in health responses and outbound notification payloads.</div>
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label">App Port</label>
                                     <input class="form-control" name="app_port" type="number" min="1" max="65535" value="{{ app_settings.app_port }}">
-                                    <div class="form-text">Saved immediately, but changing the port requires an app restart.</div>
+                                    <div class="form-text">Saved right away, but changing the port still requires an app restart.</div>
                                 </div>
                                 <div class="col-12">
                                     <label class="form-label">Public Base URL</label>
@@ -108,7 +108,7 @@
                         <div class="surface-panel">
                             <div class="section-kicker mb-2">Instagram</div>
                             <h2 class="h5 mb-2">Instagram Webhooks</h2>
-                            <div class="small text-secondary mb-3">Configure the callback Meta will use for giveaway comment and story-mention capture.</div>
+                            <div class="small text-secondary mb-3">Set up the callback Meta will use for giveaway comments and story mentions.</div>
                             <div class="row g-3">
                                 <div class="col-12">
                                     <div class="form-check">
@@ -134,17 +134,17 @@
                                 </div>
                                 <div class="col-12">
                                     <label class="form-label">Webhook Callback URL</label>
-                                    <div class="form-control bg-body-tertiary">{{ instagram_webhook_callback_url or "Set Public Base URL first" }}</div>
+                                    <div class="lp-static-field code-ish {% if not instagram_webhook_callback_url %}is-empty{% endif %}">{{ instagram_webhook_callback_url or "Set Public Base URL first" }}</div>
                                     <div class="form-text">Instagram verifies <code>GET /webhooks/instagram</code> and delivers live events to <code>POST /webhooks/instagram</code>.</div>
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label">Latest Webhook Delivery</label>
-                                    <div class="form-control bg-body-tertiary">{{ instagram_webhook_latest_received_at|datetime_display if instagram_webhook_latest_received_at else "No webhook events received yet" }}</div>
+                                    <div class="lp-static-field {% if not instagram_webhook_latest_received_at %}is-empty{% endif %}">{{ instagram_webhook_latest_received_at|datetime_display if instagram_webhook_latest_received_at else "No webhook events received yet" }}</div>
                                     <div class="form-text">Latest event type: {{ instagram_webhook_latest_event_type or "-" }}</div>
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label">Recommended Subscriptions</label>
-                                    <div class="form-control bg-body-tertiary">{{ instagram_webhook_required_fields|join(", ") }}</div>
+                                    <div class="lp-static-field">{{ instagram_webhook_required_fields|join(", ") }}</div>
                                     <div class="form-text">For giveaway v1 we expect comment and mention-style events.</div>
                                 </div>
                                 <div class="col-12">
@@ -159,7 +159,7 @@
                         <details class="surface-details mt-4" open>
                             <summary class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 p-3">
                                 <div>
-                                    <div class="fw-semibold">Tunnel Setup Helper</div>
+                                    <div class="fw-semibold">Tunnel Helper</div>
                                     <div class="small text-secondary">Use a temporary public HTTPS URL to point Instagram back at this local app while you test webhook delivery.</div>
                                 </div>
                                 <span class="badge text-bg-light border rounded-pill">cloudflared or ngrok</span>
@@ -168,11 +168,11 @@
                                 <div class="row g-3">
                                     <div class="col-md-6">
                                         <label class="form-label">Local App Target</label>
-                                        <div class="form-control bg-body-tertiary code-ish">{{ instagram_tunnel_local_target }}</div>
-                                        <div class="form-text">Run the tunnel on the same machine where LynxPoster is listening.</div>
+                                        <div class="lp-static-field code-ish">{{ instagram_tunnel_local_target }}</div>
+                                        <div class="form-text">Run the tunnel on the same machine where lynxposter is listening.</div>
                                     </div>
                                     <div class="col-md-6">
-                                        <label class="form-label">Quick Order Of Operations</label>
+                                        <label class="form-label">Quick Setup Steps</label>
                                         <div class="surface-panel-soft small">
                                             1. Start a tunnel to the local app target.
                                             <br>
@@ -187,18 +187,18 @@
                                     </div>
                                     <div class="col-md-6">
                                         <label class="form-label">Cloudflare Quick Tunnel</label>
-                                        <div class="form-control bg-body-tertiary code-ish">{{ instagram_tunnel_cloudflared_command }}</div>
+                                        <div class="lp-static-field code-ish">{{ instagram_tunnel_cloudflared_command }}</div>
                                         <div class="form-text">Good for quick local webhook tests without changing your app port.</div>
                                     </div>
                                     <div class="col-md-6">
                                         <label class="form-label">ngrok</label>
-                                        <div class="form-control bg-body-tertiary code-ish">{{ instagram_tunnel_ngrok_command }}</div>
+                                        <div class="lp-static-field code-ish">{{ instagram_tunnel_ngrok_command }}</div>
                                         <div class="form-text">Use the public HTTPS forwarding URL as your Public Base URL after the tunnel starts.</div>
                                     </div>
                                     {% if instagram_tunnel_verify_probe %}
                                     <div class="col-12">
                                         <label class="form-label">Verification Probe</label>
-                                        <div class="form-control bg-body-tertiary code-ish">{{ instagram_tunnel_verify_probe }}</div>
+                                        <div class="lp-static-field code-ish">{{ instagram_tunnel_verify_probe }}</div>
                                         <div class="form-text">This should return <code>test123</code> once the tunnel is live and the callback URL is reachable.</div>
                                     </div>
                                     {% endif %}
@@ -211,7 +211,7 @@
                         <div class="surface-panel">
                             <div class="section-kicker mb-2">Automation</div>
                             <h2 class="h5 mb-2">Background scheduler</h2>
-                            <div class="small text-secondary mb-3">Tune how often LynxPoster scans, queues, and publishes work.</div>
+                            <div class="small text-secondary mb-3">Tune how often lynxposter scans, queues, and publishes work.</div>
                             <div class="row g-3">
                                 <div class="col-md-6">
                                     <label class="form-label">Autorun Interval (seconds)</label>
@@ -227,7 +227,7 @@
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label">Scheduler Status</label>
-                                    <div class="form-control bg-body-tertiary">{{ "Running" if scheduler_status.scheduler_started else "Stopped" }}{% if not scheduler_status.automation_enabled %} | Paused{% endif %}</div>
+                                    <div class="lp-static-field">{{ "Running" if scheduler_status.scheduler_started else "Stopped" }}{% if not scheduler_status.automation_enabled %} | Paused{% endif %}</div>
                                     <div class="form-text">Next run: {{ scheduler_status.next_run_at|datetime_display if scheduler_status.next_run_at else "Not scheduled" }}</div>
                                 </div>
                             </div>
@@ -238,7 +238,7 @@
                         <div class="surface-panel">
                             <div class="section-kicker mb-2">Authentication</div>
                             <h2 class="h5 mb-2">OpenID Connect</h2>
-                            <div class="small text-secondary mb-3">Connect LynxPoster to Authelia or another OIDC provider while keeping admin controls intact.</div>
+                            <div class="small text-secondary mb-3">Connect lynxposter to Authelia or another OIDC provider while keeping admin controls intact.</div>
                             <div class="row g-3">
                                 <div class="col-12">
                                     <div class="form-check">
@@ -268,7 +268,7 @@
                                         <input class="form-control secret-toggle-input" type="password" name="auth_session_secret" value="{{ app_settings.auth_session_secret }}">
                                         <button class="btn btn-outline-secondary secret-toggle-button" type="button">Show</button>
                                     </div>
-                                    <div class="form-text">Used to sign browser sessions. Change this in production.</div>
+                                    <div class="form-text">Used to sign browser sessions. Changing it still requires an app restart to fully take effect.</div>
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label">OIDC Scope</label>
@@ -397,7 +397,7 @@
         <div class="card section-card mb-4">
             <div class="card-body">
                 <div class="section-kicker mb-2">Runtime Paths</div>
-                <h2 class="h5 mb-3">Instance directories</h2>
+                <h2 class="h5 mb-3">Instance files</h2>
                 <dl class="mb-0">
                     <dt class="small text-secondary">Config Directory</dt>
                     <dd class="small code-ish">{{ app_settings.config_dir }}</dd>
@@ -452,18 +452,4 @@
         </div>
     </div>
 </div>
-{% endblock %}
-
-{% block scripts %}
-<script>
-document.querySelectorAll(".secret-toggle-button").forEach((button) => {
-  button.addEventListener("click", () => {
-    const input = button.parentElement.querySelector(".secret-toggle-input");
-    if (!input) return;
-    const isVisible = input.type === "text";
-    input.type = isVisible ? "password" : "text";
-    button.textContent = isVisible ? "Show" : "Hide";
-  });
-});
-</script>
 {% endblock %}

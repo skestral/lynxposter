@@ -2,11 +2,11 @@
 {% block content %}
 <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
     <div>
-        <h1 class="h3 mb-1">Users</h1>
-        <div class="small text-secondary">Review local and OIDC-backed users, see persona ownership, and disable access when needed.</div>
+        <h1 class="h3 mb-1">People</h1>
+        <div class="small text-secondary">Review profiles, see persona ownership, and pause access when needed.</div>
     </div>
     <div class="d-flex gap-2 flex-wrap">
-        <span class="badge text-bg-light border">{{ users|length }} total users</span>
+        <span class="badge text-bg-light border">{{ users|length }} total profiles</span>
         <span class="badge text-bg-light border">{{ users|selectattr('is_enabled')|list|length }} enabled</span>
     </div>
 </div>
@@ -25,7 +25,7 @@
 <div class="card section-card mb-4">
     <div class="card-body">
         <div class="small text-secondary">
-            Roles and groups shown here come from OIDC claims when OAuth is enabled. This page is best used for operational tasks like checking who owns personas, reviewing login state, and locally disabling an account if you need to block access.
+            When OIDC is on, roles and groups come from your provider. Use this screen to check persona ownership, review recent sign-ins, and locally disable a profile if you need to block access.
         </div>
     </div>
 </div>
@@ -66,7 +66,7 @@
 
                 <div class="row g-3 mb-3">
                     <div class="col-md-4">
-                        <div class="small text-secondary">Owned Personas</div>
+                        <div class="small text-secondary">Personas</div>
                         <div class="fw-semibold">{{ user.personas|length }}</div>
                         {% if user.personas %}
                         <div class="small text-secondary mt-1">
@@ -104,15 +104,15 @@
                     <div class="col-md-4 d-flex align-items-end">
                         <div class="form-check">
                             <input class="form-check-input" type="checkbox" name="is_enabled" {% if user.is_enabled %}checked{% endif %}>
-                            <label class="form-check-label">User is enabled</label>
+                            <label class="form-check-label">Profile is enabled</label>
                         </div>
                     </div>
                     <div class="col-md-3 d-flex align-items-end">
-                        <button class="btn btn-primary w-100" type="submit">Save User</button>
+                        <button class="btn btn-primary w-100" type="submit">Save Profile</button>
                     </div>
                     {% if current_principal.user_id == user.id %}
                     <div class="col-12">
-                        <div class="small text-secondary">Your own admin account cannot be disabled from this screen.</div>
+                        <div class="small text-secondary">You cannot disable your own admin profile from this screen.</div>
                     </div>
                     {% endif %}
                 </form>
@@ -121,7 +121,7 @@
     </div>
     {% else %}
     <div class="col-12">
-        <div class="alert alert-light border mb-0">No users have been created yet.</div>
+        <div class="alert alert-light border mb-0">No profiles have been created yet.</div>
     </div>
     {% endfor %}
 </div>

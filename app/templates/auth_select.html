@@ -11,12 +11,12 @@
             <div class="card-body p-4">
                 <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
                     <div>
-                        <h1 class="h3 mb-2">Choose Local User</h1>
-                        <p class="mb-0 text-secondary">OAuth is currently disabled, so LynxPoster is using local user selection. Pick an existing local user or create a new one to continue.</p>
+                        <h1 class="h3 mb-2">Choose a profile</h1>
+                        <p class="mb-0 text-secondary">Local mode is active for this trusted setup. Pick a profile or create a new one to keep going.</p>
                     </div>
                     <div class="d-flex gap-2 flex-wrap">
-                        <span class="badge rounded-pill soft-badge px-3 py-2">{{ local_users|length }} local users</span>
-                        <span class="badge rounded-pill text-bg-light border px-3 py-2">Admin account: Lynx</span>
+                        <span class="badge rounded-pill soft-badge px-3 py-2">{{ local_users|length }} profiles</span>
+                        <span class="badge rounded-pill text-bg-light border px-3 py-2">Trusted local mode</span>
                     </div>
                 </div>
             </div>
@@ -27,8 +27,8 @@
                 <div class="card section-card h-100">
                     <div class="card-body">
                         <div class="d-flex justify-content-between align-items-center mb-3">
-                            <h2 class="h5 mb-0">Existing Local Users</h2>
-                            <span class="small text-secondary">Only enabled users can be selected.</span>
+                            <h2 class="h5 mb-0">Available Profiles</h2>
+                            <span class="small text-secondary">Only enabled profiles can be selected.</span>
                         </div>
                         <div class="row g-3">
                             {% for user in local_users %}
@@ -61,7 +61,7 @@
                                             <input type="hidden" name="user_id" value="{{ user.id }}">
                                             <input type="hidden" name="next" value="{{ next_path }}">
                                             <button class="btn btn-primary" type="submit" {% if not user.is_enabled %}disabled{% endif %}>
-                                                Use {{ user.display_name }}
+                                                Continue as {{ user.display_name }}
                                             </button>
                                         </form>
                                     </div>
@@ -69,7 +69,7 @@
                             </div>
                             {% else %}
                             <div class="col-12">
-                                <div class="alert alert-light border mb-0">No local users are available yet.</div>
+                                <div class="alert alert-light border mb-0">No local profiles are available yet.</div>
                             </div>
                             {% endfor %}
                         </div>
@@ -80,13 +80,13 @@
             <div class="col-12 col-xl-5">
                 <div class="card section-card">
                     <div class="card-body">
-                        <h2 class="h5 mb-3">Create Local User</h2>
-                        <p class="text-secondary">New local users default to the regular <strong>User</strong> role. The <strong>Lynx</strong> admin account stays reserved for administration.</p>
+                        <h2 class="h5 mb-3">Create a profile</h2>
+                        <p class="text-secondary">New local profiles start with the regular <strong>User</strong> role. Admin access stays reserved for administration.</p>
                         <form method="post" action="/auth/select/create" class="row g-3">
                             <input type="hidden" name="next" value="{{ next_path }}">
                             <div class="col-12">
                                 <label class="form-label">Display Name</label>
-                                <input class="form-control" name="display_name" placeholder="New User" required>
+                                <input class="form-control" name="display_name" placeholder="New Profile" required>
                             </div>
                             <div class="col-12">
                                 <label class="form-label">Timezone</label>
@@ -104,10 +104,10 @@
                 </div>
                 <div class="card section-card mt-4">
                     <div class="card-body">
-                        <h2 class="h5 mb-3">Local Mode Notes</h2>
+                        <h2 class="h5 mb-3">Local mode notes</h2>
                         <div class="small text-secondary">
-                            OAuth is disabled, so local user selection is active.
-                            When OAuth is turned back on, external identity and group claims take over sign-in again.
+                            Local mode is best for trusted private setups.
+                            When OIDC is turned back on, external sign-in and group claims take over again.
                         </div>
                     </div>
                 </div>

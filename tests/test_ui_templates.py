@@ -586,7 +586,7 @@ def test_settings_template_renders_instagram_webhook_setup_guidance():
     assert "/webhooks/instagram" in html
     assert "Verify Token" in html
     assert "Recommended Subscriptions" in html
-    assert "Tunnel Setup Helper" in html
+    assert "Tunnel Helper" in html
     assert "cloudflared tunnel --url http://127.0.0.1:8000" in html
     assert "ngrok http 8000" in html
     assert "Verification Probe" in html
@@ -852,7 +852,7 @@ def test_logs_template_renders_instagram_webhook_observability_for_admin():
     assert "received a new comment from" in html
     assert "Open sender profile" in html
     assert "https://www.instagram.com/entrant.one/" in html
-    assert "Matched LynxPoster Account" in html
+    assert "Matched lynxposter account" in html
 
 
 def test_instagram_webhook_observability_collapses_recent_deliveries_after_three():
