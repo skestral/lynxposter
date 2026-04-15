@@ -14,12 +14,18 @@ from app.services.auth import Principal
 from app.services.personas import create_account, create_persona
 
 
-def _create_persona(session, *, slug: str = "instagram-account-api"):
+def _create_persona(
+    session,
+    *,
+    slug: str = "instagram-account-api",
+    owner_user_id: str | None = "admin-user",
+):
     return create_persona(
         session,
         {
             "name": "Instagram Persona",
             "slug": slug,
+            "owner_user_id": owner_user_id,
             "is_enabled": True,
             "timezone": "server",
             "settings_json": {},
