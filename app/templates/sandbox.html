@@ -1,0 +1,418 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row g-4">
+    <div class="col-12 col-xl-5">
+        <div class="card section-card">
+            <div class="card-body">
+                <h1 class="h4">Publishing Sandbox</h1>
+                <p class="text-secondary">Preview the exact per-account payload shape, validate it, and compare it to expectations without hitting any live services.</p>
+                {% if sandbox_source_label %}
+                <div class="alert alert-info">{{ sandbox_source_label }}</div>
+                {% endif %}
+                {% if personas %}
+                <form id="sandbox-form" class="row g-3">
+                    <div class="col-12">
+                        <label class="form-label">Persona</label>
+                        <select class="form-select" name="persona_id" id="sandbox-persona-select">
+                            {% for persona in personas %}
+                            <option value="{{ persona.id }}">{{ persona.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Body</label>
+                        <textarea class="form-control" name="body" rows="6"></textarea>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Source Link</label>
+                        <input class="form-control" name="source_link">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Visibility</label>
+                        <select class="form-select" name="visibility">
+                            <option value="">Use persona default</option>
+                            <option value="public">Public</option>
+                            <option value="unlisted">Unlisted</option>
+                            <option value="private">Private</option>
+                            <option value="direct">Direct</option>
+                        </select>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Attachment Preview Inputs</label>
+                        <input class="form-control" id="sandbox-uploads" name="uploads" type="file" multiple>
+                        <div id="sandbox-attachment-list" class="mt-2"></div>
+                        <button class="btn btn-sm btn-outline-secondary mt-2 d-none" type="button" id="clear-saved-attachments-button">Clear Saved Attachments</button>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Destination Accounts</label>
+                        <div id="sandbox-target-account-list" class="row g-2"></div>
+                    </div>
+                    <div class="col-12">
+                        <div class="border rounded p-3 bg-light-subtle">
+                            <h2 class="h6 mb-3">Expectations</h2>
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">Expected Target Count</label>
+                                    <input class="form-control" name="expected_target_count" type="number" min="0">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Max Body Length</label>
+                                    <input class="form-control" name="max_body_length" type="number" min="0">
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label">Body Must Contain</label>
+                                    <input class="form-control" name="body_must_contain">
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label">Body Must Not Contain</label>
+                                    <input class="form-control" name="body_must_not_contain">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Expected Attachment Count</label>
+                                    <input class="form-control" name="expected_attachment_count" type="number" min="0">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Expected Visibility</label>
+                                    <select class="form-select" name="expected_visibility">
+                                        <option value="">Any</option>
+                                        <option value="public">Public</option>
+                                        <option value="unlisted">Unlisted</option>
+                                        <option value="private">Private</option>
+                                        <option value="direct">Direct</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Require Media</label>
+                                    <select class="form-select" name="require_media">
+                                        <option value="">Ignore</option>
+                                        <option value="true">Yes</option>
+                                        <option value="false">No</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Require Source Link In Payload</label>
+                                    <select class="form-select" name="require_source_link_in_payload">
+                                        <option value="">Ignore</option>
+                                        <option value="true">Yes</option>
+                                        <option value="false">No</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12 d-flex gap-2 flex-wrap">
+                        <button class="btn btn-primary" type="submit">Run Sandbox Preview</button>
+                        <a class="btn btn-outline-secondary" href="/scheduled-posts/page">Back To Scheduled Posts</a>
+                    </div>
+                </form>
+                {% else %}
+                <div class="alert alert-light border mb-0">Create a persona and at least one destination account before using the sandbox.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-xl-7">
+        <div class="card section-card h-100">
+            <div class="card-body">
+                <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
+                    <div>
+                        <h2 class="h5 mb-1">Dry-Run Results</h2>
+                        <p class="text-secondary mb-0">Every preview here is generated locally from the adapter translation rules. No publish calls or live uploads are performed.</p>
+                    </div>
+                    <span class="badge soft-badge rounded-pill" id="sandbox-result-badge">Waiting for preview</span>
+                </div>
+                <div id="sandbox-summary" class="mb-3 text-secondary">Run a sandbox preview to inspect the payload shape for each selected account.</div>
+                <div id="sandbox-results" class="d-grid gap-3"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const personaTargets = {{ persona_targets | tojson }};
+const sandboxSeed = {{ sandbox_seed | tojson }};
+const form = document.getElementById("sandbox-form");
+const personaSelect = document.getElementById("sandbox-persona-select");
+const targetAccountList = document.getElementById("sandbox-target-account-list");
+const uploadsInput = document.getElementById("sandbox-uploads");
+const attachmentList = document.getElementById("sandbox-attachment-list");
+const clearSavedAttachmentsButton = document.getElementById("clear-saved-attachments-button");
+const summaryEl = document.getElementById("sandbox-summary");
+const resultsEl = document.getElementById("sandbox-results");
+const resultBadge = document.getElementById("sandbox-result-badge");
+let persistedAttachments = Array.isArray(sandboxSeed.attachment_inputs) ? [...sandboxSeed.attachment_inputs] : [];
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function parseOptionalNumber(value) {
+  if (value === "" || value === null || value === undefined) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseOptionalBoolean(value) {
+  if (value === "" || value === null || value === undefined) return null;
+  return value === "true";
+}
+
+function buildAttachmentInputs() {
+  const current = [...persistedAttachments];
+  for (const [index, file] of Array.from(uploadsInput?.files || []).entries()) {
+    current.push({
+      filename: file.name,
+      mime_type: file.type || "application/octet-stream",
+      alt_text: "",
+      size_bytes: file.size,
+      sort_order: persistedAttachments.length + index,
+      storage_path: `sandbox/${file.name}`,
+    });
+  }
+  return current;
+}
+
+function renderAttachmentList() {
+  const attachments = buildAttachmentInputs();
+  if (!attachments.length) {
+    attachmentList.innerHTML = '<div class="small text-secondary">No attachment metadata loaded into the sandbox yet.</div>';
+    clearSavedAttachmentsButton?.classList.add("d-none");
+    return;
+  }
+  attachmentList.innerHTML = attachments.map((attachment) => `
+    <div class="border rounded p-2 bg-white mb-2">
+      <div class="fw-semibold">${escapeHtml(attachment.filename)}</div>
+      <div class="small text-secondary">${escapeHtml(attachment.mime_type)}${attachment.size_bytes ? ` • ${attachment.size_bytes} bytes` : ""}</div>
+    </div>
+  `).join("");
+  if (persistedAttachments.length) {
+    clearSavedAttachmentsButton?.classList.remove("d-none");
+  } else {
+    clearSavedAttachmentsButton?.classList.add("d-none");
+  }
+}
+
+function selectedTargetIdsFromSeed(accounts) {
+  if (Array.isArray(sandboxSeed.target_account_ids) && sandboxSeed.target_account_ids.length) {
+    const matchingIds = sandboxSeed.target_account_ids.filter((accountId) => accounts.some((account) => account.id === accountId));
+    if (matchingIds.length) {
+      return new Set(matchingIds);
+    }
+  }
+  return new Set(accounts.map((account) => account.id));
+}
+
+function renderTargetAccounts() {
+  const accounts = personaTargets[personaSelect.value] || [];
+  const selectedIds = selectedTargetIdsFromSeed(accounts);
+  targetAccountList.innerHTML = "";
+  if (!accounts.length) {
+    targetAccountList.innerHTML = '<div class="col-12"><div class="alert alert-light border mb-0">This persona has no enabled destination accounts yet.</div></div>';
+    return;
+  }
+  for (const account of accounts) {
+    const seededOverride = sandboxSeed.publish_overrides_json?.[account.id]?.body || "";
+    const checked = selectedIds.has(account.id) ? "checked" : "";
+    const wrapper = document.createElement("div");
+    wrapper.className = "col-12";
+    wrapper.innerHTML = `
+      <div class="border rounded p-3 bg-white">
+        <div class="form-check">
+          <input class="form-check-input sandbox-target-checkbox" type="checkbox" value="${account.id}" id="sandbox-target-${account.id}" ${checked}>
+          <label class="form-check-label fw-semibold" for="sandbox-target-${account.id}">${escapeHtml(account.label)}</label>
+          <span class="small text-secondary ms-2">${escapeHtml(account.service)}</span>
+        </div>
+        <div class="mt-2">
+          <label class="form-label small text-secondary mb-1">Optional override body</label>
+          <textarea class="form-control sandbox-override-body" data-account-id="${account.id}" rows="2">${escapeHtml(seededOverride)}</textarea>
+        </div>
+      </div>
+    `;
+    targetAccountList.appendChild(wrapper);
+  }
+}
+
+function renderChecks(checks) {
+  if (!checks?.length) {
+    return '<div class="small text-secondary">No custom expectations applied.</div>';
+  }
+  return `
+    <div class="d-grid gap-2">
+      ${checks.map((check) => `
+        <div class="border rounded p-2 ${check.passed ? "bg-success-subtle border-success-subtle" : "bg-danger-subtle border-danger-subtle"}">
+          <div class="fw-semibold">${escapeHtml(check.label)}</div>
+          <div class="small">${escapeHtml(check.message)}</div>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderIssues(issues) {
+  if (!issues?.length) {
+    return '<div class="small text-secondary">No validation issues.</div>';
+  }
+  return `
+    <div class="d-grid gap-2">
+      ${issues.map((issue) => `
+        <div class="border rounded p-2 ${issue.level === "error" ? "bg-danger-subtle border-danger-subtle" : "bg-warning-subtle border-warning-subtle"}">
+          <div class="fw-semibold">${escapeHtml(issue.field || issue.service || "Issue")}</div>
+          <div class="small">${escapeHtml(issue.message)}</div>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderPreviewResults(result) {
+  const isHealthy = result.overall_valid && result.overall_expectations_passed;
+  resultBadge.textContent = isHealthy ? "Ready for live publish" : "Needs review";
+  resultBadge.className = `badge rounded-pill ${isHealthy ? "text-bg-success" : "text-bg-warning"}`;
+
+  const globalErrors = result.global_errors?.length
+    ? `<div class="alert alert-danger mb-3">${result.global_errors.map((message) => escapeHtml(message)).join("<br>")}</div>`
+    : "";
+  summaryEl.innerHTML = `
+    ${globalErrors}
+    <div class="d-flex gap-2 flex-wrap mb-2">
+      <span class="badge text-bg-light border">${escapeHtml(result.persona_name)}</span>
+      <span class="badge text-bg-light border">${result.target_count} targets</span>
+      <span class="badge text-bg-light border">${result.attachment_count} attachments</span>
+      <span class="badge ${result.overall_valid ? "text-bg-success" : "text-bg-danger"}">${result.overall_valid ? "Adapter validation passed" : "Adapter validation needs fixes"}</span>
+      <span class="badge ${result.overall_expectations_passed ? "text-bg-success" : "text-bg-danger"}">${result.overall_expectations_passed ? "Expectations passed" : "Expectation mismatches"}</span>
+    </div>
+    <div class="small text-secondary">Generated at ${escapeHtml(result.generated_at)}</div>
+    <div class="mt-3">${renderChecks(result.global_checks)}</div>
+  `;
+
+  resultsEl.innerHTML = result.previews.map((preview) => `
+    <div class="card border-0 shadow-sm">
+      <div class="card-body">
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
+          <div>
+            <h3 class="h6 mb-1">${escapeHtml(preview.account_label)}</h3>
+            <div class="small text-secondary">${escapeHtml(preview.service)} • ${escapeHtml(preview.action)}</div>
+          </div>
+          <div class="d-flex gap-2 flex-wrap">
+            <span class="badge ${preview.publish_ready ? "text-bg-success" : "text-bg-warning"}">${preview.publish_ready ? "Publish Ready" : "Needs Attention"}</span>
+            <span class="badge ${preview.configured ? "text-bg-success" : "text-bg-secondary"}">${preview.configured ? "Configured" : "Not Configured"}</span>
+            <span class="badge text-bg-light border">${preview.body_length} chars</span>
+          </div>
+        </div>
+        <div class="row g-3">
+          <div class="col-12">
+            <div class="small text-secondary mb-1">Rendered Body Preview</div>
+            <pre class="bg-light border rounded p-3 mb-0" style="white-space: pre-wrap;">${escapeHtml(preview.rendered_body)}</pre>
+          </div>
+          <div class="col-12 col-lg-6">
+            <div class="small text-secondary mb-2">Validation</div>
+            ${renderIssues(preview.validation_issues)}
+          </div>
+          <div class="col-12 col-lg-6">
+            <div class="small text-secondary mb-2">Expectation Checks</div>
+            ${renderChecks(preview.expectation_checks)}
+          </div>
+          <div class="col-12">
+            <div class="small text-secondary mb-1">Request Shape${preview.endpoint_label ? ` • ${escapeHtml(preview.endpoint_label)}` : ""}</div>
+            <pre class="bg-light border rounded p-3 mb-0"><code>${escapeHtml(JSON.stringify(preview.request_shape, null, 2))}</code></pre>
+          </div>
+          <div class="col-12">
+            <div class="small text-secondary mb-1">Notes</div>
+            ${preview.notes?.length
+              ? `<div class="d-grid gap-2">${preview.notes.map((note) => `<div class="border rounded p-2 bg-light">${escapeHtml(note)}</div>`).join("")}</div>`
+              : '<div class="small text-secondary">No extra notes.</div>'}
+          </div>
+        </div>
+      </div>
+    </div>
+  `).join("");
+}
+
+function buildPayload() {
+  const targetAccountIds = Array.from(form.querySelectorAll(".sandbox-target-checkbox"))
+    .filter((checkbox) => checkbox.checked)
+    .map((checkbox) => checkbox.value);
+  const publishOverrides = {};
+  form.querySelectorAll(".sandbox-override-body").forEach((textarea) => {
+    if (textarea.value.trim()) {
+      publishOverrides[textarea.dataset.accountId] = {body: textarea.value};
+    }
+  });
+  const metadata = {};
+  if (form.source_link.value.trim()) metadata.link = form.source_link.value.trim();
+  if (form.visibility.value) metadata.visibility = form.visibility.value;
+  return {
+    persona_id: form.persona_id.value,
+    body: form.body.value,
+    target_account_ids: targetAccountIds,
+    publish_overrides_json: publishOverrides,
+    metadata_json: metadata,
+    attachment_inputs: buildAttachmentInputs(),
+    expectations: {
+      expected_target_count: parseOptionalNumber(form.expected_target_count.value),
+      body_must_contain: form.body_must_contain.value.trim() || null,
+      body_must_not_contain: form.body_must_not_contain.value.trim() || null,
+      max_body_length: parseOptionalNumber(form.max_body_length.value),
+      expected_attachment_count: parseOptionalNumber(form.expected_attachment_count.value),
+      expected_visibility: form.expected_visibility.value || null,
+      require_media: parseOptionalBoolean(form.require_media.value),
+      require_source_link_in_payload: parseOptionalBoolean(form.require_source_link_in_payload.value),
+    },
+  };
+}
+
+async function runSandboxPreview() {
+  resultBadge.textContent = "Running preview";
+  resultBadge.className = "badge rounded-pill text-bg-primary";
+  summaryEl.textContent = "Generating sandbox preview...";
+  resultsEl.innerHTML = "";
+  const response = await fetch("/sandbox/preview", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(buildPayload()),
+  });
+  if (!response.ok) {
+    summaryEl.textContent = await response.text();
+    resultBadge.textContent = "Preview failed";
+    resultBadge.className = "badge rounded-pill text-bg-danger";
+    return;
+  }
+  const result = await response.json();
+  renderPreviewResults(result);
+}
+
+function applySeed() {
+  if (!sandboxSeed || !Object.keys(sandboxSeed).length) return;
+  if (sandboxSeed.persona_id) personaSelect.value = sandboxSeed.persona_id;
+  if (sandboxSeed.body) form.body.value = sandboxSeed.body;
+  if (sandboxSeed.metadata_json?.link) form.source_link.value = sandboxSeed.metadata_json.link;
+  if (sandboxSeed.metadata_json?.visibility) form.visibility.value = sandboxSeed.metadata_json.visibility;
+}
+
+personaSelect?.addEventListener("change", renderTargetAccounts);
+uploadsInput?.addEventListener("change", renderAttachmentList);
+clearSavedAttachmentsButton?.addEventListener("click", () => {
+  persistedAttachments = [];
+  renderAttachmentList();
+});
+form?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await runSandboxPreview();
+});
+
+applySeed();
+renderTargetAccounts();
+renderAttachmentList();
+
+if (sandboxSeed && sandboxSeed.post_id) {
+  runSandboxPreview();
+}
+</script>
+{% endblock %}

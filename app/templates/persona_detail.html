@@ -1,0 +1,709 @@
+{% extends "base.html" %}
+{% macro render_account_field(field, scope, value="", column_class="col-md-6", service=None) -%}
+<div
+    class="{{ column_class }}{% if service %} service-field{% endif %}"
+    {% if service %}data-service="{{ service }}" style="display:none;"{% endif %}
+>
+    <label class="form-label">{{ field.label }}</label>
+    {% if field.input_type == "password" %}
+    <div class="input-group">
+        <input
+            class="form-control secret-toggle-input"
+            type="password"
+            data-scope="{{ scope }}"
+            data-field-name="{{ field.name }}"
+            value="{{ value }}"
+        >
+        <button class="btn btn-outline-secondary secret-toggle-button" type="button">Show</button>
+    </div>
+    {% else %}
+    <input
+        class="form-control"
+        type="{{ field.input_type }}"
+        data-scope="{{ scope }}"
+        data-field-name="{{ field.name }}"
+        value="{{ value }}"
+    >
+    {% endif %}
+    {% if field.help_text %}
+    <div class="form-text">{{ field.help_text }}</div>
+    {% endif %}
+</div>
+{%- endmacro %}
+{% block content %}
+<div class="card hero-card section-card mb-4">
+    <div class="card-body">
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
+            <div>
+                <div class="section-kicker mb-2">Persona Workspace</div>
+                <h1 class="h3 mb-1">{{ persona.name }}</h1>
+                <div class="small-muted code-ish">{{ persona.slug }}</div>
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+                {% if persona.is_enabled %}
+                    <span class="badge text-bg-success rounded-pill px-3 py-2">Enabled</span>
+                {% else %}
+                    <span class="badge text-bg-secondary rounded-pill px-3 py-2">Disabled</span>
+                {% endif %}
+                <span class="badge soft-badge rounded-pill px-3 py-2">{{ persona.accounts|length }} accounts</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<ul class="nav nav-pills glass-tabs mb-4" id="persona-detail-tabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="persona-overview-tab" data-bs-toggle="tab" data-bs-target="#persona-overview-pane" type="button" role="tab">Overview</button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="persona-accounts-tab" data-bs-toggle="tab" data-bs-target="#persona-accounts-pane" type="button" role="tab">Accounts</button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="persona-routing-tab" data-bs-toggle="tab" data-bs-target="#persona-routing-pane" type="button" role="tab">Routing</button>
+    </li>
+</ul>
+
+<div class="tab-content">
+    <div class="tab-pane fade show active" id="persona-overview-pane" role="tabpanel" aria-labelledby="persona-overview-tab" tabindex="0">
+        <div class="card section-card">
+            <div class="card-body">
+                <form id="persona-update-form" class="tab-pane-stack">
+                    <div class="surface-panel">
+                        <div class="section-kicker mb-2">Overview</div>
+                        <h2 class="h5 mb-3">Identity and automation defaults</h2>
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label">Name</label>
+                                <input class="form-control" name="name" value="{{ persona.name }}" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Slug</label>
+                                <input class="form-control" name="slug" value="{{ persona.slug }}" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Timezone</label>
+                                <select class="form-select" name="timezone">
+                                    {% for option in timezone_options(True) %}
+                                    <option value="{{ option }}" {% if persona.timezone == option %}selected{% endif %}>{{ option }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Max Retries</label>
+                                <input class="form-control" name="max_retries" type="number" value="{{ persona.retry_settings_json.max_retries if persona.retry_settings_json else 5 }}">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Max Posts / Hour</label>
+                                <input class="form-control" name="max_per_hour" type="number" value="{{ persona.throttle_settings_json.max_per_hour if persona.throttle_settings_json else 0 }}">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Overflow Policy</label>
+                                <select class="form-select" name="overflow_posts">
+                                    {% set overflow = persona.throttle_settings_json.overflow_posts if persona.throttle_settings_json else "retry" %}
+                                    <option value="retry" {% if overflow == "retry" %}selected{% endif %}>Retry</option>
+                                    <option value="skip" {% if overflow == "skip" %}selected{% endif %}>Skip</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3 d-flex align-items-end">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="is_enabled" {% if persona.is_enabled %}checked{% endif %}>
+                                    <label class="form-check-label">Enabled</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="surface-panel">
+                        <div class="section-kicker mb-2">Posting Defaults</div>
+                        <h2 class="h5 mb-3">Shared guardrails</h2>
+                        <div class="row g-3">
+                            <div class="col-md-3">
+                                <label class="form-label">Lookback Hours</label>
+                                <input class="form-control" name="post_time_limit" type="number" value="{{ persona.settings_json.post_time_limit if persona.settings_json else 12 }}">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Default Visibility</label>
+                                {% set visibility = persona.settings_json.visibility if persona.settings_json else "public" %}
+                                <select class="form-select" name="visibility">
+                                    <option value="public" {% if visibility == "public" %}selected{% endif %}>Public</option>
+                                    <option value="unlisted" {% if visibility == "unlisted" %}selected{% endif %}>Unlisted</option>
+                                    <option value="private" {% if visibility == "private" %}selected{% endif %}>Private</option>
+                                    <option value="direct" {% if visibility == "direct" %}selected{% endif %}>Direct</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Mentions Policy</label>
+                                {% set mentions = persona.settings_json.mentions if persona.settings_json else "strip" %}
+                                <select class="form-select" name="mentions">
+                                    <option value="strip" {% if mentions == "strip" %}selected{% endif %}>Strip</option>
+                                    <option value="keep" {% if mentions == "keep" %}selected{% endif %}>Keep</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3 d-flex align-items-end">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="quote_posts" {% if persona.settings_json and persona.settings_json.quote_posts %}checked{% endif %}>
+                                    <label class="form-check-label">Allow Quote Posts</label>
+                                </div>
+                            </div>
+                            <div class="col-md-3 d-flex align-items-end">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="post_default" {% if persona.settings_json and persona.settings_json.post_default %}checked{% endif %}>
+                                    <label class="form-check-label">Enable Default Posting</label>
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="import_existing_posts" {% if persona.settings_json and persona.settings_json.import_existing_posts %}checked{% endif %}>
+                                    <label class="form-check-label">Import existing posts on first scan</label>
+                                </div>
+                                <div class="small text-secondary">Keep this off to prevent a new or reset source account from flooding destination accounts with historical posts.</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex gap-2 flex-wrap">
+                        <button class="btn btn-primary" type="submit">Save Persona Settings</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="tab-pane fade" id="persona-accounts-pane" role="tabpanel" aria-labelledby="persona-accounts-tab" tabindex="0">
+        <div class="row g-4">
+            <div class="col-12 col-xl-5">
+                <div class="card section-card h-100">
+                    <div class="card-body">
+                        <div class="section-kicker mb-2">Add Account</div>
+                        <h2 class="h5 mb-3">Service setup</h2>
+                        <form id="account-create-form" class="tab-pane-stack" data-mode="create">
+                            <div class="surface-panel">
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label">Service</label>
+                                        <select class="form-select" name="service" id="new-account-service">
+                                            {% for definition in service_definitions %}
+                                            <option value="{{ definition.service }}">{{ definition.label }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Label</label>
+                                        <input class="form-control" name="label" value="New Account" required>
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label">Handle or Identifier</label>
+                                        <input class="form-control" name="handle_or_identifier">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="is_enabled" checked>
+                                            <label class="form-check-label">Enabled</label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="source_enabled">
+                                            <label class="form-check-label">Source Enabled</label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="destination_enabled">
+                                            <label class="form-check-label">Destination Enabled</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="surface-panel">
+                                <div class="section-kicker mb-2">Service Fields</div>
+                                <div class="row g-3">
+                                    {% for definition in service_definitions %}
+                                        {% for field in definition.credential_fields %}
+                                        {{ render_account_field(field, "credentials", "", "col-12", definition.service) }}
+                                        {% endfor %}
+                                        {% for field in definition.source_setting_fields %}
+                                        {{ render_account_field(field, "source", "", "col-12", definition.service) }}
+                                        {% endfor %}
+                                        {% for field in definition.publish_setting_fields %}
+                                        {{ render_account_field(field, "publish", "", "col-12", definition.service) }}
+                                        {% endfor %}
+                                    {% endfor %}
+                                </div>
+                            </div>
+
+                            <div class="d-flex gap-2 flex-wrap">
+                                <button class="btn btn-primary" type="submit">Create Account</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12 col-xl-7">
+                <div class="card section-card h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div>
+                                <div class="section-kicker mb-2">Existing Accounts</div>
+                                <h2 class="h5 mb-0">Connections and credentials</h2>
+                            </div>
+                            <span class="badge soft-badge rounded-pill px-3 py-2">{{ accounts|length }} configured</span>
+                        </div>
+                        <div class="d-flex flex-column gap-3">
+                            {% for entry in accounts %}
+                            <details class="details-card account-card" {% if loop.first or entry.account.last_error or not entry.account_read.configured %}open{% endif %}>
+                                <summary class="p-3">
+                                    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+                                        <div>
+                                            <div class="fw-semibold">{{ entry.account.label }}</div>
+                                            <div class="small-muted">{{ entry.definition.label }}{% if entry.account.handle_or_identifier %} | {{ entry.account.handle_or_identifier }}{% endif %}</div>
+                                        </div>
+                                        <div class="d-flex gap-2 flex-wrap justify-content-end">
+                                            {% if entry.account_read.source_supported %}
+                                                <span class="badge text-bg-light border">Source</span>
+                                            {% endif %}
+                                            {% if entry.account_read.destination_supported %}
+                                                <span class="badge text-bg-light border">Destination</span>
+                                            {% endif %}
+                                            {% if entry.account_read.configured %}
+                                                <span class="badge text-bg-success">Configured</span>
+                                            {% else %}
+                                                <span class="badge text-bg-warning">Needs Setup</span>
+                                            {% endif %}
+                                            {% if entry.account.last_error %}
+                                                <span class="badge text-bg-danger">Attention</span>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </summary>
+                                <div class="px-3 pb-3">
+                                    <form class="account-update-form tab-pane-stack" data-account-id="{{ entry.account.id }}" data-service="{{ entry.account.service }}">
+                                        <div class="surface-panel">
+                                            <div class="section-kicker mb-2">Basics</div>
+                                            <div class="row g-3">
+                                                <div class="col-md-5">
+                                                    <label class="form-label">Label</label>
+                                                    <input class="form-control" name="label" value="{{ entry.account.label }}">
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label">Handle or Identifier</label>
+                                                    <input class="form-control" name="handle_or_identifier" value="{{ entry.account.handle_or_identifier }}">
+                                                </div>
+                                                <div class="col-md-3 d-flex align-items-end">
+                                                    <div class="small-muted">{{ entry.account.service }}</div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="checkbox" name="is_enabled" {% if entry.account.is_enabled %}checked{% endif %}>
+                                                        <label class="form-check-label">Enabled</label>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="checkbox" name="source_enabled" {% if entry.account.source_enabled %}checked{% endif %}>
+                                                        <label class="form-check-label">Source Enabled</label>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="checkbox" name="destination_enabled" {% if entry.account.destination_enabled %}checked{% endif %}>
+                                                        <label class="form-check-label">Destination Enabled</label>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {% if entry.definition.credential_fields %}
+                                        <div class="surface-panel">
+                                            <div class="section-kicker mb-2">Credentials</div>
+                                            <div class="row g-3">
+                                                {% for field in entry.definition.credential_fields %}
+                                                {{ render_account_field(field, "credentials", entry.account.credentials_json.get(field.name, ""), "col-md-6") }}
+                                                {% endfor %}
+                                            </div>
+                                        </div>
+                                        {% endif %}
+
+                                        {% if entry.definition.source_setting_fields %}
+                                        <div class="surface-panel">
+                                            <div class="section-kicker mb-2">Source Settings</div>
+                                            <div class="row g-3">
+                                                {% for field in entry.definition.source_setting_fields %}
+                                                {{ render_account_field(field, "source", entry.account.source_settings_json.get(field.name, ""), "col-md-6") }}
+                                                {% endfor %}
+                                            </div>
+                                        </div>
+                                        {% endif %}
+
+                                        {% if entry.definition.publish_setting_fields %}
+                                        <div class="surface-panel">
+                                            <div class="section-kicker mb-2">Publishing</div>
+                                            <div class="row g-3">
+                                                {% for field in entry.definition.publish_setting_fields %}
+                                                {{ render_account_field(field, "publish", entry.publish_field_values.get(field.name, ""), "col-md-6") }}
+                                                {% endfor %}
+                                            </div>
+                                        </div>
+                                        {% endif %}
+
+                                        {% if entry.account.service == "instagram" and entry.instagram_token_status %}
+                                        <div class="surface-panel-soft">
+                                            <div class="d-flex flex-column flex-md-row justify-content-between gap-2 align-items-md-start">
+                                                <div>
+                                                    <div class="fw-semibold">Token Lifecycle</div>
+                                                    <div class="small text-secondary">{{ entry.instagram_token_status.summary }}</div>
+                                                </div>
+                                                <span class="badge {{ entry.instagram_token_status.badge_class }}">{{ entry.instagram_token_status.badge_label }}</span>
+                                            </div>
+                                            <div class="row g-3 mt-1">
+                                                <div class="col-md-6">
+                                                    <div class="small text-secondary">Last Recorded Refresh</div>
+                                                    <div>{{ entry.instagram_token_status.recorded_at|datetime_display if entry.instagram_token_status.recorded_at else "-" }}</div>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <div class="small text-secondary">Estimated Expiry</div>
+                                                    <div>{{ entry.instagram_token_status.estimated_expires_at|datetime_display if entry.instagram_token_status.estimated_expires_at else "-" }}</div>
+                                                </div>
+                                            </div>
+                                            {% if entry.instagram_token_status.token_present %}
+                                            <div class="mt-3">
+                                                <button
+                                                    class="btn btn-outline-secondary btn-sm instagram-token-refresh-button"
+                                                    type="button"
+                                                    data-account-id="{{ entry.account.id }}"
+                                                    data-account-label="{{ entry.account.label }}"
+                                                >
+                                                    Record Token Refreshed
+                                                </button>
+                                                <div class="small text-secondary mt-2">
+                                                    Use this after refreshing or replacing the long-lived token in Meta so LynxPoster can reset the reminder window.
+                                                </div>
+                                            </div>
+                                            {% endif %}
+                                        </div>
+                                        {% endif %}
+
+                                        {% if entry.account.last_error %}
+                                        <div class="alert alert-danger py-2 mb-0">
+                                            <div class="fw-semibold">Last Account Error</div>
+                                            <div class="small mb-0">{{ entry.account.last_error }}</div>
+                                        </div>
+                                        {% endif %}
+
+                                        <div class="d-flex gap-2 flex-wrap">
+                                            <button class="btn btn-outline-primary" type="submit">Save Account</button>
+                                            {% if entry.account.service == "instagram" %}
+                                            <button
+                                                class="btn btn-outline-secondary instagram-login-validate-button"
+                                                type="button"
+                                                data-account-id="{{ entry.account.id }}"
+                                                data-account-label="{{ entry.account.label }}"
+                                            >
+                                                Validate Login
+                                            </button>
+                                            {% endif %}
+                                            <button
+                                                class="btn btn-outline-danger delete-account-button"
+                                                type="button"
+                                                data-account-id="{{ entry.account.id }}"
+                                                data-account-label="{{ entry.account.label }}"
+                                            >
+                                                Delete Account
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </details>
+                            {% else %}
+                            <div class="alert alert-light border mb-0">No accounts yet.</div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="tab-pane fade" id="persona-routing-pane" role="tabpanel" aria-labelledby="persona-routing-tab" tabindex="0">
+        <div class="card section-card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div>
+                        <div class="section-kicker mb-2">Routing</div>
+                        <h2 class="h5 mb-1">Matrix</h2>
+                        <p class="text-secondary mb-0">Imported posts fan out from a source-enabled account to the destination-enabled accounts checked here.</p>
+                    </div>
+                    <button class="btn btn-primary" id="save-routes-button" {% if not source_accounts or not destination_accounts %}disabled{% endif %}>Save Routes</button>
+                </div>
+                {% if source_accounts and destination_accounts %}
+                <div class="table-responsive">
+                    <table class="table align-middle">
+                        <thead>
+                            <tr>
+                                <th>Source</th>
+                                {% for destination in destination_accounts %}
+                                <th class="route-cell">{{ destination.label }}</th>
+                                {% endfor %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for source in source_accounts %}
+                            <tr>
+                                <th>{{ source.label }}</th>
+                                {% for destination in destination_accounts %}
+                                <td class="route-cell">
+                                    {% if source.id == destination.id %}
+                                        <span class="text-secondary">-</span>
+                                    {% else %}
+                                        <input
+                                            class="form-check-input route-checkbox"
+                                            type="checkbox"
+                                            data-source-id="{{ source.id }}"
+                                            data-destination-id="{{ destination.id }}"
+                                            {% if routes_map.get((source.id, destination.id)) %}checked{% endif %}
+                                        >
+                                    {% endif %}
+                                </td>
+                                {% endfor %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="alert alert-light border mb-0">Add at least one source-enabled account and one destination-enabled account to configure routing.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const personaId = "{{ persona.id }}";
+
+async function responseMessage(response) {
+  try {
+    const payload = await response.clone().json();
+    if (typeof payload.detail === "string" && payload.detail.trim()) return payload.detail;
+    if (typeof payload.message === "string" && payload.message.trim()) return payload.message;
+    return JSON.stringify(payload);
+  } catch {
+    return await response.text();
+  }
+}
+
+function collectScopedFields(form) {
+  const credentials = {};
+  const sourceSettings = {};
+  const publishSettings = {};
+  form.querySelectorAll("[data-scope='credentials']").forEach((field) => {
+    if (field.value !== "") credentials[field.dataset.fieldName] = field.value;
+  });
+  form.querySelectorAll("[data-scope='source']").forEach((field) => {
+    if (field.value !== "") sourceSettings[field.dataset.fieldName] = field.type === "number" ? Number(field.value) : field.value;
+  });
+  form.querySelectorAll("[data-scope='publish']").forEach((field) => {
+    if (field.value !== "") publishSettings[field.dataset.fieldName] = field.value;
+  });
+  return {credentials, sourceSettings, publishSettings};
+}
+
+function buildAccountPayload(form) {
+  const scoped = collectScopedFields(form);
+  return {
+    label: form.label.value,
+    handle_or_identifier: form.handle_or_identifier.value,
+    is_enabled: form.is_enabled.checked,
+    source_enabled: form.source_enabled.checked,
+    destination_enabled: form.destination_enabled.checked,
+    credentials_json: scoped.credentials,
+    source_settings_json: scoped.sourceSettings,
+    publish_settings_json: scoped.publishSettings,
+  };
+}
+
+function toggleCreateServiceFields() {
+  const service = document.getElementById("new-account-service").value;
+  document.querySelectorAll("#account-create-form .service-field").forEach((field) => {
+    field.style.display = field.dataset.service === service ? "" : "none";
+    field.querySelectorAll("input").forEach((input) => {
+      if (field.dataset.service !== service) input.value = "";
+    });
+  });
+}
+
+document.getElementById("new-account-service").addEventListener("change", toggleCreateServiceFields);
+toggleCreateServiceFields();
+
+document.getElementById("persona-update-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const payload = {
+    name: form.name.value,
+    slug: form.slug.value,
+    timezone: form.timezone.value || "server",
+    is_enabled: form.is_enabled.checked,
+    settings_json: {
+      post_time_limit: Number(form.post_time_limit.value || 12),
+      visibility: form.visibility.value,
+      mentions: form.mentions.value,
+      quote_posts: form.quote_posts.checked,
+      post_default: form.post_default.checked,
+      import_existing_posts: form.import_existing_posts.checked,
+    },
+    retry_settings_json: {
+      max_retries: Number(form.max_retries.value || 5),
+    },
+    throttle_settings_json: {
+      max_per_hour: Number(form.max_per_hour.value || 0),
+      overflow_posts: form.overflow_posts.value,
+    },
+  };
+  const response = await fetch(`/personas/${personaId}`, {
+    method: "PUT",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    alert(await response.text());
+    return;
+  }
+  window.location.reload();
+});
+
+document.getElementById("account-create-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const scoped = collectScopedFields(form);
+  const payload = {
+    service: form.service.value,
+    label: form.label.value,
+    handle_or_identifier: form.handle_or_identifier.value,
+    is_enabled: form.is_enabled.checked,
+    source_enabled: form.source_enabled.checked,
+    destination_enabled: form.destination_enabled.checked,
+    credentials_json: scoped.credentials,
+    source_settings_json: scoped.sourceSettings,
+    publish_settings_json: scoped.publishSettings,
+  };
+  const response = await fetch(`/personas/${personaId}/accounts`, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    alert(await responseMessage(response));
+    return;
+  }
+  window.location.reload();
+});
+
+document.querySelectorAll(".account-update-form").forEach((form) => {
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const payload = buildAccountPayload(form);
+    const response = await fetch(`/personas/${personaId}/accounts/${form.dataset.accountId}`, {
+      method: "PUT",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      alert(await responseMessage(response));
+      return;
+    }
+    window.location.reload();
+  });
+});
+
+document.querySelectorAll(".delete-account-button").forEach((button) => {
+  button.addEventListener("click", async () => {
+    const label = button.dataset.accountLabel || "this account";
+    const confirmed = window.confirm(`Delete ${label} from this persona? This removes its routes and stored delivery state.`);
+    if (!confirmed) return;
+
+    const response = await fetch(`/personas/${personaId}/accounts/${button.dataset.accountId}`, {
+      method: "DELETE",
+    });
+    if (!response.ok) {
+      alert(await responseMessage(response));
+      return;
+    }
+    window.location.reload();
+  });
+});
+
+document.querySelectorAll(".instagram-login-validate-button").forEach((button) => {
+  button.addEventListener("click", async () => {
+    const form = button.closest(".account-update-form");
+    if (!form) return;
+    const payload = buildAccountPayload(form);
+    const response = await fetch(`/personas/${personaId}/accounts/${button.dataset.accountId}/instagram-login/validate`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      alert(await responseMessage(response));
+      return;
+    }
+    const message = await responseMessage(response);
+    if (message) alert(message);
+    window.location.reload();
+  });
+});
+
+document.querySelectorAll(".instagram-token-refresh-button").forEach((button) => {
+  button.addEventListener("click", async () => {
+    const label = button.dataset.accountLabel || "this Instagram account";
+    const confirmed = window.confirm(`Record a fresh Instagram token window for ${label}? Use this after renewing the token in Meta.`);
+    if (!confirmed) return;
+
+    const response = await fetch(`/personas/${personaId}/accounts/${button.dataset.accountId}/instagram-token/record-refresh`, {
+      method: "POST",
+    });
+    if (!response.ok) {
+      alert(await responseMessage(response));
+      return;
+    }
+    window.location.reload();
+  });
+});
+
+const saveRoutesButton = document.getElementById("save-routes-button");
+if (saveRoutesButton) {
+  saveRoutesButton.addEventListener("click", async () => {
+    const routes = Array.from(document.querySelectorAll(".route-checkbox"))
+      .filter((checkbox) => checkbox.checked)
+      .map((checkbox) => ({
+        source_account_id: checkbox.dataset.sourceId,
+        destination_account_id: checkbox.dataset.destinationId,
+        is_enabled: true,
+      }));
+    const response = await fetch(`/personas/${personaId}/routes`, {
+      method: "PUT",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({routes}),
+    });
+    if (!response.ok) {
+      alert(await responseMessage(response));
+      return;
+    }
+    window.location.reload();
+  });
+}
+
+document.querySelectorAll(".secret-toggle-button").forEach((button) => {
+  button.addEventListener("click", () => {
+    const input = button.parentElement.querySelector(".secret-toggle-input");
+    if (!input) return;
+    const isVisible = input.type === "text";
+    input.type = isVisible ? "password" : "text";
+    button.textContent = isVisible ? "Show" : "Hide";
+  });
+});
+</script>
+{% endblock %}

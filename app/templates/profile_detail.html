@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card">
+    <h1>Edit Profile</h1>
+    <p class="muted">Profile ID: {{ profile.id }}</p>
+    <form id="profile-update-form">
+        <label>Name</label>
+        <input name="name" value="{{ profile.name }}">
+        <label>Slug</label>
+        <input name="slug" value="{{ profile.slug }}">
+        <label>Service Credentials JSON</label>
+        <textarea name="service_credentials">{{ service_credentials_json }}</textarea>
+        <p class="muted">Derived source services: {{ source_services_json }}</p>
+        <p class="muted">Derived destination services: {{ destination_services_json }}</p>
+        <label>Posting Settings JSON</label>
+        <textarea name="posting_settings">{{ posting_settings_json }}</textarea>
+        <label>Retry Settings JSON</label>
+        <textarea name="retry_settings">{{ retry_settings_json }}</textarea>
+        <label>Throttle Settings JSON</label>
+        <textarea name="throttle_settings">{{ throttle_settings_json }}</textarea>
+        <button type="submit">Save Profile</button>
+    </form>
+</section>
+<script>
+document.getElementById("profile-update-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const payload = {
+    name: form.name.value,
+    slug: form.slug.value,
+    service_credentials: JSON.parse(form.service_credentials.value || "{}"),
+    posting_settings: JSON.parse(form.posting_settings.value || "{}"),
+    retry_settings: JSON.parse(form.retry_settings.value || "{}"),
+    throttle_settings: JSON.parse(form.throttle_settings.value || "{}"),
+  };
+  const response = await fetch("/profiles/{{ profile.id }}", {
+    method: "PUT",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    alert(await response.text());
+    return;
+  }
+  window.location.reload();
+});
+</script>
+{% endblock %}

@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-12 col-xl-8">
+        <div class="card section-card">
+            <div class="card-body p-4">
+                <h1 class="h3 mb-3">Authentication Error</h1>
+                <div class="alert alert-danger" role="alert">
+                    {{ error_message }}
+                </div>
+                <div class="small text-secondary mb-3">
+                    The app could not complete the sign-in flow with your identity provider.
+                </div>
+                {% if auth_debug_json %}
+                <div class="mt-4">
+                    <h2 class="h5 mb-2">OIDC Debug Snapshot</h2>
+                    <div class="small text-secondary mb-2">
+                        This is split into <code>lynxposter_config</code> for the app's expected group mapping, <code>provider_claims</code> for the sanitized claims returned by Authelia, and <code>provider_tokens</code> for the raw JWTs plus decoded header and payload when available.
+                    </div>
+                    <pre class="bg-light border rounded p-3 small mb-0"><code>{{ auth_debug_json }}</code></pre>
+                </div>
+                {% endif %}
+                <div class="small text-secondary mt-4">
+                    Recovery steps:
+                </div>
+                <ol class="small mt-2 mb-0">
+                    <li>Check the OIDC settings in LynxPoster, especially the issuer URL, client credentials, and requested scope.</li>
+                    <li>For Authelia, many clients should use <code>openid profile email</code> and only request <code>groups</code> if the client is explicitly allowed to.</li>
+                    <li>If you are locked out, temporarily set <code>AUTH_OIDC_ENABLED=false</code> in your config and restart the app so you can get back in through local mode.</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

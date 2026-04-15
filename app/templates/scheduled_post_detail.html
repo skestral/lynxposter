@@ -1,0 +1,827 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card hero-card section-card mb-4">
+    <div class="card-body">
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+            <div>
+                <div class="section-kicker mb-2">Scheduled Post</div>
+                <h1 class="h3 mb-1">Edit delivery plan</h1>
+                <div class="small-muted code-ish">{{ post.id }}</div>
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+                <span class="badge soft-badge rounded-pill px-3 py-2">{{ post.display_status|replace('_', ' ')|title }}</span>
+                <span class="badge soft-badge rounded-pill px-3 py-2">{{ post.target_account_ids|length }} targets</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-12 col-xl-8">
+        <div class="card section-card">
+            <div class="card-body">
+                {% if post.last_error %}
+                <div class="alert alert-danger">
+                    <div class="fw-semibold">Last Post Error</div>
+                    <div class="mb-0">{{ post.last_error }}</div>
+                </div>
+                {% endif %}
+                <form id="scheduled-post-update-form" class="tab-pane-stack">
+                    <ul class="nav nav-pills glass-tabs" id="scheduled-detail-tabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="detail-basics-tab" data-bs-toggle="tab" data-bs-target="#detail-basics-pane" type="button" role="tab">Basics</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="detail-giveaway-tab" data-bs-toggle="tab" data-bs-target="#detail-giveaway-pane" type="button" role="tab">Giveaway</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="detail-media-tab" data-bs-toggle="tab" data-bs-target="#detail-media-pane" type="button" role="tab">Media</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="detail-targets-tab" data-bs-toggle="tab" data-bs-target="#detail-targets-pane" type="button" role="tab">Targets</button>
+                        </li>
+                    </ul>
+
+                    <div class="tab-content tab-pane-stack">
+                        <div class="tab-pane fade show active" id="detail-basics-pane" role="tabpanel" aria-labelledby="detail-basics-tab" tabindex="0">
+                            <div class="surface-panel">
+                                <div class="row g-3">
+                                    <div class="col-12">
+                                        <label class="form-label">Persona</label>
+                                        <input class="form-control" value="{{ persona.name }}" disabled>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="d-flex justify-content-between align-items-center gap-3">
+                                            <label class="form-label mb-0">Body</label>
+                                            <span class="small text-secondary" id="body-length-indicator">{{ post.body|length }} chars</span>
+                                        </div>
+                                        <textarea class="form-control" name="body" rows="6">{{ post.body }}</textarea>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Post Type</label>
+                                        <select class="form-select" name="post_type" id="post-type-select">
+                                            <option value="standard" {% if post.post_type == "standard" %}selected{% endif %}>Standard Post</option>
+                                            <option value="instagram_giveaway" {% if post.post_type == "instagram_giveaway" %}selected{% endif %}>Instagram Giveaway</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Status</label>
+                                        <select class="form-select" name="status">
+                                            <option value="draft" {% if post.status == "draft" %}selected{% endif %}>Draft</option>
+                                            <option value="scheduled" {% if post.status == "scheduled" %}selected{% endif %}>Scheduled</option>
+                                            <option value="queued" {% if post.status == "queued" %}selected{% endif %}>Queued</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Scheduled For</label>
+                                        <input class="form-control" name="scheduled_for" type="datetime-local" value="{{ post.scheduled_for|datetime_local_input if post.scheduled_for else '' }}">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Source Link</label>
+                                        <input class="form-control" name="source_link" value="{{ post.metadata_json.get('link', '') }}">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Visibility</label>
+                                        <select class="form-select" name="visibility">
+                                            {% set visibility = post.metadata_json.get('visibility', '') %}
+                                            <option value="" {% if not visibility %}selected{% endif %}>Use persona default</option>
+                                            <option value="public" {% if visibility == "public" %}selected{% endif %}>Public</option>
+                                            <option value="unlisted" {% if visibility == "unlisted" %}selected{% endif %}>Unlisted</option>
+                                            <option value="private" {% if visibility == "private" %}selected{% endif %}>Private</option>
+                                            <option value="direct" {% if visibility == "direct" %}selected{% endif %}>Direct</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="tab-pane fade" id="detail-giveaway-pane" role="tabpanel" aria-labelledby="detail-giveaway-tab" tabindex="0">
+                            <div class="surface-panel {% if post.post_type != 'instagram_giveaway' %}d-none{% endif %}" id="giveaway-config-panel">
+                                <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
+                                    <div>
+                                        <div class="fw-semibold">Instagram Giveaway Rules</div>
+                                        <div class="small text-secondary">Share is interpreted as a story mention captured while the giveaway is live.</div>
+                                    </div>
+                                    {% if post.giveaway %}
+                                    <span class="badge text-bg-light border">{{ post.giveaway.status|replace('_', ' ')|title }}</span>
+                                    {% endif %}
+                                </div>
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label">Giveaway End Time</label>
+                                        <input class="form-control" name="giveaway_end_at" type="datetime-local" value="{{ post.giveaway.giveaway_end_at|datetime_local_input if post.giveaway else '' }}">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Friend Mentions Required</label>
+                                        <input class="form-control" name="giveaway_min_friend_mentions" type="number" min="0" max="20" value="{{ post.giveaway.rules.min_friend_mentions if post.giveaway else 1 }}">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Required Keywords</label>
+                                        <input class="form-control" name="giveaway_required_keywords" value="{{ post.giveaway.rules.required_keywords|join(', ') if post.giveaway else '' }}">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Required Hashtags</label>
+                                        <input class="form-control" name="giveaway_required_hashtags" value="{{ post.giveaway.rules.required_hashtags|join(', ') if post.giveaway else '' }}">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="form-check mt-2">
+                                            <input class="form-check-input" type="checkbox" name="giveaway_require_story_mention" {% if not post.giveaway or post.giveaway.rules.require_story_mention %}checked{% endif %}>
+                                            <label class="form-check-label">Require story mention</label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="form-check mt-2">
+                                            <input class="form-check-input" type="checkbox" name="giveaway_require_like" {% if post.giveaway and post.giveaway.rules.require_like %}checked{% endif %}>
+                                            <label class="form-check-label">Require like</label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="form-check mt-2">
+                                            <input class="form-check-input" type="checkbox" name="giveaway_require_follow" {% if post.giveaway and post.giveaway.rules.require_follow %}checked{% endif %}>
+                                            <label class="form-check-label">Require follow</label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="small text-secondary" id="giveaway-target-hint">Instagram giveaway posts must target exactly one Instagram destination account.</div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% if post.post_type != 'instagram_giveaway' %}
+                            <div class="surface-panel-soft">
+                                <div class="small text-secondary">Switch the post type to <strong>Instagram Giveaway</strong> to edit raffle rules here.</div>
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="tab-pane fade" id="detail-media-pane" role="tabpanel" aria-labelledby="detail-media-tab" tabindex="0">
+                            <div class="surface-panel">
+                                <label class="form-label">Add Uploads</label>
+                                <input class="form-control" name="uploads" type="file" multiple>
+                                <div class="form-text" id="upload-summary">Choose more images or videos to append to this draft.</div>
+                                <div id="upload-preview-list" class="row g-3 mt-1"></div>
+                            </div>
+                            <div class="surface-panel-soft">
+                                <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+                                    <div>
+                                        <div class="fw-semibold">Post Snapshot</div>
+                                        <div class="small text-secondary">Live counts for the current body, saved attachments, pending uploads, and selected destinations.</div>
+                                    </div>
+                                    <div class="d-flex gap-2 flex-wrap">
+                                        <span class="badge text-bg-light border" id="snapshot-body-length">{{ post.body|length }} chars</span>
+                                        <span class="badge text-bg-light border" id="snapshot-attachments">{{ post.attachments|length }} attachments</span>
+                                        <span class="badge text-bg-light border" id="snapshot-targets">{{ post.target_account_ids|length }} targets</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="tab-pane fade" id="detail-targets-pane" role="tabpanel" aria-labelledby="detail-targets-tab" tabindex="0">
+                            <div class="surface-panel">
+                                <label class="form-label">Destination Accounts</label>
+                                <div class="row g-2" id="target-account-list">
+                                    {% for account in accounts %}
+                                    <div class="col-12" data-account-service="{{ account.service }}">
+                                        <div class="border rounded p-3 bg-white">
+                                            <div class="form-check">
+                                                <input class="form-check-input target-checkbox" type="checkbox" value="{{ account.id }}" id="target-{{ account.id }}" {% if account.id in post.target_account_ids %}checked{% endif %}>
+                                                <label class="form-check-label fw-semibold" for="target-{{ account.id }}">{{ account.label }}</label>
+                                                <span class="small-muted ms-2">{{ account.service }}</span>
+                                            </div>
+                                            <div class="small text-secondary mt-2 post-guidance-summary"></div>
+                                            <div class="mt-2">
+                                                <label class="form-label small-muted mb-1">Optional override body</label>
+                                                <textarea class="form-control override-body" data-account-id="{{ account.id }}" rows="2">{{ post.publish_overrides_json.get(account.id, {}).get('body', '') if post.publish_overrides_json.get(account.id) else '' }}</textarea>
+                                            </div>
+                                            <div class="post-guidance-panel border rounded p-2 bg-body-tertiary mt-3" data-account-id="{{ account.id }}">
+                                                <div class="fw-semibold small">Publishing Guidance</div>
+                                                <div class="small mt-2 post-guidance-status"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex gap-2 flex-wrap">
+                        <button class="btn btn-primary" type="submit">Save Post</button>
+                        {% if post.status == "draft" %}
+                        <button class="btn btn-outline-danger" type="button" id="delete-draft-button">Delete Draft</button>
+                        {% endif %}
+                        <button class="btn btn-outline-primary" type="button" id="send-now-button">Send Now</button>
+                        <a class="btn btn-outline-secondary" href="/sandbox/page?post_id={{ post.id }}">Open In Sandbox</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-xl-4">
+        {% if post.giveaway %}
+        <div class="card section-card mb-4">
+            <div class="card-body">
+                <h2 class="h5">Giveaway</h2>
+                <div class="mb-3">
+                    <div class="fw-semibold">{{ post.giveaway.status|replace('_', ' ')|title }}</div>
+                    <div class="small text-secondary">Ends {{ post.giveaway.giveaway_end_at|datetime_display }}</div>
+                    {% if post.giveaway.instagram_media_url %}
+                    <div class="small mt-1"><a href="{{ post.giveaway.instagram_media_url }}" target="_blank" rel="noreferrer">Open published Instagram post</a></div>
+                    {% elif post.giveaway.instagram_media_id %}
+                    <div class="small text-secondary mt-1">Instagram media ID: {{ post.giveaway.instagram_media_id }}</div>
+                    {% endif %}
+                </div>
+                <div class="small text-secondary mb-3">
+                    {{ post.giveaway.audit_summary.entrants }} entrants •
+                    {{ post.giveaway.audit_summary.eligible }} eligible •
+                    {{ post.giveaway.audit_summary.provisional }} provisional •
+                    {{ post.giveaway.audit_summary.disqualified }} disqualified
+                </div>
+                {% if post.giveaway.provisional_winner %}
+                <div class="border rounded p-3 mb-3 bg-warning-subtle">
+                    <div class="fw-semibold">Provisional Winner</div>
+                    <div>{{ post.giveaway.provisional_winner.instagram_username or post.giveaway.provisional_winner.instagram_user_id }}</div>
+                    {% if post.giveaway.provisional_winner.inconclusive_reasons %}
+                    <div class="small text-secondary mt-2">{{ post.giveaway.provisional_winner.inconclusive_reasons|join("; ") }}</div>
+                    {% endif %}
+                    {% if post.giveaway.status == "review_required" %}
+                    <div class="d-flex gap-2 flex-wrap mt-3">
+                        <button class="btn btn-sm btn-outline-success" type="button" id="confirm-giveaway-winner-button">Confirm Winner</button>
+                        <button class="btn btn-sm btn-outline-warning" type="button" id="advance-giveaway-winner-button">Advance To Next Candidate</button>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+                {% if post.giveaway.final_winner %}
+                <div class="border rounded p-3 mb-3 bg-success-subtle">
+                    <div class="fw-semibold">Final Winner</div>
+                    <div>{{ post.giveaway.final_winner.instagram_username or post.giveaway.final_winner.instagram_user_id }}</div>
+                </div>
+                {% endif %}
+                {% if post.giveaway.last_error %}
+                <div class="small text-danger mb-3">{{ post.giveaway.last_error }}</div>
+                {% endif %}
+                {% if post.giveaway.entries %}
+                <div class="table-responsive">
+                    <table class="table align-middle mb-0">
+                        <thead>
+                            <tr><th>Entrant</th><th>Checks</th><th>Outcome</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for entry in post.giveaway.entries %}
+                            <tr>
+                                <td>
+                                    <div class="fw-semibold">{{ entry.instagram_username or entry.instagram_user_id }}</div>
+                                    <div class="small text-secondary">{{ entry.comment_count }} comments • {{ entry.mention_count }} mentions</div>
+                                </td>
+                                <td class="small">
+                                    <div>Share: {{ entry.shared_status|replace('_', ' ')|title }}</div>
+                                    <div>Like: {{ entry.liked_status|replace('_', ' ')|title }}</div>
+                                    <div>Follow: {{ entry.followed_status|replace('_', ' ')|title }}</div>
+                                </td>
+                                <td class="small">
+                                    <div class="fw-semibold">{{ entry.eligibility_status|replace('_', ' ')|title }}</div>
+                                    {% if entry.inconclusive_reasons %}
+                                    <div class="text-secondary mt-1">{{ entry.inconclusive_reasons|join("; ") }}</div>
+                                    {% endif %}
+                                    {% if entry.disqualification_reasons %}
+                                    <div class="text-danger mt-1">{{ entry.disqualification_reasons|join("; ") }}</div>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-secondary">No giveaway evidence has been captured yet.</div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+        <div class="card section-card mb-4">
+            <div class="card-body">
+                <h2 class="h5">Delivery Outcome</h2>
+                {% if post.delivery_breakdown.succeeded %}
+                <div class="mb-3">
+                    <div class="fw-semibold text-success">Succeeded</div>
+                    <div class="small mt-1">
+                        {% for delivery in post.delivery_breakdown.succeeded %}
+                        <div>
+                            {{ delivery.label }}
+                            {% if delivery.external_url %}
+                            <a href="{{ delivery.external_url }}" target="_blank" rel="noreferrer">Open</a>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                {% if post.delivery_breakdown.failed %}
+                <div class="mb-3">
+                    <div class="fw-semibold text-danger">Failed</div>
+                    <div class="small mt-1">
+                        {% for delivery in post.delivery_breakdown.failed %}
+                        <div>{{ delivery.label }}{% if delivery.last_error %}: {{ delivery.last_error }}{% endif %}</div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                {% if post.delivery_breakdown.cancelled %}
+                <div class="mb-3">
+                    <div class="fw-semibold text-secondary">Not Sent</div>
+                    <div class="small mt-1">
+                        {% for delivery in post.delivery_breakdown.cancelled %}
+                        <div>{{ delivery.label }}{% if delivery.last_error %}: {{ delivery.last_error }}{% endif %}</div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                {% if post.delivery_breakdown.pending %}
+                <div>
+                    <div class="fw-semibold text-secondary">Pending</div>
+                    <div class="small mt-1">
+                        {% for delivery in post.delivery_breakdown.pending %}
+                        <div>{{ delivery.label }}: {{ delivery.status }}</div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                {% if not post.deliveries %}
+                <div class="text-secondary">No delivery jobs yet.</div>
+                {% endif %}
+            </div>
+        </div>
+        <div class="card section-card mb-4">
+            <div class="card-body">
+                <h2 class="h5">Delivery State</h2>
+                <div class="table-responsive">
+                    <table class="table align-middle mb-0">
+                        <thead>
+                            <tr><th>Account</th><th>Status</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for delivery in post.deliveries.values() %}
+                            <tr>
+                                <td>{{ delivery.label }}</td>
+                                <td>
+                                    <div>{{ delivery.status }}</div>
+                                    {% if delivery.last_error %}
+                                    <div class="small text-danger mt-1">{{ delivery.last_error }}</div>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="2" class="text-secondary">No delivery jobs yet.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="card section-card">
+            <div class="card-body">
+                <h2 class="h5">Attachments</h2>
+                <div class="list-group list-group-flush">
+                    {% for attachment in post.attachments %}
+                    <div class="list-group-item px-0">
+                        <div class="row g-3 align-items-center">
+                            <div class="col-md-5">
+                                {% if attachment.mime_type.startswith('image/') %}
+                                <a href="/media/attachments/{{ attachment.id }}" target="_blank" rel="noreferrer">
+                                    <img
+                                        src="/media/attachments/{{ attachment.id }}"
+                                        alt="{{ attachment.alt_text or 'Attachment preview' }}"
+                                        class="img-fluid rounded border"
+                                        style="max-height: 220px;"
+                                    >
+                                </a>
+                                {% else %}
+                                <div class="border rounded bg-light px-3 py-4 text-secondary text-center">
+                                    {{ attachment.mime_type }}
+                                </div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-7">
+                                <div class="fw-semibold">{{ attachment.mime_type }}</div>
+                                {% if attachment.alt_text %}
+                                <div class="small text-secondary mb-1">Alt text: {{ attachment.alt_text }}</div>
+                                {% endif %}
+                                <div class="small text-secondary">Size: {{ attachment.size_bytes }} bytes</div>
+                                <div class="small-muted code-ish mt-2">{{ attachment.storage_path }}</div>
+                            </div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="list-group-item px-0 text-secondary">No attachments.</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const postId = "{{ post.id }}";
+const servicePostGuidance = {{ service_post_guidance | tojson }};
+const existingAttachments = [
+{% for attachment in post.attachments %}
+  {
+    mime_type: {{ attachment.mime_type | tojson }},
+  },
+{% endfor %}
+];
+
+const bodyTextarea = document.querySelector("textarea[name='body']");
+const bodyLengthIndicator = document.getElementById("body-length-indicator");
+const snapshotBodyLength = document.getElementById("snapshot-body-length");
+const snapshotAttachments = document.getElementById("snapshot-attachments");
+const snapshotTargets = document.getElementById("snapshot-targets");
+const uploadsInput = document.querySelector("input[name='uploads']");
+const uploadPreviewList = document.getElementById("upload-preview-list");
+const uploadSummary = document.getElementById("upload-summary");
+const deleteDraftButton = document.getElementById("delete-draft-button");
+const postTypeSelect = document.getElementById("post-type-select");
+const giveawayConfigPanel = document.getElementById("giveaway-config-panel");
+const giveawayTargetHint = document.getElementById("giveaway-target-hint");
+const confirmGiveawayWinnerButton = document.getElementById("confirm-giveaway-winner-button");
+const advanceGiveawayWinnerButton = document.getElementById("advance-giveaway-winner-button");
+
+function attachmentSnapshot(items) {
+  const attachments = Array.from(items || []);
+  const images = attachments.filter((item) => String(item.mime_type || "").startsWith("image/"));
+  const videos = attachments.filter((item) => String(item.mime_type || "").startsWith("video/"));
+  const others = attachments.filter((item) => !String(item.mime_type || "").startsWith("image/") && !String(item.mime_type || "").startsWith("video/"));
+  return {
+    total: attachments.length,
+    images: images.length,
+    videos: videos.length,
+    others: others.length,
+    imageMimeTypes: images.map((item) => String(item.mime_type || "").toLowerCase()).filter(Boolean),
+  };
+}
+
+function describeAttachmentSnapshot(snapshot) {
+  const pieces = [
+    `${snapshot.total} attachment${snapshot.total === 1 ? "" : "s"}`,
+    `${snapshot.images} image${snapshot.images === 1 ? "" : "s"}`,
+    `${snapshot.videos} video${snapshot.videos === 1 ? "" : "s"}`,
+  ];
+  if (snapshot.others) {
+    pieces.push(`${snapshot.others} other file${snapshot.others === 1 ? "" : "s"}`);
+  }
+  return pieces.join(" • ");
+}
+
+function fileSnapshot(files) {
+  return attachmentSnapshot(
+    Array.from(files || []).map((file) => ({mime_type: file.type || ""}))
+  );
+}
+
+function combinedAttachmentSnapshot() {
+  const existingSnapshot = attachmentSnapshot(existingAttachments);
+  const pendingSnapshot = fileSnapshot(uploadsInput?.files || []);
+  return {
+    total: existingSnapshot.total + pendingSnapshot.total,
+    images: existingSnapshot.images + pendingSnapshot.images,
+    videos: existingSnapshot.videos + pendingSnapshot.videos,
+    others: existingSnapshot.others + pendingSnapshot.others,
+    imageMimeTypes: existingSnapshot.imageMimeTypes.concat(pendingSnapshot.imageMimeTypes),
+  };
+}
+
+function formatFileSize(value) {
+  if (!Number.isFinite(value) || value <= 0) return "0 B";
+  if (value >= 1024 * 1024) return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+  if (value >= 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${value} B`;
+}
+
+function renderUploadPreviews() {
+  const files = Array.from(uploadsInput?.files || []);
+  uploadPreviewList.innerHTML = "";
+  if (!files.length) {
+    uploadPreviewList.innerHTML = '<div class="col-12"><div class="small text-secondary">No new files selected.</div></div>';
+    return;
+  }
+  for (const file of files) {
+    const item = document.createElement("div");
+    item.className = "col-12";
+    const preview = file.type.startsWith("image/")
+      ? `<img src="${URL.createObjectURL(file)}" alt="${file.name}" class="img-fluid rounded border" style="max-height: 220px;">`
+      : `<div class="border rounded bg-light px-3 py-4 text-secondary text-center">${file.type || "Attachment"}</div>`;
+    item.innerHTML = `
+      <div class="border rounded p-3 bg-white h-100">
+        <div class="row g-3 align-items-center">
+          <div class="col-md-4">
+            ${preview}
+          </div>
+          <div class="col-md-8">
+            <div class="fw-semibold">${file.name}</div>
+            <div class="small text-secondary">${file.type || "Unknown type"} • ${formatFileSize(file.size)}</div>
+          </div>
+        </div>
+      </div>
+    `;
+    uploadPreviewList.appendChild(item);
+  }
+}
+
+function describeServiceGuidance(rule) {
+  if (!rule) return "No structured posting guidance is available for this service yet.";
+  const parts = [];
+  if (rule.requires_media) parts.push("media required");
+  if (rule.requires_body_or_media) parts.push("needs text or media");
+  if (rule.body_limit != null && rule.body_limit_with_media != null && rule.body_limit_with_media !== rule.body_limit) {
+    parts.push(`${rule.body_limit} chars text-only`);
+    parts.push(`${rule.body_limit_with_media} chars with media`);
+  } else if (rule.body_limit != null) {
+    parts.push(`${rule.body_limit} chars`);
+  }
+  if (rule.max_attachments != null) parts.push(`up to ${rule.max_attachments} attachments`);
+  if (rule.max_images != null && rule.max_videos != null && rule.single_video_only) {
+    parts.push(`up to ${rule.max_images} images or ${rule.max_videos} video`);
+  } else {
+    if (rule.max_images != null) parts.push(`up to ${rule.max_images} images`);
+    if (rule.max_videos != null) parts.push(`up to ${rule.max_videos} video${rule.max_videos === 1 ? "" : "s"}`);
+  }
+  if (rule.multi_attachment_images_only) parts.push("image albums only for multi-attachment posts");
+  if (rule.allowed_image_mime_types?.length) parts.push("JPEG images only");
+  if (!parts.length && rule.notes?.length) return rule.notes[0];
+  return parts.join(" • ");
+}
+
+function evaluateServiceGuidance(rule, bodyText, snapshot) {
+  const issues = [];
+  const lines = [];
+  const activeBodyLimit = snapshot.total > 0 && rule?.body_limit_with_media != null ? rule.body_limit_with_media : rule?.body_limit;
+  const bodyLength = bodyText.length;
+
+  lines.push(activeBodyLimit != null ? `Body: ${bodyLength}/${activeBodyLimit} characters` : `Body: ${bodyLength} characters`);
+  lines.push(`Media: ${describeAttachmentSnapshot(snapshot)}`);
+
+  if (!rule) {
+    return {
+      tone: "warning",
+      lines: lines.concat(["No structured post guidance is available for this service yet."]),
+    };
+  }
+
+  if (rule.requires_body_or_media && !bodyText.trim() && snapshot.total === 0) {
+    issues.push("This service needs text or at least one attachment.");
+  }
+  if (rule.requires_media && snapshot.total === 0) {
+    issues.push("This service requires at least one image or video attachment.");
+  }
+  if (activeBodyLimit != null && bodyLength > activeBodyLimit) {
+    issues.push(`Body exceeds the current ${activeBodyLimit}-character limit.`);
+  }
+  if (rule.max_attachments != null && snapshot.total > rule.max_attachments) {
+    issues.push(`Attachment count exceeds the ${rule.max_attachments}-attachment limit.`);
+  }
+  if (rule.max_images != null && snapshot.images > rule.max_images) {
+    issues.push(`Image count exceeds the ${rule.max_images}-image limit.`);
+  }
+  if (rule.max_videos != null && snapshot.videos > rule.max_videos) {
+    issues.push(`Video count exceeds the ${rule.max_videos}-video limit.`);
+  }
+  if (rule.single_video_only && snapshot.videos > 0 && snapshot.total > 1) {
+    issues.push("This service currently supports either images or one video, not mixed or multi-video posts.");
+  }
+  if (rule.multi_attachment_images_only && snapshot.total > 1 && snapshot.images !== snapshot.total) {
+    issues.push("Multiple attachments must all be images for this service.");
+  }
+  if (
+    rule.allowed_image_mime_types?.length &&
+    snapshot.imageMimeTypes.some((mimeType) => !rule.allowed_image_mime_types.includes(mimeType))
+  ) {
+    issues.push(`Image uploads must use one of: ${rule.allowed_image_mime_types.join(", ")}.`);
+  }
+  if (
+    Array.isArray(rule.supported_attachment_kinds) &&
+    !rule.supported_attachment_kinds.includes("other") &&
+    snapshot.others > 0
+  ) {
+    issues.push("One or more current attachments are not image or video media.");
+  }
+
+  if (!issues.length) {
+    const okLines = ["Current post fits this service's known app limits."];
+    if (rule.notes?.length) okLines.push(...rule.notes);
+    return {tone: "ok", lines: lines.concat(okLines)};
+  }
+
+  return {tone: "danger", lines: lines.concat(issues)};
+}
+
+function renderGuidanceLines(container, lines, tone) {
+  container.innerHTML = "";
+  lines.forEach((line, index) => {
+    const row = document.createElement("div");
+    row.className = index < 2 ? "text-secondary" : tone === "danger" ? "text-danger" : "text-secondary";
+    row.textContent = line;
+    container.appendChild(row);
+  });
+}
+
+function parseCommaSeparated(value) {
+  return String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function buildGiveawayPayload(form) {
+  if (postTypeSelect?.value !== "instagram_giveaway") {
+    return null;
+  }
+  return {
+    giveaway_end_at: form.giveaway_end_at.value || null,
+    min_friend_mentions: Number.parseInt(form.giveaway_min_friend_mentions.value || "0", 10) || 0,
+    required_keywords: parseCommaSeparated(form.giveaway_required_keywords.value),
+    required_hashtags: parseCommaSeparated(form.giveaway_required_hashtags.value),
+    require_story_mention: form.giveaway_require_story_mention.checked,
+    require_like: form.giveaway_require_like.checked,
+    require_follow: form.giveaway_require_follow.checked,
+  };
+}
+
+function refreshGiveawayState() {
+  const isGiveaway = postTypeSelect?.value === "instagram_giveaway";
+  giveawayConfigPanel?.classList.toggle("d-none", !isGiveaway);
+  const selectedInstagramTargets = Array.from(document.querySelectorAll(".target-checkbox"))
+    .filter((checkbox) => checkbox.checked)
+    .map((checkbox) => checkbox.closest("[data-account-service]"))
+    .filter((wrapper) => wrapper?.dataset.accountService === "instagram").length;
+  if (isGiveaway && giveawayTargetHint) {
+    giveawayTargetHint.className = selectedInstagramTargets === 1 ? "small text-success" : "small text-danger";
+    giveawayTargetHint.textContent = selectedInstagramTargets === 1
+      ? "Exactly one Instagram destination is selected."
+      : "Instagram giveaway posts must target exactly one Instagram destination account.";
+  }
+}
+
+function refreshPostGuidance() {
+  const snapshot = combinedAttachmentSnapshot();
+  const selectedTargets = Array.from(document.querySelectorAll(".target-checkbox")).filter((checkbox) => checkbox.checked).length;
+
+  bodyLengthIndicator.textContent = `${bodyTextarea.value.length} chars`;
+  snapshotBodyLength.textContent = `${bodyTextarea.value.length} chars`;
+  snapshotAttachments.textContent = `${snapshot.total} attachment${snapshot.total === 1 ? "" : "s"}`;
+  snapshotTargets.textContent = `${selectedTargets} target${selectedTargets === 1 ? "" : "s"}`;
+  const pendingSnapshot = fileSnapshot(uploadsInput?.files || []);
+  uploadSummary.textContent = pendingSnapshot.total
+    ? `${describeAttachmentSnapshot(pendingSnapshot)} will be appended to this draft.`
+    : "Choose more images or videos to append to this draft.";
+  refreshGiveawayState();
+
+  document.querySelectorAll("[data-account-service]").forEach((wrapper) => {
+    const checkbox = wrapper.querySelector(".target-checkbox");
+    const panel = wrapper.querySelector(".post-guidance-panel");
+    const summary = wrapper.querySelector(".post-guidance-summary");
+    const status = wrapper.querySelector(".post-guidance-status");
+    const service = wrapper.dataset.accountService;
+    const rule = servicePostGuidance[service];
+    const override = wrapper.querySelector(".override-body")?.value.trim() || "";
+
+    summary.textContent = describeServiceGuidance(rule);
+    panel.classList.remove("is-ok", "is-warning", "is-danger");
+
+    if (!checkbox.checked) {
+      panel.classList.add("is-warning");
+      renderGuidanceLines(status, ["This destination is not selected for the current post."], "warning");
+      return;
+    }
+
+    const evaluation = evaluateServiceGuidance(rule, override || bodyTextarea.value, snapshot);
+    panel.classList.add(`is-${evaluation.tone}`);
+    renderGuidanceLines(status, evaluation.lines, evaluation.tone);
+  });
+}
+
+function buildPostPayload(form) {
+  const targetAccountIds = Array.from(form.querySelectorAll(".target-checkbox"))
+    .filter((checkbox) => checkbox.checked)
+    .map((checkbox) => checkbox.value);
+  const publishOverrides = {};
+  form.querySelectorAll(".override-body").forEach((textarea) => {
+    if (textarea.value.trim()) {
+      publishOverrides[textarea.dataset.accountId] = {body: textarea.value};
+    }
+  });
+  const metadata = {};
+  if (form.source_link.value.trim()) metadata.link = form.source_link.value.trim();
+  if (form.visibility.value) metadata.visibility = form.visibility.value;
+  return {
+    body: form.body.value,
+    post_type: form.post_type.value,
+    status: form.status.value,
+    scheduled_for: form.scheduled_for.value || null,
+    target_account_ids: targetAccountIds,
+    publish_overrides_json: publishOverrides,
+    metadata_json: metadata,
+    giveaway: buildGiveawayPayload(form),
+  };
+}
+
+document.getElementById("scheduled-post-update-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const payload = new FormData();
+  const postPayload = buildPostPayload(form);
+  if (postPayload.post_type === "instagram_giveaway") {
+    const instagramTargetIds = postPayload.target_account_ids.filter((accountId) => {
+      const wrapper = document.getElementById(`target-${accountId}`)?.closest("[data-account-service]");
+      return wrapper?.dataset.accountService === "instagram";
+    });
+    if (instagramTargetIds.length !== 1 || postPayload.target_account_ids.length !== 1) {
+      alert("Instagram giveaway posts must target exactly one Instagram destination account.");
+      return;
+    }
+    if (!postPayload.giveaway?.giveaway_end_at) {
+      alert("Instagram giveaway posts require a giveaway end time.");
+      return;
+    }
+  }
+  payload.append("body", postPayload.body);
+  payload.append("post_type", postPayload.post_type);
+  payload.append("status", postPayload.status);
+  payload.append("scheduled_for", postPayload.scheduled_for || "");
+  payload.append("target_account_ids", JSON.stringify(postPayload.target_account_ids));
+  payload.append("publish_overrides_json", JSON.stringify(postPayload.publish_overrides_json));
+  payload.append("metadata_json", JSON.stringify(postPayload.metadata_json));
+  payload.append("giveaway_json", JSON.stringify(postPayload.giveaway));
+  payload.append("alt_texts", JSON.stringify([]));
+  for (const file of form.uploads.files) {
+    payload.append("uploads", file);
+  }
+  const response = await fetch(`/scheduled-posts/${postId}`, {
+    method: "PUT",
+    body: payload,
+  });
+  if (!response.ok) {
+    alert(await response.text());
+    return;
+  }
+  window.location.reload();
+});
+
+document.getElementById("send-now-button").addEventListener("click", async () => {
+  const response = await fetch(`/scheduled-posts/${postId}/send-now`, {method: "POST"});
+  if (!response.ok) {
+    alert(await response.text());
+    return;
+  }
+  window.location.reload();
+});
+
+if (confirmGiveawayWinnerButton) {
+  confirmGiveawayWinnerButton.addEventListener("click", async () => {
+    const response = await fetch(`/scheduled-posts/${postId}/giveaway/review/confirm`, {method: "POST"});
+    if (!response.ok) {
+      alert(await response.text());
+      return;
+    }
+    window.location.reload();
+  });
+}
+
+if (advanceGiveawayWinnerButton) {
+  advanceGiveawayWinnerButton.addEventListener("click", async () => {
+    const response = await fetch(`/scheduled-posts/${postId}/giveaway/review/advance`, {method: "POST"});
+    if (!response.ok) {
+      alert(await response.text());
+      return;
+    }
+    window.location.reload();
+  });
+}
+
+if (deleteDraftButton) {
+  deleteDraftButton.addEventListener("click", async () => {
+    const confirmed = window.confirm("Delete this draft scheduled post? This removes it from the scheduler list.");
+    if (!confirmed) return;
+
+    const response = await fetch(`/scheduled-posts/${postId}`, {method: "DELETE"});
+    if (!response.ok) {
+      alert(await response.text());
+      return;
+    }
+    window.location.href = "/scheduled-posts/page";
+  });
+}
+
+bodyTextarea.addEventListener("input", refreshPostGuidance);
+uploadsInput?.addEventListener("change", () => {
+  renderUploadPreviews();
+  refreshPostGuidance();
+});
+document.getElementById("target-account-list")?.addEventListener("input", refreshPostGuidance);
+document.getElementById("target-account-list")?.addEventListener("change", refreshPostGuidance);
+postTypeSelect?.addEventListener("change", refreshPostGuidance);
+renderUploadPreviews();
+refreshPostGuidance();
+</script>
+{% endblock %}

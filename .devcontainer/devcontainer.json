@@ -1,0 +1,46 @@
+{
+  "name": "LynxPoster",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "mounts": [
+    "source=lynxposter-codex-state,target=/home/vscode/.codex,type=volume"
+  ],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "openai.chatgpt",
+        "ms-vscode.remote-server",
+        "ms-azuretools.vscode-docker"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/home/vscode/.venvs/lynxposter/bin/python",
+        "python.testing.pytestArgs": [
+          "tests"
+        ],
+        "python.testing.unittestEnabled": false,
+        "python.testing.pytestEnabled": true,
+        "python.testing.cwd": "${containerWorkspaceFolder}"
+      }
+    }
+  },
+  "forwardPorts": [
+    8000
+  ],
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "portsAttributes": {
+    "8000": {
+      "label": "LynxPoster",
+      "onAutoForward": "openBrowser"
+    }
+  },
+  "postCreateCommand": "bash -lc 'mkdir -p /home/vscode/.codex /home/vscode/.venvs && if [ -d \"${containerWorkspaceFolder}/.codex-home\" ] && [ -z \"$(find /home/vscode/.codex -mindepth 1 -maxdepth 1 2>/dev/null)\" ]; then cp -a \"${containerWorkspaceFolder}/.codex-home\"/. /home/vscode/.codex/; fi && if [ ! -x /home/vscode/.venvs/lynxposter/bin/python ]; then python -m venv /home/vscode/.venvs/lynxposter; fi && /home/vscode/.venvs/lynxposter/bin/python -m pip install --upgrade pip && /home/vscode/.venvs/lynxposter/bin/python -m pip install -r requirements.txt'",
+  "remoteEnv": {
+    "APP_DATA_DIR": "${containerWorkspaceFolder}/app_data",
+    "CODEX_HOME": "/home/vscode/.codex"
+  }
+}

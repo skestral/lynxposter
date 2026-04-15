@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LynxPoster</title>
+    <link rel="stylesheet" href="/static/vendor/bootstrap/bootstrap.min.css">
+    <link rel="stylesheet" href="/static/style.css">
+    <style id="theme-runtime-vars">
+{{ ui_theme_runtime_style(
+    current_principal.ui_theme if current_principal is defined and current_principal.ui_theme else "skylight",
+    current_principal.ui_mode if current_principal is defined and current_principal.ui_mode else "light",
+) }}
+    </style>
+</head>
+<body
+    data-ui-theme="{{ current_principal.ui_theme if current_principal is defined and current_principal.ui_theme else 'skylight' }}"
+    data-ui-mode="{{ current_principal.ui_mode if current_principal is defined and current_principal.ui_mode else 'light' }}"
+    data-ui-theme-saved="{{ current_principal.ui_theme if current_principal is defined and current_principal.ui_theme else 'skylight' }}"
+    data-ui-mode-saved="{{ current_principal.ui_mode if current_principal is defined and current_principal.ui_mode else 'light' }}"
+    data-ui-timezone="{{ current_principal.timezone if current_principal is defined and current_principal.timezone else 'UTC' }}"
+    data-ui-preferences-persist="{% if current_principal is defined and current_principal.is_authenticated and current_principal.user_id %}1{% else %}0{% endif %}"
+    data-live-updates-enabled="{% if current_principal is defined and current_principal.is_authenticated %}1{% else %}0{% endif %}"
+>
+<div class="app-backdrop" aria-hidden="true">
+    <div class="app-blob app-blob-one"></div>
+    <div class="app-blob app-blob-two"></div>
+    <div class="app-blob app-blob-three"></div>
+</div>
+<div class="app-shell">
+    {% set page_path = current_path if current_path is defined else (request.url.path if request is defined else '/') %}
+    {% set workspace_active = page_path.startswith('/personas') or page_path.startswith('/scheduled-posts') or page_path.startswith('/sandbox') or page_path.startswith('/logs') %}
+    {% set admin_active = page_path.startswith('/admin/users') or page_path.startswith('/settings') %}
+    <nav class="navbar navbar-expand-xl sticky-top app-topbar-wrap">
+        <div class="container app-topbar">
+            <a class="navbar-brand app-brand" href="/">
+                <span class="app-brand-mark">LP</span>
+                <span class="app-brand-copy">
+                    <span class="app-brand-title">LynxPoster</span>
+                    <span class="app-brand-subtitle">Crossposting control deck</span>
+                </span>
+            </a>
+            <button class="navbar-toggler app-nav-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#main-nav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="main-nav">
+                <div class="app-nav-rail ms-auto">
+                    <ul class="navbar-nav app-nav-pills">
+                        {% if current_principal.is_authenticated %}
+                            <li class="nav-item">
+                                <a class="nav-link {% if page_path == '/' %}active{% endif %}" href="/">Dashboard</a>
+                            </li>
+                            {% if current_principal.is_user %}
+                            <li class="nav-item dropdown">
+                                <a
+                                    class="nav-link dropdown-toggle {% if workspace_active %}active{% endif %}"
+                                    href="#"
+                                    role="button"
+                                    data-bs-toggle="dropdown"
+                                    aria-expanded="false"
+                                >
+                                    Workspace
+                                </a>
+                                <ul class="dropdown-menu dropdown-menu-end app-glass-menu">
+                                    <li><a class="dropdown-item {% if page_path.startswith('/personas') %}active{% endif %}" href="/personas/page">Personas</a></li>
+                                    <li><a class="dropdown-item {% if page_path.startswith('/scheduled-posts') %}active{% endif %}" href="/scheduled-posts/page">Scheduled Posts</a></li>
+                                    <li><a class="dropdown-item {% if page_path.startswith('/sandbox') %}active{% endif %}" href="/sandbox/page">Sandbox</a></li>
+                                    <li><a class="dropdown-item {% if page_path.startswith('/logs') %}active{% endif %}" href="/logs/page">Logs</a></li>
+                                </ul>
+                            </li>
+                            {% endif %}
+                            {% if current_principal.is_admin %}
+                            <li class="nav-item dropdown">
+                                <a
+                                    class="nav-link dropdown-toggle {% if admin_active %}active{% endif %}"
+                                    href="#"
+                                    role="button"
+                                    data-bs-toggle="dropdown"
+                                    aria-expanded="false"
+                                >
+                                    Admin
+                                </a>
+                                <ul class="dropdown-menu dropdown-menu-end app-glass-menu">
+                                    <li><a class="dropdown-item {% if page_path.startswith('/admin/users') %}active{% endif %}" href="/admin/users/page">Users</a></li>
+                                    <li><a class="dropdown-item {% if page_path.startswith('/settings') %}active{% endif %}" href="/settings/page">Settings</a></li>
+                                </ul>
+                            </li>
+                            {% endif %}
+                            {% if current_principal.user_id %}
+                            <li class="nav-item">
+                                <a class="nav-link {% if page_path.startswith('/account') %}active{% endif %}" href="/account/page">Account</a>
+                            </li>
+                            {% endif %}
+                        {% endif %}
+                    </ul>
+
+                    <div class="app-identity-cluster">
+                        {% if current_principal.is_authenticated %}
+                        <div class="app-identity-card">
+                            <div class="app-mode-switch" role="group" aria-label="Appearance mode">
+                                <button class="app-mode-button" type="button" data-ui-mode-value="light" aria-label="Light mode" title="Light mode">
+                                    <svg class="app-mode-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                        <circle cx="12" cy="12" r="4.25" fill="currentColor"></circle>
+                                        <path d="M12 2.75v2.1M12 19.15v2.1M21.25 12h-2.1M4.85 12H2.75M18.55 5.45l-1.5 1.5M6.95 17.05l-1.5 1.5M18.55 18.55l-1.5-1.5M6.95 6.95l-1.5-1.5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.7"></path>
+                                    </svg>
+                                </button>
+                                <button class="app-mode-button" type="button" data-ui-mode-value="dark" aria-label="Dark mode" title="Dark mode">
+                                    <svg class="app-mode-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                        <path d="M14.6 2.75c-4.9.9-8.35 5.25-8.05 10.28.31 5.21 4.57 9.29 9.78 9.37 2.08.03 4-.55 5.61-1.58-1.52.19-3.12-.07-4.57-.82-4.51-2.31-6.3-7.84-3.99-12.35.78-1.52 1.91-2.76 3.25-3.67-.68-.12-1.35-.19-2.03-.19z" fill="currentColor"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                            <span
+                                class="navbar-text navbar-identity"
+                                title="{{ current_principal.display_name }}{% if current_principal.role and current_principal.role != 'guest' %} | {{ current_principal.role|capitalize }}{% endif %}"
+                            >
+                                <span class="app-identity-name">{{ current_principal.display_name }}</span>
+                                {% if current_principal.role and current_principal.role != "guest" %}
+                                <span class="app-identity-role">{{ current_principal.role|capitalize }}</span>
+                                {% endif %}
+                            </span>
+                        </div>
+                        <a class="btn btn-outline-secondary btn-sm app-action-button" href="/auth/logout">Log Out</a>
+                        {% elif auth_enabled %}
+                        <a class="btn btn-primary btn-sm app-action-button" href="/auth/login">Log In</a>
+                        {% else %}
+                        <a class="btn btn-primary btn-sm app-action-button" href="/auth/select">Choose User</a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+    <main class="container py-4 app-page">
+        {% block content %}{% endblock %}
+    </main>
+</div>
+<script src="/static/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+<script>
+const uiThemeCatalog = {{ ui_theme_catalog_for_client() | tojson }};
+const uiThemeById = Object.fromEntries(uiThemeCatalog.map((theme) => [theme.id, theme]));
+const uiRuntimeStyle = document.getElementById("theme-runtime-vars");
+const uiModeButtons = Array.from(document.querySelectorAll(".app-mode-button"));
+function normalizeUiThemeId(value) {
+  return uiThemeById[value] ? value : "skylight";
+}
+
+function normalizeUiMode(value) {
+  return value === "dark" ? "dark" : "light";
+}
+
+function themeTokens(themeId, mode) {
+  const normalizedTheme = normalizeUiThemeId(themeId);
+  const normalizedMode = normalizeUiMode(mode);
+  return uiThemeById[normalizedTheme]?.modes?.[normalizedMode] || uiThemeById.skylight.modes.light;
+}
+
+function themeRuntimeCss(themeId, mode) {
+  const tokens = themeTokens(themeId, mode);
+  const lines = [":root {"];
+  Object.entries(tokens).forEach(([key, value]) => {
+    lines.push(`    --lp-${key.replaceAll("_", "-")}: ${value};`);
+  });
+  lines.push("}");
+  return lines.join("\n");
+}
+
+function syncAppearanceControls(themeId, mode) {
+  uiModeButtons.forEach((button) => {
+    const isActive = button.dataset.uiModeValue === mode;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-pressed", isActive ? "true" : "false");
+  });
+}
+
+function applyUiAppearance(themeId, mode, options = {}) {
+  const normalizedTheme = normalizeUiThemeId(themeId);
+  const normalizedMode = normalizeUiMode(mode);
+  document.body.dataset.uiTheme = normalizedTheme;
+  document.body.dataset.uiMode = normalizedMode;
+  if (uiRuntimeStyle) {
+    uiRuntimeStyle.textContent = themeRuntimeCss(normalizedTheme, normalizedMode);
+  }
+  syncAppearanceControls(normalizedTheme, normalizedMode);
+  window.localStorage?.setItem("lynxposter.ui_theme", normalizedTheme);
+  window.localStorage?.setItem("lynxposter.ui_mode", normalizedMode);
+  window.dispatchEvent(new CustomEvent("lynxposter:appearance-changed", {detail: {themeId: normalizedTheme, mode: normalizedMode}}));
+  if (options.persist) {
+    return persistUiAppearance(normalizedTheme, normalizedMode);
+  }
+  return Promise.resolve();
+}
+
+async function persistUiAppearance(themeId, mode) {
+  if (document.body.dataset.uiPreferencesPersist !== "1") {
+    return;
+  }
+  const response = await fetch("/account", {
+    method: "PUT",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({
+      timezone: document.body.dataset.uiTimezone || "UTC",
+      ui_theme: themeId,
+      ui_mode: mode,
+    }),
+  });
+  if (response.ok) {
+    const updated = await response.json();
+    document.body.dataset.uiTimezone = updated.timezone || document.body.dataset.uiTimezone || "UTC";
+    document.body.dataset.uiThemeSaved = updated.ui_theme || themeId;
+    document.body.dataset.uiModeSaved = updated.ui_mode || mode;
+  }
+}
+
+let liveUpdateTimer = null;
+let liveUpdateInFlight = false;
+let liveUpdateToken = null;
+let liveUpdateVisibilityHandler = null;
+
+function setLiveUpdateStatus(statusElement, text) {
+  if (!statusElement) return;
+  statusElement.textContent = text;
+}
+
+function stopLiveUpdates() {
+  if (liveUpdateTimer) {
+    window.clearInterval(liveUpdateTimer);
+    liveUpdateTimer = null;
+  }
+  if (liveUpdateVisibilityHandler) {
+    document.removeEventListener("visibilitychange", liveUpdateVisibilityHandler);
+    liveUpdateVisibilityHandler = null;
+  }
+  liveUpdateInFlight = false;
+  liveUpdateToken = null;
+}
+
+function registerLiveUpdates(config) {
+  stopLiveUpdates();
+  if (document.body.dataset.liveUpdatesEnabled !== "1") {
+    return;
+  }
+  const topics = Array.from(new Set((config?.topics || []).map((topic) => String(topic || "").trim()).filter(Boolean)));
+  if (!topics.length) {
+    return;
+  }
+  const intervalMs = Math.max(2000, Number(config?.intervalMs) || {{ live_update_poll_interval_ms }});
+  const reloadDelayMs = Math.max(150, Number(config?.reloadDelayMs) || 350);
+  const pauseWhenHidden = config?.pauseWhenHidden !== false;
+  const statusElement = config?.statusElementId ? document.getElementById(config.statusElementId) : null;
+  const readyLabel = config?.readyLabel || "Live updates on";
+  const updatingLabel = config?.updatingLabel || "Updating…";
+
+  async function pollLiveUpdates({initial = false} = {}) {
+    if (liveUpdateInFlight) {
+      return;
+    }
+    liveUpdateInFlight = true;
+    try {
+      const params = new URLSearchParams({topics: topics.join(",")});
+      const response = await fetch(`/live-updates/status?${params.toString()}`, {
+        method: "GET",
+        headers: {"Accept": "application/json"},
+        cache: "no-store",
+      });
+      if (response.status === 401) {
+        stopLiveUpdates();
+        return;
+      }
+      if (!response.ok) {
+        return;
+      }
+      const snapshot = await response.json();
+      if (!liveUpdateToken) {
+        liveUpdateToken = snapshot.token;
+        setLiveUpdateStatus(statusElement, readyLabel);
+        return;
+      }
+      if (snapshot.token !== liveUpdateToken) {
+        liveUpdateToken = snapshot.token;
+        setLiveUpdateStatus(statusElement, updatingLabel);
+        window.setTimeout(() => window.location.reload(), reloadDelayMs);
+        return;
+      }
+      if (!initial) {
+        setLiveUpdateStatus(statusElement, readyLabel);
+      }
+    } catch (error) {
+      console.debug("Live update poll failed", error);
+    } finally {
+      liveUpdateInFlight = false;
+    }
+  }
+
+  liveUpdateVisibilityHandler = () => {
+    if (document.visibilityState === "visible") {
+      pollLiveUpdates();
+    }
+  };
+  document.addEventListener("visibilitychange", liveUpdateVisibilityHandler);
+  pollLiveUpdates({initial: true});
+  liveUpdateTimer = window.setInterval(() => {
+    if (pauseWhenHidden && document.visibilityState === "hidden") {
+      return;
+    }
+    pollLiveUpdates();
+  }, intervalMs);
+}
+
+window.applyUiAppearance = applyUiAppearance;
+window.persistUiAppearance = persistUiAppearance;
+window.registerLiveUpdates = registerLiveUpdates;
+
+const startingTheme = normalizeUiThemeId(document.body.dataset.uiTheme || window.localStorage?.getItem("lynxposter.ui_theme") || "skylight");
+const startingMode = normalizeUiMode(document.body.dataset.uiMode || window.localStorage?.getItem("lynxposter.ui_mode") || "light");
+applyUiAppearance(startingTheme, startingMode);
+
+uiModeButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    const previewTheme = document.body.dataset.uiTheme || "skylight";
+    const persistedTheme = document.body.dataset.uiThemeSaved || previewTheme;
+    applyUiAppearance(previewTheme, button.dataset.uiModeValue);
+    persistUiAppearance(persistedTheme, button.dataset.uiModeValue).catch(() => {});
+  });
+});
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

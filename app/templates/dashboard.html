@@ -1,0 +1,351 @@
+{% extends "base.html" %}
+{% import "_delivery_summary_pills.html" as delivery_ui %}
+{% block content %}
+<div class="row g-4">
+    <div class="col-12">
+        <div class="card hero-card section-card">
+            <div class="card-body p-4">
+                <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+                    <div>
+                        <h1 class="h3 mb-2">Crossposting and scheduling for all your personas</h1>
+                        <p class="mb-0 text-secondary">Manage accounts, routing, queued work, and operational logs from one local service.</p>
+                        {% if current_principal.is_admin %}
+                        <p class="mb-0 small text-secondary mt-2">Admin controls stay available here too, including user management, app settings, and automation controls.</p>
+                        {% endif %}
+                    </div>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <span class="badge rounded-pill text-bg-light border px-3 py-2" id="dashboard-live-update-status">Live updates on</span>
+                        {% if current_principal.is_user %}
+                        <span class="badge rounded-pill soft-badge px-3 py-2">{{ personas|length }} personas</span>
+                        <span class="badge rounded-pill soft-badge px-3 py-2">{{ account_count }} accounts</span>
+                        <span class="badge rounded-pill soft-badge px-3 py-2">{{ posts|length }} recent scheduled posts</span>
+                        {% endif %}
+                        {% if current_principal.is_admin %}
+                        <span class="badge rounded-pill soft-badge px-3 py-2">Admin mode</span>
+                        <span class="badge rounded-pill soft-badge px-3 py-2">{{ run_groups|length }} recent runs</span>
+                        <span class="badge rounded-pill soft-badge px-3 py-2">{{ alert_events|length }} recent alerts</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="mt-4 d-flex gap-2 flex-wrap">
+                    {% if current_principal.is_user %}
+                    <a class="btn btn-primary" href="/personas/page">Manage Personas</a>
+                    <a class="btn btn-outline-primary" href="/scheduled-posts/page">Open Composer</a>
+                    <a class="btn btn-outline-secondary" href="/logs/page">View Logs</a>
+                    {% endif %}
+                    {% if current_principal.is_admin %}
+                    <a class="btn btn-primary" href="/admin/users/page">Manage Users</a>
+                    <a class="btn btn-outline-primary" href="/settings/page">Open Settings</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if cleared_dashboard_alert_count %}
+<div class="alert alert-success mt-4" role="alert">
+    Removed {{ cleared_dashboard_alert_count }} recent alert{% if cleared_dashboard_alert_count != 1 %}s{% endif %} from the dashboard list. Logs are unchanged.
+</div>
+{% endif %}
+
+<div class="row g-4 mt-1">
+    <div class="col-12">
+        <div class="card section-card">
+            <div class="card-body">
+                <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+                    <div>
+                        <h2 class="h5 mb-1">Automation Control</h2>
+                        <p class="text-secondary mb-0">Autorun now operates as one full cycle every {{ scheduler_status.autorun_interval_seconds // 60 }} minutes, writes start and completion logs, and will not perform first-sync historical imports. Any intentional backfill must be run manually.</p>
+                    </div>
+                    <div class="d-flex gap-2 flex-wrap align-items-center">
+                        {% if scheduler_status.automation_enabled %}
+                            <span class="badge text-bg-success">Autorun Active</span>
+                        {% else %}
+                            <span class="badge text-bg-secondary">Autorun Paused</span>
+                        {% endif %}
+                        {% if scheduler_status.cycle_in_progress %}
+                            <span class="badge text-bg-warning">Cycle Running</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="row g-3 mt-1">
+                    <div class="col-md-3">
+                        <div class="small-muted">Interval</div>
+                        <div class="fw-semibold">{{ scheduler_status.autorun_interval_seconds }} seconds</div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="small-muted">Next Run</div>
+                        <div class="fw-semibold">{{ scheduler_status.next_run_at|datetime_display if scheduler_status.next_run_at else "-" }}</div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="small-muted">Last Run Trigger</div>
+                        <div class="fw-semibold">{{ scheduler_status.last_run_trigger or "-" }}</div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="small-muted">Last Run Finished</div>
+                        <div class="fw-semibold">{{ scheduler_status.last_run_finished_at|datetime_display if scheduler_status.last_run_finished_at else "-" }}</div>
+                    </div>
+                </div>
+                {% if not auth_enabled or current_principal.is_admin %}
+                <div class="mt-3 d-flex gap-2 flex-wrap">
+                    <button class="btn btn-primary" id="manual-run-button">Run Now</button>
+                    {% if scheduler_status.automation_enabled %}
+                        <button class="btn btn-outline-secondary" id="pause-automation-button">Pause Autorun</button>
+                    {% else %}
+                        <button class="btn btn-outline-success" id="start-automation-button">Start Autorun</button>
+                    {% endif %}
+                </div>
+                {% else %}
+                <div class="mt-3 small text-secondary">Automation controls are restricted to admins in multi-user mode.</div>
+                {% endif %}
+                <div id="scheduler-feedback" class="small-muted mt-3"></div>
+            </div>
+        </div>
+    </div>
+    {% if current_principal.is_user %}
+    <div class="col-12 col-xl-6">
+        <div class="card section-card h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h2 class="h5 mb-0">Personas</h2>
+                    <a href="/personas/page" class="btn btn-sm btn-outline-secondary">Open</a>
+                </div>
+                <div class="table-responsive">
+                    <table class="table align-middle mb-0">
+                        <thead>
+                            <tr><th>Name</th><th>Accounts</th><th>Status</th></tr>
+                        </thead>
+                        <tbody>
+                        {% for persona in personas %}
+                            <tr>
+                                <td><a href="/personas/{{ persona.id }}/page">{{ persona.name }}</a></td>
+                                <td>{{ persona.accounts|length }}</td>
+                                <td>
+                                    {% if persona.is_enabled %}
+                                        <span class="badge text-bg-success">Enabled</span>
+                                    {% else %}
+                                        <span class="badge text-bg-secondary">Disabled</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% else %}
+                            <tr><td colspan="3" class="text-secondary">No personas yet.</td></tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    <div class="col-12 col-xl-6">
+        <div class="card section-card h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h2 class="h5 mb-0">Recent Alerts</h2>
+                    <div class="d-flex gap-2 flex-wrap">
+                        {% if alert_events %}
+                        <form method="post" action="/dashboard/alerts/clear" class="m-0">
+                            <button class="btn btn-sm btn-outline-danger" type="submit">Clear Dashboard List</button>
+                        </form>
+                        {% endif %}
+                        <a href="/logs/page" class="btn btn-sm btn-outline-secondary">Inspect</a>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table align-middle mb-0">
+                        <thead>
+                            <tr><th>When</th><th>Persona</th><th>Operation</th><th>Message</th></tr>
+                        </thead>
+                        <tbody>
+                        {% for alert in alert_events %}
+                            <tr>
+                                <td class="small-muted">{{ alert.created_at|datetime_display }}</td>
+                                <td>
+                                    <div>{{ alert.persona_name or "No persona" }}</div>
+                                    {% if alert.account_label %}
+                                    <div class="small text-secondary">{{ alert.account_label }}{% if alert.service %} ({{ alert.service }}){% endif %}</div>
+                                    {% elif alert.service %}
+                                    <div class="small text-secondary">{{ alert.service }}</div>
+                                    {% endif %}
+                                </td>
+                                <td>{{ alert.operation }}</td>
+                                <td class="text-danger">{{ alert.message }}</td>
+                            </tr>
+                        {% else %}
+                            <tr><td colspan="4" class="text-secondary">No alert events recorded yet.</td></tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if current_principal.is_admin and instagram_webhook_observability %}
+<div class="row g-4 mt-1" id="instagram-webhooks">
+    <div class="col-12">
+        <div class="card section-card">
+            <div class="card-body">
+                {% set instagram_webhook_panel_title = "Instagram Webhooks" %}
+                {% set instagram_webhook_panel_subtitle = "This is where incoming Meta test deliveries and live giveaway evidence land. Expand any event to inspect the full payload shape." %}
+                {% set instagram_webhook_panel_cta_href = "/logs/page#instagram-webhooks" %}
+                {% set instagram_webhook_panel_cta_label = "Open Full Logs" %}
+                {% include "_instagram_webhook_observability.html" %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="row g-4 mt-1">
+    {% if current_principal.is_user %}
+    <div class="col-12 col-xl-6">
+        <div class="card section-card h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h2 class="h5 mb-0">Recent Scheduled Posts</h2>
+                    <a href="/scheduled-posts/page" class="btn btn-sm btn-outline-secondary">Open</a>
+                </div>
+                <div class="table-responsive">
+                    <table class="table align-middle mb-0">
+                        <thead>
+                            <tr><th>Persona</th><th>Status</th><th>Scheduled</th></tr>
+                        </thead>
+                        <tbody>
+                        {% for post in posts %}
+                            <tr>
+                                <td>{{ persona_name_by_id.get(post.persona_id, post.persona_id) }}</td>
+                                <td>
+                                    <div>{{ post.display_status|replace('_', ' ')|title }}</div>
+                                    {{ delivery_ui.render(post) }}
+                                </td>
+                                <td>{{ post.scheduled_for|datetime_display if post.scheduled_for else "-" }}</td>
+                            </tr>
+                        {% else %}
+                            <tr><td colspan="3" class="text-secondary">No scheduled posts yet.</td></tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    <div class="col-12 col-xl-6">
+        <div class="card section-card h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h2 class="h5 mb-0">Recent Worker Events</h2>
+                    <a href="/logs/page" class="btn btn-sm btn-outline-secondary">Inspect</a>
+                </div>
+                <div class="d-flex flex-column gap-3">
+                    {% for run in run_groups %}
+                    <details class="border rounded p-3 bg-body-tertiary" {% if loop.first %}open{% endif %}>
+                        <summary class="d-flex flex-column gap-2" style="cursor: pointer; list-style: none;">
+                            <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-2">
+                                <div class="d-flex align-items-center gap-2 flex-wrap">
+                                    {% if run.severity == "error" %}
+                                    <span class="badge text-bg-danger">Error</span>
+                                    {% elif run.severity == "warning" %}
+                                    <span class="badge text-bg-warning">Warning</span>
+                                    {% else %}
+                                    <span class="badge text-bg-secondary">{{ (run.trigger or "run")|title }}</span>
+                                    {% endif %}
+                                    <span class="fw-semibold">{{ (run.trigger or "run")|title }} Run</span>
+                                    <span class="small text-secondary">{{ run.finished_at|datetime_display }}</span>
+                                </div>
+                                <div class="d-flex gap-2 flex-wrap">
+                                    <span class="badge text-bg-light border">{{ run.counts.personas }} personas</span>
+                                    <span class="badge text-bg-light border">{{ run.counts.accounts }} accounts</span>
+                                    <span class="badge text-bg-light border">{{ run.counts.posts_found }} found</span>
+                                    <span class="badge text-bg-light border">{{ run.counts.reposted }} reposted</span>
+                                    <span class="badge text-bg-light border">{{ run.counts.errors }} errors</span>
+                                </div>
+                            </div>
+                            <div class="small text-secondary">{{ run.summary_message }}</div>
+                        </summary>
+                        <div class="mt-3 d-flex flex-column gap-3">
+                            {% if run.system_events %}
+                            <div>
+                                <div class="small fw-semibold text-secondary mb-2">Run-wide events</div>
+                                <div class="d-flex flex-column gap-2">
+                                    {% for event in run.system_events %}
+                                    <div class="border rounded p-2 bg-white">
+                                        <div class="small text-secondary">{{ event.created_at|datetime_display }} • {{ event.operation }} • {{ event.severity }}</div>
+                                        <div>{{ event.message }}</div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% endif %}
+                            {% for persona in run.persona_summaries %}
+                            <details class="border rounded p-3 bg-white">
+                                <summary class="d-flex flex-column gap-2" style="cursor: pointer; list-style: none;">
+                                    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-2">
+                                        <div class="fw-semibold">{{ persona.persona_name }}</div>
+                                        <div class="d-flex gap-2 flex-wrap">
+                                            <span class="badge text-bg-light border">{{ persona.counts.accounts }} accounts</span>
+                                            <span class="badge text-bg-light border">{{ persona.counts.posts_found }} found</span>
+                                            <span class="badge text-bg-light border">{{ persona.counts.reposted }} reposted</span>
+                                            <span class="badge text-bg-light border">{{ persona.counts.errors }} errors</span>
+                                        </div>
+                                    </div>
+                                </summary>
+                                <div class="mt-3 d-flex flex-column gap-2">
+                                    {% for event in persona.events %}
+                                    <div class="border rounded p-2 bg-body-tertiary">
+                                        <div class="small text-secondary">
+                                            {{ event.created_at|datetime_display }} • {{ event.operation }} • {{ event.severity }}
+                                            {% if event.account_label %} • {{ event.account_label }}{% endif %}
+                                            {% if event.service %} ({{ event.service }}){% endif %}
+                                        </div>
+                                        <div>{{ event.message }}</div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </details>
+                            {% else %}
+                            <div class="text-secondary">No persona-scoped events were recorded for this run.</div>
+                            {% endfor %}
+                        </div>
+                    </details>
+                    {% else %}
+                    <div class="text-secondary">No worker events yet.</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+window.registerLiveUpdates?.({
+  topics: {{ (["run_events", "alert_events", "scheduled_posts"] + (["instagram_webhooks"] if current_principal.is_admin else [])) | tojson }},
+  statusElementId: "dashboard-live-update-status",
+  readyLabel: "Live updates on",
+  updatingLabel: "Refreshing…",
+});
+
+async function postSchedulerAction(url) {
+  const feedback = document.getElementById("scheduler-feedback");
+  feedback.textContent = "Working...";
+  const response = await fetch(url, {method: "POST"});
+  if (!response.ok) {
+    feedback.textContent = await response.text();
+    return;
+  }
+  const result = await response.json();
+  feedback.textContent = result.message || "Action complete.";
+  window.location.reload();
+}
+
+document.getElementById("manual-run-button")?.addEventListener("click", () => postSchedulerAction("/scheduler/run"));
+document.getElementById("pause-automation-button")?.addEventListener("click", () => postSchedulerAction("/scheduler/pause"));
+document.getElementById("start-automation-button")?.addEventListener("click", () => postSchedulerAction("/scheduler/start"));
+</script>
+{% endblock %}

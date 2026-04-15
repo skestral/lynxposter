@@ -1,0 +1,1047 @@
+{% extends "base.html" %}
+{% import "_delivery_summary_pills.html" as delivery_ui %}
+{% block content %}
+<div class="card hero-card section-card">
+    <div class="card-body p-4">
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+            <div>
+                <div class="section-kicker mb-2">Planning Workspace</div>
+                <h1 class="h4 mb-1">Scheduled Posts</h1>
+                <p class="text-secondary mb-0">Create new work, plot upcoming posts on a calendar, or triage the queue by status without leaving this page.</p>
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+                <span class="badge soft-badge rounded-pill px-3 py-2">{{ posts|length }} posts in view</span>
+                <span class="badge soft-badge rounded-pill px-3 py-2">{{ persona_targets|length }} personas ready</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card section-card mt-4">
+    <div class="card-body">
+        <ul class="nav nav-pills glass-tabs" id="scheduled-workspace-tabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="workspace-new-post-tab" data-bs-toggle="tab" data-bs-target="#workspace-new-post-pane" type="button" role="tab">New Post</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="workspace-calendar-tab" data-bs-toggle="tab" data-bs-target="#workspace-calendar-pane" type="button" role="tab">Calendar</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="workspace-kanban-tab" data-bs-toggle="tab" data-bs-target="#workspace-kanban-pane" type="button" role="tab">Kanban</button>
+            </li>
+        </ul>
+
+        <div class="tab-content tab-pane-stack mt-4">
+            <div class="tab-pane fade show active" id="workspace-new-post-pane" role="tabpanel" aria-labelledby="workspace-new-post-tab" tabindex="0">
+                <div class="row g-4">
+                    <div class="col-12 col-xl-5">
+                        <div class="card section-card h-100">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-start gap-3 mb-4">
+                                    <div>
+                                        <div class="section-kicker mb-2">Composer</div>
+                                        <h2 class="h5 mb-1">Schedule a post</h2>
+                                        <p class="text-secondary mb-0">Manual posts originate here and publish directly to the destination accounts you choose.</p>
+                                    </div>
+                                    <span class="badge soft-badge rounded-pill px-3 py-2">Step-based</span>
+                                </div>
+                                <form id="scheduled-post-form" class="tab-pane-stack">
+                                    <ul class="nav nav-pills glass-tabs" id="compose-tabs" role="tablist">
+                                        <li class="nav-item" role="presentation">
+                                            <button class="nav-link active" id="compose-basics-tab" data-bs-toggle="tab" data-bs-target="#compose-basics-pane" type="button" role="tab">Basics</button>
+                                        </li>
+                                        <li class="nav-item" role="presentation">
+                                            <button class="nav-link" id="compose-giveaway-tab" data-bs-toggle="tab" data-bs-target="#compose-giveaway-pane" type="button" role="tab">Giveaway</button>
+                                        </li>
+                                        <li class="nav-item" role="presentation">
+                                            <button class="nav-link" id="compose-media-tab" data-bs-toggle="tab" data-bs-target="#compose-media-pane" type="button" role="tab">Media</button>
+                                        </li>
+                                        <li class="nav-item" role="presentation">
+                                            <button class="nav-link" id="compose-targets-tab" data-bs-toggle="tab" data-bs-target="#compose-targets-pane" type="button" role="tab">Targets</button>
+                                        </li>
+                                    </ul>
+
+                                    <div class="tab-content tab-pane-stack">
+                                        <div class="tab-pane fade show active" id="compose-basics-pane" role="tabpanel" aria-labelledby="compose-basics-tab" tabindex="0">
+                                            <div class="surface-panel">
+                                                <div class="row g-3">
+                                                    <div class="col-12">
+                                                        <label class="form-label">Persona</label>
+                                                        <select class="form-select" name="persona_id" id="persona-select">
+                                                            {% for persona in personas %}
+                                                            <option value="{{ persona.id }}">{{ persona.name }}</option>
+                                                            {% endfor %}
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-12">
+                                                        <div class="d-flex justify-content-between align-items-center gap-3">
+                                                            <label class="form-label mb-0">Body</label>
+                                                            <span class="small text-secondary" id="body-length-indicator">0 chars</span>
+                                                        </div>
+                                                        <textarea class="form-control" name="body" rows="6"></textarea>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label">Post Type</label>
+                                                        <select class="form-select" name="post_type" id="post-type-select">
+                                                            <option value="standard">Standard Post</option>
+                                                            <option value="instagram_giveaway">Instagram Giveaway</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label">Status</label>
+                                                        <select class="form-select" name="status">
+                                                            <option value="draft">Draft</option>
+                                                            <option value="scheduled">Scheduled</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label">Scheduled For</label>
+                                                        <input class="form-control" name="scheduled_for" type="datetime-local">
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label">Source Link</label>
+                                                        <input class="form-control" name="source_link">
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label">Visibility</label>
+                                                        <select class="form-select" name="visibility">
+                                                            <option value="">Use persona default</option>
+                                                            <option value="public">Public</option>
+                                                            <option value="unlisted">Unlisted</option>
+                                                            <option value="private">Private</option>
+                                                            <option value="direct">Direct</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="tab-pane fade" id="compose-giveaway-pane" role="tabpanel" aria-labelledby="compose-giveaway-tab" tabindex="0">
+                                            <div class="surface-panel giveaway-only d-none" id="giveaway-config-panel">
+                                                <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
+                                                    <div>
+                                                        <div class="fw-semibold">Instagram Giveaway Rules</div>
+                                                        <div class="small text-secondary">Giveaways require exactly one Instagram destination. Share is interpreted as a story mention captured while the giveaway is live.</div>
+                                                    </div>
+                                                    <span class="badge text-bg-light border">One winner</span>
+                                                </div>
+                                                <div class="row g-3">
+                                                    <div class="col-md-6">
+                                                        <label class="form-label">Giveaway End Time</label>
+                                                        <input class="form-control" name="giveaway_end_at" type="datetime-local">
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label">Friend Mentions Required</label>
+                                                        <input class="form-control" name="giveaway_min_friend_mentions" type="number" min="0" max="20" value="1">
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label">Required Keywords</label>
+                                                        <input class="form-control" name="giveaway_required_keywords" placeholder="launch, giveaway">
+                                                        <div class="form-text">Optional comma-separated keywords that must appear in the entrant's comment.</div>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label">Required Hashtags</label>
+                                                        <input class="form-control" name="giveaway_required_hashtags" placeholder="#giveaway, #launch">
+                                                        <div class="form-text">Optional comma-separated hashtags.</div>
+                                                    </div>
+                                                    <div class="col-md-4">
+                                                        <div class="form-check mt-2">
+                                                            <input class="form-check-input" type="checkbox" name="giveaway_require_story_mention" checked>
+                                                            <label class="form-check-label">Require story mention</label>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-4">
+                                                        <div class="form-check mt-2">
+                                                            <input class="form-check-input" type="checkbox" name="giveaway_require_like">
+                                                            <label class="form-check-label">Require like</label>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-4">
+                                                        <div class="form-check mt-2">
+                                                            <input class="form-check-input" type="checkbox" name="giveaway_require_follow">
+                                                            <label class="form-check-label">Require follow</label>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-12">
+                                                        <div class="small text-secondary" id="giveaway-target-hint">Select exactly one Instagram destination account for giveaway posts.</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="surface-panel-soft">
+                                                <div class="small text-secondary">This tab activates when the post type is <strong>Instagram Giveaway</strong>.</div>
+                                            </div>
+                                        </div>
+
+                                        <div class="tab-pane fade" id="compose-media-pane" role="tabpanel" aria-labelledby="compose-media-tab" tabindex="0">
+                                            <div class="surface-panel">
+                                                <label class="form-label">Uploads</label>
+                                                <input class="form-control" name="uploads" type="file" multiple>
+                                                <div class="form-text" id="upload-summary">Selected images and videos will be attached to the scheduled post.</div>
+                                                <div id="upload-preview-list" class="row g-3 mt-1"></div>
+                                            </div>
+                                            <div class="surface-panel-soft">
+                                                <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+                                                    <div>
+                                                        <div class="fw-semibold">Post Snapshot</div>
+                                                        <div class="small text-secondary">Live counts for the current body, attachments, and selected destinations.</div>
+                                                    </div>
+                                                    <div class="d-flex gap-2 flex-wrap">
+                                                        <span class="badge text-bg-light border" id="snapshot-body-length">0 chars</span>
+                                                        <span class="badge text-bg-light border" id="snapshot-attachments">0 attachments</span>
+                                                        <span class="badge text-bg-light border" id="snapshot-targets">0 targets</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="tab-pane fade" id="compose-targets-pane" role="tabpanel" aria-labelledby="compose-targets-tab" tabindex="0">
+                                            <div class="surface-panel">
+                                                <label class="form-label">Destination Accounts</label>
+                                                <div id="target-account-list" class="row g-2"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="d-flex gap-2 flex-wrap">
+                                        <button class="btn btn-primary" type="submit">Create Post</button>
+                                        <a class="btn btn-outline-secondary" href="/sandbox/page">Open Sandbox</a>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12 col-xl-7">
+                        <div class="card section-card h-100">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <div>
+                                        <div class="section-kicker mb-2">Queue</div>
+                                        <h2 class="h5 mb-0">Recent Scheduled Posts</h2>
+                                    </div>
+                                    <span class="badge soft-badge rounded-pill px-3 py-2">{{ posts|length }} recent</span>
+                                </div>
+                                <div class="table-responsive">
+                                    <table class="table align-middle mb-0">
+                                        <thead>
+                                            <tr><th>Status</th><th>Persona</th><th>Targets</th><th>Attachments</th><th>Scheduled</th><th></th></tr>
+                                        </thead>
+                                        <tbody>
+                                        {% for post in posts %}
+                                            <tr>
+                                                <td>
+                                                    {% if post.post_type == "instagram_giveaway" %}
+                                                    <div><span class="badge text-bg-warning-subtle border text-dark mb-2">Instagram Giveaway</span></div>
+                                                    {% endif %}
+                                                    <div>{{ post.display_status|replace('_', ' ')|title }}</div>
+                                                    {% if post.giveaway %}
+                                                    <div class="small text-secondary mt-1">Giveaway: {{ post.giveaway.status|replace('_', ' ')|title }}{% if post.giveaway.giveaway_end_at %} • ends {{ post.giveaway.giveaway_end_at|datetime_display }}{% endif %}</div>
+                                                    {% endif %}
+                                                    {{ delivery_ui.render(post) }}
+                                                </td>
+                                                <td>{{ persona_name_by_id.get(post.persona_id, post.persona_id) }}</td>
+                                                <td>{{ post.target_account_ids|length }}</td>
+                                                <td>{{ post.attachments|length }}</td>
+                                                <td>{{ post.scheduled_for|datetime_display if post.scheduled_for else "-" }}</td>
+                                                <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="/scheduled-posts/{{ post.id }}/page">Open</a></td>
+                                            </tr>
+                                        {% else %}
+                                            <tr><td colspan="6" class="text-secondary">No scheduled posts yet.</td></tr>
+                                        {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="workspace-calendar-pane" role="tabpanel" aria-labelledby="workspace-calendar-tab" tabindex="0">
+                <div class="d-flex flex-column flex-xl-row justify-content-between align-items-xl-center gap-3 mb-4">
+                    <div>
+                        <div class="section-kicker mb-2">Planner</div>
+                        <h2 class="h5 mb-1">Calendar View</h2>
+                        <p class="text-secondary mb-0">Switch between a month and week view to see what is going out, then click any card to open the post.</p>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2 align-items-center">
+                        <div class="btn-group" role="group" aria-label="Calendar view switcher">
+                            <button class="btn btn-outline-secondary active" type="button" id="calendar-view-month" data-calendar-view="month">Month</button>
+                            <button class="btn btn-outline-secondary" type="button" id="calendar-view-week" data-calendar-view="week">Week</button>
+                        </div>
+                        <button class="btn btn-outline-secondary" type="button" id="calendar-prev-button">Previous</button>
+                        <button class="btn btn-outline-secondary" type="button" id="calendar-today-button">Today</button>
+                        <button class="btn btn-outline-secondary" type="button" id="calendar-next-button">Next</button>
+                    </div>
+                </div>
+                <div class="surface-panel-soft d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
+                    <div>
+                        <div class="fw-semibold" id="calendar-range-label">Loading calendar...</div>
+                        <div class="small text-secondary">Only posts with a scheduled time appear on the calendar. Drafts without a date stay visible in kanban.</div>
+                    </div>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <span class="badge text-bg-light border" id="calendar-summary-total">0 scheduled</span>
+                        <span class="badge text-bg-light border" id="calendar-summary-giveaways">0 giveaways</span>
+                    </div>
+                </div>
+                <div class="scheduled-calendar" id="scheduled-calendar-root">
+                    <div class="scheduled-calendar-weekdays" id="scheduled-calendar-weekdays"></div>
+                    <div class="scheduled-calendar-grid" id="scheduled-calendar-grid"></div>
+                </div>
+                <div class="scheduled-calendar-empty d-none" id="scheduled-calendar-empty">
+                    <div class="surface-panel text-center">
+                        <div class="fw-semibold mb-2">No scheduled posts in this range</div>
+                        <div class="text-secondary">Move to a different month or week, or schedule a post from the New Post tab.</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="workspace-kanban-pane" role="tabpanel" aria-labelledby="workspace-kanban-tab" tabindex="0">
+                <div class="d-flex flex-column flex-xl-row justify-content-between align-items-xl-center gap-3 mb-4">
+                    <div>
+                        <div class="section-kicker mb-2">Workflow</div>
+                        <h2 class="h5 mb-1">Kanban View</h2>
+                        <p class="text-secondary mb-0">Watch the queue move from draft to completion, with a dedicated lane for anything that needs attention.</p>
+                    </div>
+                    <span class="badge soft-badge rounded-pill px-3 py-2">Grouped by status</span>
+                </div>
+                <div class="scheduled-kanban-board" id="scheduled-kanban-board">
+                    <div class="scheduled-kanban-lane" data-kanban-bucket="drafts">
+                        <div class="scheduled-kanban-lane-header">
+                            <div>
+                                <div class="fw-semibold">Drafts</div>
+                                <div class="small text-secondary">Posts still taking shape.</div>
+                            </div>
+                            <span class="badge text-bg-light border" id="kanban-count-drafts">0</span>
+                        </div>
+                        <div class="scheduled-kanban-list" id="kanban-lane-drafts"></div>
+                    </div>
+                    <div class="scheduled-kanban-lane" data-kanban-bucket="scheduled">
+                        <div class="scheduled-kanban-lane-header">
+                            <div>
+                                <div class="fw-semibold">Scheduled</div>
+                                <div class="small text-secondary">Ready and waiting for publish time.</div>
+                            </div>
+                            <span class="badge text-bg-light border" id="kanban-count-scheduled">0</span>
+                        </div>
+                        <div class="scheduled-kanban-list" id="kanban-lane-scheduled"></div>
+                    </div>
+                    <div class="scheduled-kanban-lane" data-kanban-bucket="running">
+                        <div class="scheduled-kanban-lane-header">
+                            <div>
+                                <div class="fw-semibold">In Progress</div>
+                                <div class="small text-secondary">Posts actively moving through delivery.</div>
+                            </div>
+                            <span class="badge text-bg-light border" id="kanban-count-running">0</span>
+                        </div>
+                        <div class="scheduled-kanban-list" id="kanban-lane-running"></div>
+                    </div>
+                    <div class="scheduled-kanban-lane" data-kanban-bucket="attention">
+                        <div class="scheduled-kanban-lane-header">
+                            <div>
+                                <div class="fw-semibold">Needs Attention</div>
+                                <div class="small text-secondary">Failures, partial failures, and cancelled work.</div>
+                            </div>
+                            <span class="badge text-bg-light border" id="kanban-count-attention">0</span>
+                        </div>
+                        <div class="scheduled-kanban-list" id="kanban-lane-attention"></div>
+                    </div>
+                    <div class="scheduled-kanban-lane" data-kanban-bucket="done">
+                        <div class="scheduled-kanban-lane-header">
+                            <div>
+                                <div class="fw-semibold">Completed</div>
+                                <div class="small text-secondary">Successfully delivered posts.</div>
+                            </div>
+                            <span class="badge text-bg-light border" id="kanban-count-done">0</span>
+                        </div>
+                        <div class="scheduled-kanban-list" id="kanban-lane-done"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const personaTargets = {{ persona_targets | tojson }};
+const servicePostGuidance = {{ service_post_guidance | tojson }};
+const personaSelect = document.getElementById("persona-select");
+const targetAccountList = document.getElementById("target-account-list");
+const bodyTextarea = document.querySelector("textarea[name='body']");
+const uploadsInput = document.querySelector("input[name='uploads']");
+const uploadPreviewList = document.getElementById("upload-preview-list");
+const uploadSummary = document.getElementById("upload-summary");
+const bodyLengthIndicator = document.getElementById("body-length-indicator");
+const snapshotBodyLength = document.getElementById("snapshot-body-length");
+const snapshotAttachments = document.getElementById("snapshot-attachments");
+const snapshotTargets = document.getElementById("snapshot-targets");
+const postTypeSelect = document.getElementById("post-type-select");
+const giveawayConfigPanel = document.getElementById("giveaway-config-panel");
+const giveawayTargetHint = document.getElementById("giveaway-target-hint");
+const scheduledPostsPlannerData = [
+{% for post in posts %}
+  {
+    id: {{ post.id|tojson }},
+    href: {{ ("/scheduled-posts/" ~ post.id ~ "/page")|tojson }},
+    personaName: {{ persona_name_by_id.get(post.persona_id, post.persona_id)|tojson }},
+    body: {{ post.body|default("", true)|tojson }},
+    status: {{ post.status|tojson }},
+    displayStatus: {{ post.display_status|tojson }},
+    scheduledFor: {{ (post.scheduled_for.isoformat() if post.scheduled_for else None)|tojson }},
+    scheduledLabel: {{ (post.scheduled_for|datetime_display if post.scheduled_for else "Unscheduled")|tojson }},
+    attachmentCount: {{ post.attachments|length }},
+    targetCount: {{ post.target_account_ids|length }},
+    postType: {{ post.post_type|tojson }},
+    lastError: {{ post.last_error|tojson }},
+    successCount: {{ post.delivery_breakdown.succeeded|length }},
+    failureCount: {{ post.delivery_breakdown.failed|length }},
+    cancelledCount: {{ post.delivery_breakdown.cancelled|length }}
+  }{% if not loop.last %},{% endif %}
+{% endfor %}
+];
+const calendarWeekdays = document.getElementById("scheduled-calendar-weekdays");
+const calendarGrid = document.getElementById("scheduled-calendar-grid");
+const calendarRoot = document.getElementById("scheduled-calendar-root");
+const calendarEmpty = document.getElementById("scheduled-calendar-empty");
+const calendarRangeLabel = document.getElementById("calendar-range-label");
+const calendarSummaryTotal = document.getElementById("calendar-summary-total");
+const calendarSummaryGiveaways = document.getElementById("calendar-summary-giveaways");
+const calendarPrevButton = document.getElementById("calendar-prev-button");
+const calendarNextButton = document.getElementById("calendar-next-button");
+const calendarTodayButton = document.getElementById("calendar-today-button");
+const calendarViewButtons = Array.from(document.querySelectorAll("[data-calendar-view]"));
+const kanbanLaneIds = {
+  drafts: "kanban-lane-drafts",
+  scheduled: "kanban-lane-scheduled",
+  running: "kanban-lane-running",
+  attention: "kanban-lane-attention",
+  done: "kanban-lane-done",
+};
+const kanbanCountIds = {
+  drafts: "kanban-count-drafts",
+  scheduled: "kanban-count-scheduled",
+  running: "kanban-count-running",
+  attention: "kanban-count-attention",
+  done: "kanban-count-done",
+};
+const plannerState = {
+  viewMode: "month",
+  anchorDate: new Date(),
+};
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function attachmentSnapshot(files) {
+  const items = Array.from(files || []);
+  const images = items.filter((item) => (item.type || "").startsWith("image/"));
+  const videos = items.filter((item) => (item.type || "").startsWith("video/"));
+  const others = items.filter((item) => !(item.type || "").startsWith("image/") && !(item.type || "").startsWith("video/"));
+  return {
+    total: items.length,
+    images: images.length,
+    videos: videos.length,
+    others: others.length,
+    imageMimeTypes: images.map((item) => String(item.type || "").toLowerCase()).filter(Boolean),
+  };
+}
+
+function describeAttachmentSnapshot(snapshot) {
+  const pieces = [
+    `${snapshot.total} attachment${snapshot.total === 1 ? "" : "s"}`,
+    `${snapshot.images} image${snapshot.images === 1 ? "" : "s"}`,
+    `${snapshot.videos} video${snapshot.videos === 1 ? "" : "s"}`,
+  ];
+  if (snapshot.others) {
+    pieces.push(`${snapshot.others} other file${snapshot.others === 1 ? "" : "s"}`);
+  }
+  return pieces.join(" • ");
+}
+
+function describeServiceGuidance(rule) {
+  if (!rule) return "No structured posting guidance is available for this service yet.";
+  const parts = [];
+  if (rule.requires_media) parts.push("media required");
+  if (rule.requires_body_or_media) parts.push("needs text or media");
+  if (rule.body_limit != null && rule.body_limit_with_media != null && rule.body_limit_with_media !== rule.body_limit) {
+    parts.push(`${rule.body_limit} chars text-only`);
+    parts.push(`${rule.body_limit_with_media} chars with media`);
+  } else if (rule.body_limit != null) {
+    parts.push(`${rule.body_limit} chars`);
+  }
+  if (rule.max_attachments != null) parts.push(`up to ${rule.max_attachments} attachments`);
+  if (rule.max_images != null && rule.max_videos != null && rule.single_video_only) {
+    parts.push(`up to ${rule.max_images} images or ${rule.max_videos} video`);
+  } else {
+    if (rule.max_images != null) parts.push(`up to ${rule.max_images} images`);
+    if (rule.max_videos != null) parts.push(`up to ${rule.max_videos} video${rule.max_videos === 1 ? "" : "s"}`);
+  }
+  if (rule.multi_attachment_images_only) parts.push("image albums only for multi-attachment posts");
+  if (rule.allowed_image_mime_types?.length) parts.push("JPEG images only");
+  if (!parts.length && rule.notes?.length) return rule.notes[0];
+  return parts.join(" • ");
+}
+
+function evaluateServiceGuidance(rule, bodyText, snapshot) {
+  const issues = [];
+  const lines = [];
+  const activeBodyLimit = snapshot.total > 0 && rule?.body_limit_with_media != null ? rule.body_limit_with_media : rule?.body_limit;
+  const bodyLength = bodyText.length;
+
+  lines.push(activeBodyLimit != null ? `Body: ${bodyLength}/${activeBodyLimit} characters` : `Body: ${bodyLength} characters`);
+  lines.push(`Media: ${describeAttachmentSnapshot(snapshot)}`);
+
+  if (!rule) {
+    return {
+      tone: "warning",
+      lines: lines.concat(["No structured post guidance is available for this service yet."]),
+    };
+  }
+
+  if (rule.requires_body_or_media && !bodyText.trim() && snapshot.total === 0) {
+    issues.push("This service needs text or at least one attachment.");
+  }
+  if (rule.requires_media && snapshot.total === 0) {
+    issues.push("This service requires at least one image or video attachment.");
+  }
+  if (activeBodyLimit != null && bodyLength > activeBodyLimit) {
+    issues.push(`Body exceeds the current ${activeBodyLimit}-character limit.`);
+  }
+  if (rule.max_attachments != null && snapshot.total > rule.max_attachments) {
+    issues.push(`Attachment count exceeds the ${rule.max_attachments}-attachment limit.`);
+  }
+  if (rule.max_images != null && snapshot.images > rule.max_images) {
+    issues.push(`Image count exceeds the ${rule.max_images}-image limit.`);
+  }
+  if (rule.max_videos != null && snapshot.videos > rule.max_videos) {
+    issues.push(`Video count exceeds the ${rule.max_videos}-video limit.`);
+  }
+  if (rule.single_video_only && snapshot.videos > 0 && snapshot.total > 1) {
+    issues.push("This service currently supports either images or one video, not mixed or multi-video posts.");
+  }
+  if (rule.multi_attachment_images_only && snapshot.total > 1 && snapshot.images !== snapshot.total) {
+    issues.push("Multiple attachments must all be images for this service.");
+  }
+  if (
+    rule.allowed_image_mime_types?.length &&
+    snapshot.imageMimeTypes.some((mimeType) => !rule.allowed_image_mime_types.includes(mimeType))
+  ) {
+    issues.push(`Image uploads must use one of: ${rule.allowed_image_mime_types.join(", ")}.`);
+  }
+  if (
+    Array.isArray(rule.supported_attachment_kinds) &&
+    !rule.supported_attachment_kinds.includes("other") &&
+    snapshot.others > 0
+  ) {
+    issues.push("One or more selected attachments are not image or video media.");
+  }
+
+  if (!issues.length) {
+    const okLines = ["Current post fits this service's known app limits."];
+    if (rule.notes?.length) okLines.push(...rule.notes);
+    return {tone: "ok", lines: lines.concat(okLines)};
+  }
+
+  return {tone: "danger", lines: lines.concat(issues)};
+}
+
+function renderGuidanceLines(container, lines, tone) {
+  container.innerHTML = "";
+  lines.forEach((line, index) => {
+    const row = document.createElement("div");
+    row.className = index < 2 ? "text-secondary" : tone === "danger" ? "text-danger" : "text-secondary";
+    row.textContent = line;
+    container.appendChild(row);
+  });
+}
+
+function renderTargetAccounts() {
+  const accounts = personaTargets[personaSelect.value] || [];
+  targetAccountList.innerHTML = "";
+  if (!accounts.length) {
+    targetAccountList.innerHTML = '<div class="col-12"><div class="alert alert-light border mb-0">This persona has no enabled destination accounts yet.</div></div>';
+    return;
+  }
+  for (const account of accounts) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "col-12";
+    wrapper.dataset.accountService = account.service;
+    wrapper.innerHTML = `
+      <div class="border rounded p-3 bg-white">
+        <div class="form-check">
+          <input class="form-check-input target-checkbox" type="checkbox" value="${account.id}" id="target-${account.id}" checked>
+          <label class="form-check-label fw-semibold" for="target-${account.id}">${account.label}</label>
+          <span class="small-muted ms-2">${account.service}</span>
+        </div>
+        <div class="small text-secondary mt-2">${escapeHtml(describeServiceGuidance(servicePostGuidance[account.service]))}</div>
+        <div class="mt-2">
+          <label class="form-label small-muted mb-1">Optional override body</label>
+          <textarea class="form-control override-body" data-account-id="${account.id}" rows="2"></textarea>
+        </div>
+        <div class="post-guidance-panel border rounded p-2 bg-body-tertiary mt-3" data-account-id="${account.id}">
+          <div class="fw-semibold small">Publishing Guidance</div>
+          <div class="small text-secondary post-guidance-summary"></div>
+          <div class="small mt-2 post-guidance-status"></div>
+        </div>
+      </div>
+    `;
+    targetAccountList.appendChild(wrapper);
+  }
+  refreshPostGuidance();
+}
+
+function parseCommaSeparated(value) {
+  return String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function buildGiveawayPayload(form) {
+  if (postTypeSelect.value !== "instagram_giveaway") {
+    return null;
+  }
+  return {
+    giveaway_end_at: form.giveaway_end_at.value || null,
+    min_friend_mentions: Number.parseInt(form.giveaway_min_friend_mentions.value || "0", 10) || 0,
+    required_keywords: parseCommaSeparated(form.giveaway_required_keywords.value),
+    required_hashtags: parseCommaSeparated(form.giveaway_required_hashtags.value),
+    require_story_mention: form.giveaway_require_story_mention.checked,
+    require_like: form.giveaway_require_like.checked,
+    require_follow: form.giveaway_require_follow.checked,
+  };
+}
+
+function refreshGiveawayState() {
+  const isGiveaway = postTypeSelect.value === "instagram_giveaway";
+  giveawayConfigPanel.classList.toggle("d-none", !isGiveaway);
+  giveawayConfigPanel.classList.toggle("giveaway-only", isGiveaway);
+  const selectedInstagramTargets = Array.from(targetAccountList.querySelectorAll(".target-checkbox"))
+    .filter((checkbox) => checkbox.checked)
+    .map((checkbox) => checkbox.closest("[data-account-service]"))
+    .filter((wrapper) => wrapper?.dataset.accountService === "instagram").length;
+  if (isGiveaway) {
+    giveawayTargetHint.className = selectedInstagramTargets === 1
+      ? "small text-success"
+      : "small text-danger";
+    giveawayTargetHint.textContent = selectedInstagramTargets === 1
+      ? "Exactly one Instagram destination is selected."
+      : "Instagram giveaway posts must target exactly one Instagram destination account.";
+  }
+}
+
+personaSelect.addEventListener("change", renderTargetAccounts);
+renderTargetAccounts();
+
+function formatFileSize(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  let value = bytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  return `${value.toFixed(value >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+}
+
+function renderUploadPreviews() {
+  const files = Array.from(uploadsInput.files || []);
+  uploadPreviewList.innerHTML = "";
+  if (!files.length) {
+    uploadPreviewList.innerHTML = '<div class="col-12"><div class="small text-secondary">No files selected yet.</div></div>';
+    return;
+  }
+  for (const file of files) {
+    const item = document.createElement("div");
+    item.className = "col-12";
+    const preview = file.type.startsWith("image/")
+      ? `<img src="${URL.createObjectURL(file)}" alt="${file.name}" class="img-fluid rounded border" style="max-height: 220px;">`
+      : `<div class="border rounded bg-light px-3 py-4 text-secondary text-center">${file.type || "Attachment"}</div>`;
+    item.innerHTML = `
+      <div class="border rounded p-3 bg-white h-100">
+        <div class="row g-3 align-items-center">
+          <div class="col-md-4">
+            ${preview}
+          </div>
+          <div class="col-md-8">
+            <div class="fw-semibold">${file.name}</div>
+            <div class="small text-secondary">${file.type || "Unknown type"} • ${formatFileSize(file.size)}</div>
+          </div>
+        </div>
+      </div>
+    `;
+    uploadPreviewList.appendChild(item);
+  }
+}
+
+function refreshPostGuidance() {
+  const snapshot = attachmentSnapshot(uploadsInput.files || []);
+  const selectedTargets = Array.from(targetAccountList.querySelectorAll(".target-checkbox")).filter((checkbox) => checkbox.checked).length;
+
+  bodyLengthIndicator.textContent = `${bodyTextarea.value.length} chars`;
+  uploadSummary.textContent = snapshot.total
+    ? `${describeAttachmentSnapshot(snapshot)} will be attached to the scheduled post.`
+    : "Selected images and videos will be attached to the scheduled post.";
+  snapshotBodyLength.textContent = `${bodyTextarea.value.length} chars`;
+  snapshotAttachments.textContent = `${snapshot.total} attachment${snapshot.total === 1 ? "" : "s"}`;
+  snapshotTargets.textContent = `${selectedTargets} target${selectedTargets === 1 ? "" : "s"}`;
+  refreshGiveawayState();
+
+  targetAccountList.querySelectorAll(".col-12[data-account-service]").forEach((wrapper) => {
+    const checkbox = wrapper.querySelector(".target-checkbox");
+    const panel = wrapper.querySelector(".post-guidance-panel");
+    const summary = wrapper.querySelector(".post-guidance-summary");
+    const status = wrapper.querySelector(".post-guidance-status");
+    const service = wrapper.dataset.accountService;
+    const rule = servicePostGuidance[service];
+    const override = wrapper.querySelector(".override-body")?.value.trim() || "";
+
+    summary.textContent = describeServiceGuidance(rule);
+    panel.classList.remove("is-ok", "is-warning", "is-danger");
+
+    if (!checkbox.checked) {
+      panel.classList.add("is-warning");
+      renderGuidanceLines(status, ["This destination is not selected for the current post."], "warning");
+      return;
+    }
+
+    const evaluation = evaluateServiceGuidance(rule, override || bodyTextarea.value, snapshot);
+    panel.classList.add(`is-${evaluation.tone}`);
+    renderGuidanceLines(status, evaluation.lines, evaluation.tone);
+  });
+}
+
+uploadsInput.addEventListener("change", () => {
+  renderUploadPreviews();
+  refreshPostGuidance();
+});
+bodyTextarea.addEventListener("input", refreshPostGuidance);
+targetAccountList.addEventListener("input", refreshPostGuidance);
+targetAccountList.addEventListener("change", refreshPostGuidance);
+postTypeSelect.addEventListener("change", refreshPostGuidance);
+renderUploadPreviews();
+refreshPostGuidance();
+
+const plannerPosts = scheduledPostsPlannerData.map((post) => ({
+  ...post,
+  scheduledDate: post.scheduledFor ? new Date(post.scheduledFor) : null,
+})).sort((left, right) => {
+  if (!left.scheduledDate && !right.scheduledDate) return 0;
+  if (!left.scheduledDate) return 1;
+  if (!right.scheduledDate) return -1;
+  return left.scheduledDate - right.scheduledDate;
+});
+
+if (plannerPosts.find((post) => post.scheduledDate)) {
+  plannerState.anchorDate = new Date(plannerPosts.find((post) => post.scheduledDate).scheduledDate);
+}
+
+function startOfLocalDay(value) {
+  return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+}
+
+function addDays(value, days) {
+  const next = new Date(value);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function startOfWeek(value) {
+  const day = startOfLocalDay(value);
+  return addDays(day, -day.getDay());
+}
+
+function isSameDay(left, right) {
+  return left.getFullYear() === right.getFullYear()
+    && left.getMonth() === right.getMonth()
+    && left.getDate() === right.getDate();
+}
+
+function formatDayLabel(date, options) {
+  return new Intl.DateTimeFormat(undefined, options).format(date);
+}
+
+function summarizeBody(body) {
+  const normalized = String(body || "").trim().replace(/\s+/g, " ");
+  if (!normalized) return "No text body";
+  return normalized.length > 72 ? `${normalized.slice(0, 69)}...` : normalized;
+}
+
+function statusBucket(displayStatus) {
+  switch (displayStatus) {
+    case "draft":
+      return "drafts";
+    case "scheduled":
+      return "scheduled";
+    case "queued":
+    case "in_progress":
+    case "posting":
+      return "running";
+    case "partial_failure":
+    case "failure":
+    case "cancelled":
+      return "attention";
+    case "success":
+      return "done";
+    default:
+      return "scheduled";
+  }
+}
+
+function statusBadgeClass(displayStatus) {
+  switch (statusBucket(displayStatus)) {
+    case "attention":
+      return "text-bg-danger";
+    case "done":
+      return "text-bg-success";
+    case "running":
+      return "text-bg-warning";
+    default:
+      return "text-bg-light border";
+  }
+}
+
+function postsForDay(day) {
+  return plannerPosts.filter((post) => post.scheduledDate && isSameDay(post.scheduledDate, day));
+}
+
+function setCalendarView(mode) {
+  plannerState.viewMode = mode;
+  calendarViewButtons.forEach((button) => {
+    button.classList.toggle("active", button.dataset.calendarView === mode);
+  });
+  renderCalendar();
+}
+
+function moveCalendar(direction) {
+  const next = new Date(plannerState.anchorDate);
+  if (plannerState.viewMode === "week") {
+    next.setDate(next.getDate() + (direction * 7));
+  } else {
+    next.setMonth(next.getMonth() + direction);
+  }
+  plannerState.anchorDate = next;
+  renderCalendar();
+}
+
+function calendarEventMarkup(post, compact = false) {
+  const summary = compact && post.body ? summarizeBody(post.body) : post.personaName;
+  const meta = compact
+    ? `${post.personaName} • ${post.targetCount} target${post.targetCount === 1 ? "" : "s"}`
+    : `${post.scheduledLabel} • ${post.attachmentCount} attachment${post.attachmentCount === 1 ? "" : "s"}`;
+  return `
+    <a class="scheduled-calendar-event" href="${post.href}">
+      <span class="badge ${statusBadgeClass(post.displayStatus)}">${post.displayStatus.replaceAll("_", " ")}</span>
+      ${post.postType === "instagram_giveaway" ? '<span class="badge text-bg-warning-subtle border text-dark">Giveaway</span>' : ""}
+      <div class="scheduled-calendar-event-title">${escapeHtml(summary)}</div>
+      <div class="scheduled-calendar-event-meta">${escapeHtml(meta)}</div>
+    </a>
+  `;
+}
+
+function renderMonthCalendar() {
+  const anchor = plannerState.anchorDate;
+  const monthStart = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+  const gridStart = addDays(monthStart, -monthStart.getDay());
+  const cells = [];
+
+  calendarWeekdays.innerHTML = Array.from({length: 7}, (_, index) => {
+    const day = addDays(startOfWeek(new Date()), index);
+    return `<div class="scheduled-calendar-weekday">${formatDayLabel(day, {weekday: "short"})}</div>`;
+  }).join("");
+
+  for (let index = 0; index < 42; index += 1) {
+    const day = addDays(gridStart, index);
+    const dayPosts = postsForDay(day);
+    const isOutsideMonth = day.getMonth() !== anchor.getMonth();
+    const hiddenCount = Math.max(dayPosts.length - 3, 0);
+    const visiblePosts = dayPosts.slice(0, 3);
+    cells.push(`
+      <div class="scheduled-calendar-cell ${isOutsideMonth ? "is-muted" : ""}">
+        <div class="scheduled-calendar-cell-head">
+          <span class="scheduled-calendar-day-number">${day.getDate()}</span>
+          ${dayPosts.length ? `<span class="small text-secondary">${dayPosts.length}</span>` : ""}
+        </div>
+        <div class="scheduled-calendar-cell-events">
+          ${visiblePosts.map((post) => calendarEventMarkup(post, true)).join("")}
+          ${hiddenCount ? `<div class="scheduled-calendar-more">+${hiddenCount} more scheduled</div>` : ""}
+        </div>
+      </div>
+    `);
+  }
+
+  calendarGrid.className = "scheduled-calendar-grid is-month";
+  calendarGrid.innerHTML = cells.join("");
+  calendarRangeLabel.textContent = formatDayLabel(anchor, {month: "long", year: "numeric"});
+}
+
+function renderWeekCalendar() {
+  const start = startOfWeek(plannerState.anchorDate);
+  const days = Array.from({length: 7}, (_, index) => addDays(start, index));
+
+  calendarWeekdays.innerHTML = days.map((day) => `
+    <div class="scheduled-calendar-weekday">
+      <div>${formatDayLabel(day, {weekday: "short"})}</div>
+      <div class="small text-secondary">${formatDayLabel(day, {month: "short", day: "numeric"})}</div>
+    </div>
+  `).join("");
+
+  calendarGrid.className = "scheduled-calendar-grid is-week";
+  calendarGrid.innerHTML = days.map((day) => {
+    const dayPosts = postsForDay(day);
+    return `
+      <div class="scheduled-calendar-column">
+        <div class="scheduled-calendar-column-events">
+          ${dayPosts.length
+            ? dayPosts.map((post) => calendarEventMarkup(post)).join("")
+            : '<div class="scheduled-calendar-placeholder">No scheduled posts</div>'}
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  const weekEnd = addDays(start, 6);
+  calendarRangeLabel.textContent = `${formatDayLabel(start, {month: "short", day: "numeric"})} - ${formatDayLabel(weekEnd, {month: "short", day: "numeric", year: "numeric"})}`;
+}
+
+function renderCalendar() {
+  const visibleScheduled = plannerPosts.filter((post) => post.scheduledDate);
+  const visibleGiveaways = visibleScheduled.filter((post) => post.postType === "instagram_giveaway");
+  calendarSummaryTotal.textContent = `${visibleScheduled.length} scheduled`;
+  calendarSummaryGiveaways.textContent = `${visibleGiveaways.length} giveaways`;
+
+  if (!visibleScheduled.length) {
+    calendarRoot.classList.add("d-none");
+    calendarEmpty.classList.remove("d-none");
+    calendarRangeLabel.textContent = "No scheduled posts yet";
+    return;
+  }
+
+  calendarRoot.classList.remove("d-none");
+  calendarEmpty.classList.add("d-none");
+  if (plannerState.viewMode === "week") {
+    renderWeekCalendar();
+  } else {
+    renderMonthCalendar();
+  }
+}
+
+function kanbanCardMarkup(post) {
+  return `
+    <a class="scheduled-kanban-card" href="${post.href}">
+      <div class="d-flex justify-content-between align-items-start gap-2">
+        <div class="fw-semibold">${escapeHtml(post.personaName)}</div>
+        <span class="badge ${statusBadgeClass(post.displayStatus)}">${post.displayStatus.replaceAll("_", " ")}</span>
+      </div>
+      <div class="scheduled-kanban-card-body">${escapeHtml(summarizeBody(post.body))}</div>
+      <div class="scheduled-kanban-card-meta">
+        <span>${escapeHtml(post.scheduledLabel)}</span>
+        <span>${post.targetCount} target${post.targetCount === 1 ? "" : "s"}</span>
+        <span>${post.attachmentCount} attachment${post.attachmentCount === 1 ? "" : "s"}</span>
+      </div>
+      ${post.postType === "instagram_giveaway" ? '<div class="small text-warning-emphasis mt-2">Instagram giveaway</div>' : ""}
+      ${post.lastError ? `<div class="small text-danger mt-2">${escapeHtml(post.lastError)}</div>` : ""}
+    </a>
+  `;
+}
+
+function renderKanbanBoard() {
+  const buckets = {
+    drafts: [],
+    scheduled: [],
+    running: [],
+    attention: [],
+    done: [],
+  };
+  plannerPosts.forEach((post) => {
+    buckets[statusBucket(post.displayStatus)].push(post);
+  });
+
+  Object.entries(buckets).forEach(([bucket, items]) => {
+    const lane = document.getElementById(kanbanLaneIds[bucket]);
+    const count = document.getElementById(kanbanCountIds[bucket]);
+    count.textContent = String(items.length);
+    lane.innerHTML = items.length
+      ? items.map((post) => kanbanCardMarkup(post)).join("")
+      : '<div class="scheduled-kanban-empty">No posts in this bucket.</div>';
+  });
+}
+
+calendarViewButtons.forEach((button) => {
+  button.addEventListener("click", () => setCalendarView(button.dataset.calendarView));
+});
+calendarPrevButton.addEventListener("click", () => moveCalendar(-1));
+calendarNextButton.addEventListener("click", () => moveCalendar(1));
+calendarTodayButton.addEventListener("click", () => {
+  plannerState.anchorDate = new Date();
+  renderCalendar();
+});
+
+renderCalendar();
+renderKanbanBoard();
+
+document.getElementById("scheduled-post-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const payload = new FormData();
+  const targetAccountIds = Array.from(form.querySelectorAll(".target-checkbox"))
+    .filter((checkbox) => checkbox.checked)
+    .map((checkbox) => checkbox.value);
+  const publishOverrides = {};
+  form.querySelectorAll(".override-body").forEach((textarea) => {
+    if (textarea.value.trim()) {
+      publishOverrides[textarea.dataset.accountId] = {body: textarea.value};
+    }
+  });
+  const metadata = {};
+  if (form.source_link.value.trim()) metadata.link = form.source_link.value.trim();
+  if (form.visibility.value) metadata.visibility = form.visibility.value;
+  const giveaway = buildGiveawayPayload(form);
+
+  if (postTypeSelect.value === "instagram_giveaway") {
+    const instagramTargetIds = Array.from(form.querySelectorAll(".target-checkbox"))
+      .filter((checkbox) => checkbox.checked)
+      .filter((checkbox) => checkbox.closest("[data-account-service]")?.dataset.accountService === "instagram")
+      .map((checkbox) => checkbox.value);
+    if (instagramTargetIds.length !== 1 || targetAccountIds.length !== 1) {
+      alert("Instagram giveaway posts must target exactly one Instagram destination account.");
+      return;
+    }
+    if (!giveaway?.giveaway_end_at) {
+      alert("Instagram giveaway posts require a giveaway end time.");
+      return;
+    }
+  }
+
+  payload.append("persona_id", form.persona_id.value);
+  payload.append("body", form.body.value);
+  payload.append("post_type", postTypeSelect.value);
+  payload.append("status", form.status.value);
+  payload.append("target_account_ids", JSON.stringify(targetAccountIds));
+  payload.append("publish_overrides_json", JSON.stringify(publishOverrides));
+  payload.append("metadata_json", JSON.stringify(metadata));
+  payload.append("scheduled_for", form.scheduled_for.value);
+  payload.append("giveaway_json", JSON.stringify(giveaway));
+  payload.append("alt_texts", JSON.stringify([]));
+  for (const file of form.uploads.files) {
+    payload.append("uploads", file);
+  }
+
+  const response = await fetch("/scheduled-posts", {method: "POST", body: payload});
+  if (!response.ok) {
+    alert(await response.text());
+    return;
+  }
+  const created = await response.json();
+  window.location.href = `/scheduled-posts/${created.id}/page`;
+});
+</script>
+{% endblock %}

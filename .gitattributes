@@ -1,0 +1,8 @@
+# Keep repository text files on LF so Windows checkouts play nicely with Linux
+# dev containers and WSL.
+* text=auto eol=lf
+
+# If we add Windows-native scripts later, keep their conventional endings.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf

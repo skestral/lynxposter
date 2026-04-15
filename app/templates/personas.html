@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card hero-card section-card mb-4">
+    <div class="card-body">
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+            <div>
+                <div class="section-kicker mb-2">Persona Library</div>
+                <h1 class="h3 mb-1">Manage personas</h1>
+                <div class="text-secondary">Each persona keeps its own account graph, routing map, and posting defaults.</div>
+            </div>
+            <span class="badge soft-badge rounded-pill px-3 py-2">{{ personas|length }} total personas</span>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-12 col-xl-5">
+        <div class="card section-card">
+            <div class="card-body">
+                <div class="section-kicker mb-2">Create</div>
+                <h2 class="h5 mb-3">New persona</h2>
+                <form id="persona-create-form" class="tab-pane-stack">
+                    <div class="surface-panel">
+                        <div class="row g-3">
+                            <div class="col-md-8">
+                                <label class="form-label">Name</label>
+                                <input class="form-control" name="name" value="New Persona" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Slug</label>
+                                <input class="form-control" name="slug" value="new-persona" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Timezone</label>
+                                <select class="form-select" name="timezone">
+                                    {% for option in timezone_options(True) %}
+                                    <option value="{{ option }}" {% if option == "server" %}selected{% endif %}>{{ option }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-6 d-flex align-items-end">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="is_enabled" checked>
+                                    <label class="form-check-label">Enabled</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="surface-panel">
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label">Max Retries</label>
+                                <input class="form-control" name="max_retries" type="number" value="5">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Max Posts / Hour</label>
+                                <input class="form-control" name="max_per_hour" type="number" value="0">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Overflow Policy</label>
+                                <select class="form-select" name="overflow_posts">
+                                    <option value="retry" selected>Retry</option>
+                                    <option value="skip">Skip</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Lookback Hours</label>
+                                <input class="form-control" name="post_time_limit" type="number" value="12">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Default Visibility</label>
+                                <select class="form-select" name="visibility">
+                                    <option value="public" selected>Public</option>
+                                    <option value="unlisted">Unlisted</option>
+                                    <option value="private">Private</option>
+                                    <option value="direct">Direct</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Mentions Policy</label>
+                                <select class="form-select" name="mentions">
+                                    <option value="strip" selected>Strip</option>
+                                    <option value="keep">Keep</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="quote_posts" checked>
+                                    <label class="form-check-label">Allow Quote Posts</label>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="post_default" checked>
+                                    <label class="form-check-label">Enable Default Posting</label>
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="import_existing_posts">
+                                    <label class="form-check-label">Import existing posts on first scan</label>
+                                </div>
+                                <div class="small text-secondary">Leave this off to establish a safe baseline and only crosspost new content going forward.</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex gap-2 flex-wrap">
+                        <button class="btn btn-primary" type="submit">Create Persona</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-xl-7">
+        <div class="card section-card h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div>
+                        <div class="section-kicker mb-2">Library</div>
+                        <h2 class="h5 mb-0">Existing Personas</h2>
+                    </div>
+                    <span class="badge soft-badge rounded-pill px-3 py-2">{{ personas|length }} total</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table align-middle mb-0">
+                        <thead>
+                            <tr><th>Name</th><th>Accounts</th><th>Status</th><th></th></tr>
+                        </thead>
+                        <tbody>
+                        {% for persona in personas %}
+                            <tr>
+                                <td>
+                                    <div class="fw-semibold">{{ persona.name }}</div>
+                                    <div class="small-muted code-ish">{{ persona.slug }}</div>
+                                </td>
+                                <td>{{ persona.accounts|length }}</td>
+                                <td>
+                                    {% if persona.is_enabled %}
+                                        <span class="badge text-bg-success">Enabled</span>
+                                    {% else %}
+                                        <span class="badge text-bg-secondary">Disabled</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="/personas/{{ persona.id }}/page">Manage</a></td>
+                            </tr>
+                        {% else %}
+                            <tr><td colspan="4" class="text-secondary">No personas available.</td></tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById("persona-create-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const payload = {
+    name: form.name.value,
+    slug: form.slug.value,
+    is_enabled: form.is_enabled.checked,
+    timezone: form.timezone.value || "server",
+    settings_json: {
+      post_time_limit: Number(form.post_time_limit.value || 12),
+      visibility: form.visibility.value,
+      mentions: form.mentions.value,
+      quote_posts: form.quote_posts.checked,
+      post_default: form.post_default.checked,
+      import_existing_posts: form.import_existing_posts.checked,
+    },
+    retry_settings_json: {
+      max_retries: Number(form.max_retries.value || 5),
+    },
+    throttle_settings_json: {
+      max_per_hour: Number(form.max_per_hour.value || 0),
+      overflow_posts: form.overflow_posts.value,
+    },
+  };
+  const response = await fetch("/personas", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    alert(await response.text());
+    return;
+  }
+  window.location.reload();
+});
+</script>
+{% endblock %}

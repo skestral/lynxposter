@@ -1,0 +1,382 @@
+{% set webhook_obs = instagram_webhook_observability %}
+{% macro render_recent_delivery(event) -%}
+<details class="surface-details p-3">
+    <summary class="d-flex flex-column gap-2" style="cursor: pointer; list-style: none;">
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-2">
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <span class="webhook-status-pill {% if event.matched %}is-success{% else %}is-muted{% endif %}">{{ event.matched_state_label }}</span>
+                <span class="webhook-status-pill is-field">{{ event.field_label }}</span>
+                <span class="small text-secondary">{{ event.created_at|datetime_display }}</span>
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+                {% if event.activity_href %}
+                <a href="{{ event.activity_href }}" target="_blank" rel="noreferrer" class="badge text-bg-light border rounded-pill text-decoration-none">{{ event.activity_href_label or "Open related post" }}</a>
+                {% endif %}
+                {% if event.chat_href %}
+                <a href="{{ event.chat_href }}" target="_blank" rel="noreferrer" class="badge text-bg-light border rounded-pill text-decoration-none">{{ event.chat_href_label or "Open inbox" }}</a>
+                {% endif %}
+                {% if event.actor_profile_href or (event.actor_local_account and event.actor_local_account.profile_href) %}
+                <a href="{{ event.actor_profile_href or event.actor_local_account.profile_href }}" target="_blank" rel="noreferrer" class="badge text-bg-light border rounded-pill text-decoration-none">Open sender profile</a>
+                {% endif %}
+                {% if event.actor_username %}
+                <span class="badge text-bg-light border rounded-pill">@{{ event.actor_username }}</span>
+                {% endif %}
+            </div>
+        </div>
+        <div class="small text-secondary">{{ event.summary_text or event.event_type_label }}</div>
+        {% if event.text_preview %}
+        <div class="small text-secondary">Content: "{{ event.text_preview }}"</div>
+        {% endif %}
+        <div class="small text-secondary">
+            {{ event.account_context_label or "Account" }}:
+            {% if event.recipient_local_account %}
+            {{ event.recipient_local_account.display_label }}
+            {% if event.recipient_local_account.persona_name %} • {{ event.recipient_local_account.persona_name }}{% endif %}
+            {% elif event.provider_local_account %}
+            {{ event.provider_local_account.display_label }}
+            {% if event.provider_local_account.persona_name %} • {{ event.provider_local_account.persona_name }}{% endif %}
+            {% elif event.recipient_id %}
+            <span class="code-ish">{{ event.recipient_id }}</span>
+            {% else %}
+            -
+            {% endif %}
+        </div>
+        {% if event.parent_post %}
+        <div class="small text-secondary">
+            Parent post:
+            {% if event.parent_post.href %}
+            <a href="{{ event.parent_post.href }}">{{ event.parent_post.label }}</a>
+            {% else %}
+            {{ event.parent_post.label }}
+            {% endif %}
+            {% if event.parent_post.persona_name %} • {{ event.parent_post.persona_name }}{% endif %}
+        </div>
+        {% elif event.related_media %}
+        <div class="small text-secondary">
+            Related post:
+            {% if event.related_media.href %}
+            <a href="{{ event.related_media.href }}" target="_blank" rel="noreferrer">{{ event.related_media.label }}</a>
+            {% else %}
+            {{ event.related_media.label }}
+            {% endif %}
+        </div>
+        {% endif %}
+    </summary>
+    <div class="mt-3 d-flex flex-column gap-3">
+        <div class="row g-3">
+            {% if event.parent_post %}
+            <div class="col-md-6">
+                <div class="webhook-kv">
+                    <div class="webhook-kv-label">Parent Scheduled Post</div>
+                    <div>
+                        {% if event.parent_post.href %}
+                        <a href="{{ event.parent_post.href }}">{{ event.parent_post.label }}</a>
+                        {% else %}
+                        {{ event.parent_post.label }}
+                        {% endif %}
+                        {% if event.parent_post.persona_name %}
+                        <div class="small text-secondary">{{ event.parent_post.persona_name }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            {% if not event.parent_post and event.related_media %}
+            <div class="col-md-6">
+                <div class="webhook-kv">
+                    <div class="webhook-kv-label">Related Instagram Post</div>
+                    <div>
+                        {% if event.related_media.href %}
+                        <a href="{{ event.related_media.href }}" target="_blank" rel="noreferrer">{{ event.related_media.label }}</a>
+                        {% else %}
+                        {{ event.related_media.label }}
+                        {% endif %}
+                        {% if event.related_media.media_id %}
+                        <div class="small text-secondary code-ish">{{ event.related_media.media_id }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            {% if event.parent_post and event.parent_post.instagram_external_url %}
+            <div class="col-md-6">
+                <div class="webhook-kv">
+                    <div class="webhook-kv-label">Published Instagram Post</div>
+                    <div>
+                        <a href="{{ event.parent_post.instagram_external_url }}" target="_blank" rel="noreferrer">Open Instagram post</a>
+                        {% if event.parent_post.instagram_external_id %}
+                        <div class="small text-secondary code-ish">{{ event.parent_post.instagram_external_id }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            {% if event.chat_href %}
+            <div class="col-md-6">
+                <div class="webhook-kv">
+                    <div class="webhook-kv-label">Conversation</div>
+                    <div>
+                        <a href="{{ event.chat_href }}" target="_blank" rel="noreferrer">{{ event.chat_href_label or "Open Instagram inbox" }}</a>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            <div class="col-md-6">
+                <div class="webhook-kv">
+                    <div class="webhook-kv-label">Provider Account</div>
+                    <div>
+                        {% if event.provider_local_account %}
+                        <div>{{ event.provider_local_account.display_label }}</div>
+                        {% if event.provider_local_account.persona_name %}
+                        <div class="small text-secondary">{{ event.provider_local_account.persona_name }}</div>
+                        {% endif %}
+                        {% endif %}
+                        <div class="code-ish">{{ event.provider_account_id or "-" }}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="webhook-kv">
+                    <div class="webhook-kv-label">Matched LynxPoster Account</div>
+                    <div>
+                        {% if event.matched_local_account %}
+                        <div>{{ event.matched_local_account.display_label }}</div>
+                        {% if event.matched_local_account.persona_name %}
+                        <div class="small text-secondary">{{ event.matched_local_account.persona_name }}</div>
+                        {% endif %}
+                        {% endif %}
+                        <div class="code-ish">{{ event.matched_account_id or "-" }}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="webhook-kv">
+                    <div class="webhook-kv-label">Matched Post</div>
+                    <div class="code-ish">{{ event.matched_post_id or "-" }}</div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="webhook-kv">
+                    <div class="webhook-kv-label">Matched Giveaway</div>
+                    <div class="code-ish">{{ event.matched_giveaway_id or "-" }}</div>
+                </div>
+            </div>
+            {% if event.provider_object_id %}
+            <div class="col-md-6">
+                <div class="webhook-kv">
+                    <div class="webhook-kv-label">{{ event.provider_object_label or "Provider Event ID" }}</div>
+                    <div class="code-ish">{{ event.provider_object_id }}</div>
+                </div>
+            </div>
+            {% endif %}
+            <div class="col-md-6">
+                <div class="webhook-kv">
+                    <div class="webhook-kv-label">{{ event.actor_context_label or "Actor" }}</div>
+                    <div class="d-flex gap-2 align-items-start">
+                        {% if event.actor_profile_image_url %}
+                        <img src="{{ event.actor_profile_image_url }}" alt="" class="rounded-circle border" style="width: 36px; height: 36px; object-fit: cover;">
+                        {% endif %}
+                        <div>
+                        {% if event.actor_profile_href or (event.actor_local_account and event.actor_local_account.profile_href) %}
+                        <div><a href="{{ event.actor_profile_href or event.actor_local_account.profile_href }}" target="_blank" rel="noreferrer">{{ event.actor_label }}</a></div>
+                        {% elif event.actor_local_account %}
+                        <div>{{ event.actor_local_account.display_label }}</div>
+                        {% elif event.actor_username %}
+                        <div>@{{ event.actor_username }}</div>
+                        {% elif event.actor_id %}
+                        <div>Instagram user</div>
+                        {% endif %}
+                        {% if event.actor_profile and event.actor_profile.name and event.actor_profile.username and event.actor_profile.name.lower() != event.actor_profile.username.lower() %}
+                        <div class="small text-secondary">@{{ event.actor_profile.username }}</div>
+                        {% elif event.actor_local_account and event.actor_local_account.persona_name %}
+                        <div class="small text-secondary">{{ event.actor_local_account.persona_name }}</div>
+                        {% endif %}
+                        <div class="code-ish">{{ event.actor_id or "-" }}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="webhook-kv">
+                    <div class="webhook-kv-label">Recipient Account</div>
+                    <div class="d-flex gap-2 align-items-start">
+                        {% if event.recipient_profile_image_url %}
+                        <img src="{{ event.recipient_profile_image_url }}" alt="" class="rounded-circle border" style="width: 36px; height: 36px; object-fit: cover;">
+                        {% endif %}
+                        <div>
+                        {% if event.recipient_profile_href or (event.recipient_local_account and event.recipient_local_account.profile_href) %}
+                        <div><a href="{{ event.recipient_profile_href or event.recipient_local_account.profile_href }}" target="_blank" rel="noreferrer">{{ event.recipient_label }}</a></div>
+                        {% elif event.recipient_local_account %}
+                        <div>{{ event.recipient_local_account.display_label }}</div>
+                        {% elif event.recipient_username %}
+                        <div>@{{ event.recipient_username }}</div>
+                        {% endif %}
+                        {% if event.recipient_profile and event.recipient_profile.name and event.recipient_profile.username and event.recipient_profile.name.lower() != event.recipient_profile.username.lower() %}
+                        <div class="small text-secondary">@{{ event.recipient_profile.username }}</div>
+                        {% elif event.recipient_local_account and event.recipient_local_account.persona_name %}
+                        <div class="small text-secondary">{{ event.recipient_local_account.persona_name }}</div>
+                        {% endif %}
+                        <div class="code-ish">{{ event.recipient_id or "-" }}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="webhook-kv">
+                    <div class="webhook-kv-label">Value Keys</div>
+                    <div class="d-flex gap-2 flex-wrap">
+                        {% for key in event.value_keys %}
+                        <span class="badge text-bg-light border rounded-pill">{{ key }}</span>
+                        {% else %}
+                        <span class="text-secondary">-</span>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div>
+            <div class="webhook-kv-label mb-2">Raw Payload</div>
+            <pre class="webhook-json-preview mb-0">{{ event.payload_json | tojson(indent=2) }}</pre>
+        </div>
+    </div>
+</details>
+{%- endmacro %}
+<div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
+    <div>
+        <h2 class="h5 mb-1">{{ instagram_webhook_panel_title or "Instagram Webhooks" }}</h2>
+        <div class="small text-secondary">{{ instagram_webhook_panel_subtitle or "Recent webhook activity, field mix, and raw payloads captured by LynxPoster." }}</div>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        {% if webhook_obs and webhook_obs.latest_received_at %}
+        <span class="badge text-bg-light border rounded-pill px-3 py-2">Latest {{ webhook_obs.latest_received_at|datetime_display }}</span>
+        {% endif %}
+        {% if instagram_webhook_panel_cta_href %}
+        <a href="{{ instagram_webhook_panel_cta_href }}" class="btn btn-sm btn-outline-secondary">{{ instagram_webhook_panel_cta_label or "Inspect" }}</a>
+        {% endif %}
+    </div>
+</div>
+
+{% if webhook_obs %}
+<div class="metric-grid">
+    <div class="metric-card">
+        <div class="metric-label">Events / {{ webhook_obs.window_days }}d</div>
+        <div class="metric-value">{{ webhook_obs.total_events }}</div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-label">Matched</div>
+        <div class="metric-value">{{ webhook_obs.matched_events }}</div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-label">Diagnostics Only</div>
+        <div class="metric-value">{{ webhook_obs.unmatched_events }}</div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-label">Giveaway Signals</div>
+        <div class="metric-value">{{ webhook_obs.giveaway_relevant_events }}</div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-label">Distinct Fields</div>
+        <div class="metric-value">{{ webhook_obs.unique_fields }}</div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-label">Distinct Actors</div>
+        <div class="metric-value">{{ webhook_obs.unique_actors }}</div>
+    </div>
+</div>
+
+<div class="row g-3 mt-1">
+    <div class="col-12 col-xl-6">
+        <div class="surface-panel h-100">
+            <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
+                <div>
+                    <div class="fw-semibold">Field Activity</div>
+                    <div class="small text-secondary">What Meta is actually sending into LynxPoster.</div>
+                </div>
+                <span class="badge text-bg-light border rounded-pill">Top fields</span>
+            </div>
+            {% if webhook_obs.field_chart %}
+            <div class="webhook-chart-list">
+                {% for item in webhook_obs.field_chart %}
+                <div class="webhook-chart-row">
+                    <div class="webhook-chart-label">{{ item.label }}</div>
+                    <div class="webhook-chart-track">
+                        <div class="webhook-chart-fill" style="width: {{ item.width_pct }}%;"></div>
+                    </div>
+                    <div class="webhook-chart-count">{{ item.count }}</div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-secondary">No webhook events captured in this time window yet.</div>
+            {% endif %}
+        </div>
+    </div>
+    <div class="col-12 col-xl-6">
+        <div class="surface-panel h-100">
+            <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
+                <div>
+                    <div class="fw-semibold">Delivery Trend</div>
+                    <div class="small text-secondary">Volume over the last {{ webhook_obs.window_days }} days.</div>
+                </div>
+                <span class="badge text-bg-light border rounded-pill">UTC</span>
+            </div>
+            {% if webhook_obs.daily_chart %}
+            <div class="webhook-chart-list">
+                {% for item in webhook_obs.daily_chart %}
+                <div class="webhook-chart-row">
+                    <div class="webhook-chart-label">{{ item.label }}</div>
+                    <div class="webhook-chart-track is-accent">
+                        <div class="webhook-chart-fill is-accent" style="width: {{ item.width_pct }}%;"></div>
+                    </div>
+                    <div class="webhook-chart-count">{{ item.count }}</div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-secondary">No recent deliveries yet.</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="surface-panel mt-3">
+    {% set capped_recent_events = webhook_obs.recent_events[:12] %}
+    {% set featured_recent_events = capped_recent_events[:3] %}
+    {% set overflow_recent_events = capped_recent_events[3:] %}
+    <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
+        <div>
+            <div class="fw-semibold">Recent Deliveries</div>
+            <div class="small text-secondary">Use the raw payload viewer below each event to inspect the exact message shape.</div>
+        </div>
+        <span class="badge text-bg-light border rounded-pill">
+            {% if overflow_recent_events %}
+            {{ featured_recent_events|length }} of {{ capped_recent_events|length }} shown
+            {% else %}
+            {{ capped_recent_events|length }} shown
+            {% endif %}
+        </span>
+    </div>
+    <div class="d-flex flex-column gap-3">
+        {% for event in featured_recent_events %}
+        {{ render_recent_delivery(event) }}
+        {% else %}
+        <div class="text-secondary">No webhook events have been captured yet. Once Meta sends a test delivery, it will show up here.</div>
+        {% endfor %}
+        {% if overflow_recent_events %}
+        <details class="surface-details p-3">
+            <summary class="d-flex justify-content-between align-items-center gap-3" style="cursor: pointer; list-style: none;">
+                <div class="fw-semibold">Show {{ overflow_recent_events|length }} more deliver{% if overflow_recent_events|length == 1 %}y{% else %}ies{% endif %}</div>
+                <div class="small text-secondary">Expand to inspect the rest of the last {{ capped_recent_events|length }} webhook deliveries.</div>
+            </summary>
+            <div class="mt-3 d-flex flex-column gap-3">
+                {% for event in overflow_recent_events %}
+                {{ render_recent_delivery(event) }}
+                {% endfor %}
+            </div>
+        </details>
+        {% endif %}
+    </div>
+</div>
+{% else %}
+<div class="text-secondary">Webhook observability is only available to admins.</div>
+{% endif %}

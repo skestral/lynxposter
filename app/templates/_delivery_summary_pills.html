@@ -1,0 +1,23 @@
+{% macro render(post) -%}
+{% set has_delivery_details = post.delivery_breakdown.succeeded or post.delivery_breakdown.failed or post.delivery_breakdown.cancelled %}
+{% if has_delivery_details or post.last_error %}
+<div class="delivery-summary-pills mt-2">
+    {% for delivery in post.delivery_breakdown.succeeded %}
+    <span class="delivery-summary-pill is-success" title="Delivered to {{ delivery.label }}">Success: {{ delivery.label }}</span>
+    {% endfor %}
+    {% for delivery in post.delivery_breakdown.failed %}
+    <span class="delivery-summary-pill is-failure" title="{{ delivery.label }}{% if delivery.last_error %}: {{ delivery.last_error }}{% endif %}">
+        Failure: {{ delivery.label }}{% if delivery.last_error %} - {{ delivery.last_error|truncate(34, True) }}{% endif %}
+    </span>
+    {% endfor %}
+    {% for delivery in post.delivery_breakdown.cancelled %}
+    <span class="delivery-summary-pill is-muted" title="{{ delivery.label }}{% if delivery.last_error %}: {{ delivery.last_error }}{% endif %}">
+        Not sent: {{ delivery.label }}{% if delivery.last_error %} - {{ delivery.last_error|truncate(30, True) }}{% endif %}
+    </span>
+    {% endfor %}
+    {% if post.last_error %}
+    <span class="delivery-summary-pill is-failure" title="{{ post.last_error }}">Post Error: {{ post.last_error|truncate(40, True) }}</span>
+    {% endif %}
+</div>
+{% endif %}
+{%- endmacro %}

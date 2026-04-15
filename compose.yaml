@@ -1,0 +1,16 @@
+services:
+  lynxposter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        PYTHON_VERSION: ${LYNXPOSTER_PYTHON_VERSION:-3.12-slim}
+    image: lynxposter:latest
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8000}:${APP_PORT:-8000}"
+    volumes:
+      - ./app_data:/data
+
+volumes:
+  lynxposter_data:

@@ -1,0 +1,469 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
+    <div>
+        <div class="section-kicker mb-2">Instance Control</div>
+        <h1 class="h3 mb-1">App Settings</h1>
+        <div class="small text-secondary">A cleaner control surface for runtime config, authentication, webhooks, and automation.</div>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        <span class="badge text-bg-light border rounded-pill px-3 py-2">Env-backed settings</span>
+        <span class="badge text-bg-light border rounded-pill px-3 py-2">Admin-only</span>
+        {% if app_settings.auth_oidc_enabled %}
+        <span class="badge text-bg-success rounded-pill px-3 py-2">OIDC enabled</span>
+        {% else %}
+        <span class="badge text-bg-secondary rounded-pill px-3 py-2">OIDC disabled</span>
+        {% endif %}
+    </div>
+</div>
+
+{% if saved %}
+<div class="alert alert-success" role="alert">
+    Settings saved successfully.
+</div>
+{% endif %}
+{% if tested %}
+<div class="alert alert-success" role="alert">
+    Test notifications sent successfully.
+</div>
+{% endif %}
+{% if error_message %}
+<div class="alert alert-danger" role="alert">
+    {{ error_message }}
+</div>
+{% endif %}
+{% if oidc_warning_message %}
+<div class="alert alert-warning" role="alert">
+    {{ oidc_warning_message }}
+</div>
+{% endif %}
+
+<div class="row g-4">
+    <div class="col-12 col-xl-8">
+        <form method="post" action="/settings/page" class="card section-card">
+            <div class="card-body">
+                <div class="page-toolbar">
+                    <div>
+                        <div class="section-kicker mb-2">Control Tabs</div>
+                        <div class="text-secondary">Use the tabs to move through the instance settings without one endless wall of fields.</div>
+                    </div>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <button class="btn btn-primary" type="submit">Save Settings</button>
+                        <button
+                            class="btn btn-outline-primary"
+                            type="submit"
+                            formaction="/settings/test-webhook"
+                            formmethod="post"
+                        >
+                            Save + Send Test Notifications
+                        </button>
+                    </div>
+                </div>
+
+                <ul class="nav nav-pills glass-tabs mb-4" id="settings-tabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="settings-general-tab" data-bs-toggle="tab" data-bs-target="#settings-general-pane" type="button" role="tab">General</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="settings-instagram-tab" data-bs-toggle="tab" data-bs-target="#settings-instagram-pane" type="button" role="tab">Instagram</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="settings-automation-tab" data-bs-toggle="tab" data-bs-target="#settings-automation-pane" type="button" role="tab">Automation</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="settings-auth-tab" data-bs-toggle="tab" data-bs-target="#settings-auth-pane" type="button" role="tab">Authentication</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="settings-notifications-tab" data-bs-toggle="tab" data-bs-target="#settings-notifications-pane" type="button" role="tab">Notifications</button>
+                    </li>
+                </ul>
+
+                <div class="tab-content tab-pane-stack">
+                    <div class="tab-pane fade show active" id="settings-general-pane" role="tabpanel" aria-labelledby="settings-general-tab" tabindex="0">
+                        <div class="surface-panel">
+                            <div class="section-kicker mb-2">General</div>
+                            <h2 class="h5 mb-2">Core runtime values</h2>
+                            <div class="small text-secondary mb-3">Instance-wide values used across logs, health checks, callbacks, and the scheduler.</div>
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">Instance Name</label>
+                                    <input class="form-control" name="instance_name" value="{{ app_settings.instance_name }}">
+                                    <div class="form-text">Included in webhook payloads and health responses.</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">App Port</label>
+                                    <input class="form-control" name="app_port" type="number" min="1" max="65535" value="{{ app_settings.app_port }}">
+                                    <div class="form-text">Saved immediately, but changing the port requires an app restart.</div>
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label">Public Base URL</label>
+                                    <input class="form-control" name="app_base_url" value="{{ app_settings.app_base_url }}">
+                                    <div class="form-text">Used for OIDC callbacks, webhook callbacks, and any externally reachable links.</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="tab-pane fade" id="settings-instagram-pane" role="tabpanel" aria-labelledby="settings-instagram-tab" tabindex="0">
+                        <div class="surface-panel">
+                            <div class="section-kicker mb-2">Instagram</div>
+                            <h2 class="h5 mb-2">Instagram Webhooks</h2>
+                            <div class="small text-secondary mb-3">Configure the callback Meta will use for giveaway comment and story-mention capture.</div>
+                            <div class="row g-3">
+                                <div class="col-12">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="instagram_webhooks_enabled" {% if app_settings.instagram_webhooks_enabled %}checked{% endif %}>
+                                        <label class="form-check-label">Enable Instagram webhooks</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Verify Token</label>
+                                    <div class="input-group">
+                                        <input class="form-control secret-toggle-input" type="password" name="instagram_webhook_verify_token" value="{{ app_settings.instagram_webhook_verify_token }}">
+                                        <button class="btn btn-outline-secondary secret-toggle-button" type="button">Show</button>
+                                    </div>
+                                    <div class="form-text">Paste this same token into the Instagram developer panel.</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">App Secret</label>
+                                    <div class="input-group">
+                                        <input class="form-control secret-toggle-input" type="password" name="instagram_app_secret" value="{{ app_settings.instagram_app_secret }}">
+                                        <button class="btn btn-outline-secondary secret-toggle-button" type="button">Show</button>
+                                    </div>
+                                    <div class="form-text">Used to validate <code>X-Hub-Signature-256</code> on incoming deliveries.</div>
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label">Webhook Callback URL</label>
+                                    <div class="form-control bg-body-tertiary">{{ instagram_webhook_callback_url or "Set Public Base URL first" }}</div>
+                                    <div class="form-text">Instagram verifies <code>GET /webhooks/instagram</code> and delivers live events to <code>POST /webhooks/instagram</code>.</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Latest Webhook Delivery</label>
+                                    <div class="form-control bg-body-tertiary">{{ instagram_webhook_latest_received_at|datetime_display if instagram_webhook_latest_received_at else "No webhook events received yet" }}</div>
+                                    <div class="form-text">Latest event type: {{ instagram_webhook_latest_event_type or "-" }}</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Recommended Subscriptions</label>
+                                    <div class="form-control bg-body-tertiary">{{ instagram_webhook_required_fields|join(", ") }}</div>
+                                    <div class="form-text">For giveaway v1 we expect comment and mention-style events.</div>
+                                </div>
+                                <div class="col-12">
+                                    <div class="d-flex gap-2 flex-wrap">
+                                        <a class="btn btn-sm btn-outline-secondary" href="{{ instagram_webhook_dashboard_href }}">Open Dashboard View</a>
+                                        <a class="btn btn-sm btn-outline-secondary" href="{{ instagram_webhook_logs_href }}">Open Raw Webhook Logs</a>
+                                    </div>
+                                    <div class="form-text mt-2">The dashboard gives you trend charts and the logs view lets you expand each delivery to inspect the full payload JSON.</div>
+                                </div>
+                            </div>
+                        </div>
+                        <details class="surface-details mt-4" open>
+                            <summary class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 p-3">
+                                <div>
+                                    <div class="fw-semibold">Tunnel Setup Helper</div>
+                                    <div class="small text-secondary">Use a temporary public HTTPS URL to point Instagram back at this local app while you test webhook delivery.</div>
+                                </div>
+                                <span class="badge text-bg-light border rounded-pill">cloudflared or ngrok</span>
+                            </summary>
+                            <div class="px-3 pb-3">
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label">Local App Target</label>
+                                        <div class="form-control bg-body-tertiary code-ish">{{ instagram_tunnel_local_target }}</div>
+                                        <div class="form-text">Run the tunnel on the same machine where LynxPoster is listening.</div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Quick Order Of Operations</label>
+                                        <div class="surface-panel-soft small">
+                                            1. Start a tunnel to the local app target.
+                                            <br>
+                                            2. Copy the public HTTPS URL into <strong>Public Base URL</strong> and save.
+                                            <br>
+                                            3. Enable Instagram webhooks, set the verify token and app secret, then save again.
+                                            <br>
+                                            4. Paste the callback URL and verify token into the Meta developer panel.
+                                            <br>
+                                            5. Subscribe to {{ instagram_webhook_required_fields|join(", ") }} and trigger a test delivery.
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Cloudflare Quick Tunnel</label>
+                                        <div class="form-control bg-body-tertiary code-ish">{{ instagram_tunnel_cloudflared_command }}</div>
+                                        <div class="form-text">Good for quick local webhook tests without changing your app port.</div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">ngrok</label>
+                                        <div class="form-control bg-body-tertiary code-ish">{{ instagram_tunnel_ngrok_command }}</div>
+                                        <div class="form-text">Use the public HTTPS forwarding URL as your Public Base URL after the tunnel starts.</div>
+                                    </div>
+                                    {% if instagram_tunnel_verify_probe %}
+                                    <div class="col-12">
+                                        <label class="form-label">Verification Probe</label>
+                                        <div class="form-control bg-body-tertiary code-ish">{{ instagram_tunnel_verify_probe }}</div>
+                                        <div class="form-text">This should return <code>test123</code> once the tunnel is live and the callback URL is reachable.</div>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </details>
+                    </div>
+
+                    <div class="tab-pane fade" id="settings-automation-pane" role="tabpanel" aria-labelledby="settings-automation-tab" tabindex="0">
+                        <div class="surface-panel">
+                            <div class="section-kicker mb-2">Automation</div>
+                            <h2 class="h5 mb-2">Background scheduler</h2>
+                            <div class="small text-secondary mb-3">Tune how often LynxPoster scans, queues, and publishes work.</div>
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">Autorun Interval (seconds)</label>
+                                    <input
+                                        class="form-control"
+                                        name="scheduler_automation_interval_seconds"
+                                        type="number"
+                                        min="30"
+                                        max="86400"
+                                        value="{{ app_settings.scheduler_automation_interval_seconds }}"
+                                    >
+                                    <div class="form-text">This updates the running scheduler immediately after save.</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Scheduler Status</label>
+                                    <div class="form-control bg-body-tertiary">{{ "Running" if scheduler_status.scheduler_started else "Stopped" }}{% if not scheduler_status.automation_enabled %} | Paused{% endif %}</div>
+                                    <div class="form-text">Next run: {{ scheduler_status.next_run_at|datetime_display if scheduler_status.next_run_at else "Not scheduled" }}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="tab-pane fade" id="settings-auth-pane" role="tabpanel" aria-labelledby="settings-auth-tab" tabindex="0">
+                        <div class="surface-panel">
+                            <div class="section-kicker mb-2">Authentication</div>
+                            <h2 class="h5 mb-2">OpenID Connect</h2>
+                            <div class="small text-secondary mb-3">Connect LynxPoster to Authelia or another OIDC provider while keeping admin controls intact.</div>
+                            <div class="row g-3">
+                                <div class="col-12">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="auth_oidc_enabled" {% if app_settings.auth_oidc_enabled %}checked{% endif %}>
+                                        <label class="form-check-label">Enable OIDC authentication</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Issuer URL</label>
+                                    <input class="form-control" name="auth_oidc_issuer_url" value="{{ app_settings.auth_oidc_issuer_url }}">
+                                    <div class="form-text">For Authelia this is the issuer base URL used for discovery.</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Client ID</label>
+                                    <input class="form-control" name="auth_oidc_client_id" value="{{ app_settings.auth_oidc_client_id }}">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Client Secret</label>
+                                    <div class="input-group">
+                                        <input class="form-control secret-toggle-input" type="password" name="auth_oidc_client_secret" value="{{ app_settings.auth_oidc_client_secret }}">
+                                        <button class="btn btn-outline-secondary secret-toggle-button" type="button">Show</button>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Session Secret</label>
+                                    <div class="input-group">
+                                        <input class="form-control secret-toggle-input" type="password" name="auth_session_secret" value="{{ app_settings.auth_session_secret }}">
+                                        <button class="btn btn-outline-secondary secret-toggle-button" type="button">Show</button>
+                                    </div>
+                                    <div class="form-text">Used to sign browser sessions. Change this in production.</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">OIDC Scope</label>
+                                    <input class="form-control" name="auth_oidc_scope" value="{{ app_settings.auth_oidc_scope }}">
+                                    <div class="form-text">Use <code>openid profile email</code> by default. Add <code>groups</code> only if your provider explicitly allows it.</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Username Claim</label>
+                                    <input class="form-control" name="auth_oidc_username_claim" value="{{ app_settings.auth_oidc_username_claim }}">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Groups Claim</label>
+                                    <input class="form-control" name="auth_oidc_groups_claim" value="{{ app_settings.auth_oidc_groups_claim }}">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Admin Groups</label>
+                                    <input class="form-control" name="auth_oidc_admin_groups" value="{{ app_settings.auth_oidc_admin_groups }}">
+                                    <div class="form-text">Comma-separated groups that map to app admins.</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">User Groups</label>
+                                    <input class="form-control" name="auth_oidc_user_groups" value="{{ app_settings.auth_oidc_user_groups }}">
+                                    <div class="form-text">Comma-separated groups that map to regular app users.</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="tab-pane fade" id="settings-notifications-pane" role="tabpanel" aria-labelledby="settings-notifications-tab" tabindex="0">
+                        <div class="surface-panel mb-4">
+                            <div class="section-kicker mb-2">Notifications</div>
+                            <h2 class="h5 mb-2">Home Assistant / Generic JSON Webhook</h2>
+                            <div class="small text-secondary mb-3">Use this for Home Assistant webhook automations or any JSON webhook receiver.</div>
+                            <div class="row g-3">
+                                <div class="col-12">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="webhook_logging_enabled" {% if app_settings.webhook_logging_enabled %}checked{% endif %}>
+                                        <label class="form-check-label">Enable webhook logging</label>
+                                    </div>
+                                    <div class="form-text">Alert events are always candidates for webhook delivery. Run events are sent when they meet the severity threshold.</div>
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label">Webhook Endpoint URL</label>
+                                    <input class="form-control" name="webhook_logging_endpoint" value="{{ app_settings.webhook_logging_endpoint }}">
+                                    <div class="form-text">Paste your Home Assistant or receiver webhook URL here.</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Bearer Token</label>
+                                    <div class="input-group">
+                                        <input class="form-control secret-toggle-input" type="password" name="webhook_logging_bearer_token" value="{{ app_settings.webhook_logging_bearer_token }}">
+                                        <button class="btn btn-outline-secondary secret-toggle-button" type="button">Show</button>
+                                    </div>
+                                    <div class="form-text">Optional. Leave blank if your receiver does not require auth headers.</div>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Timeout (seconds)</label>
+                                    <input class="form-control" name="webhook_logging_timeout_seconds" type="number" min="1" max="120" value="{{ app_settings.webhook_logging_timeout_seconds }}">
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Retry Count</label>
+                                    <input class="form-control" name="webhook_logging_retry_count" type="number" min="0" max="10" value="{{ app_settings.webhook_logging_retry_count }}">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Minimum Severity</label>
+                                    <select class="form-select" name="webhook_logging_min_severity">
+                                        {% for level in ["debug", "info", "warning", "error", "critical"] %}
+                                        <option value="{{ level }}" {% if app_settings.webhook_logging_min_severity == level %}selected{% endif %}>{{ level|capitalize }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <div class="form-text">Run events below this level stay local. Alerts still persist locally.</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="surface-panel">
+                            <div class="section-kicker mb-2">Notifications</div>
+                            <h2 class="h5 mb-2">Discord notifications</h2>
+                            <div class="small text-secondary mb-3">Separate from persona Discord publishing accounts. This posts operational notifications into a Discord channel via an incoming webhook.</div>
+                            <div class="row g-3">
+                                <div class="col-12">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="discord_notification_enabled" {% if app_settings.discord_notification_enabled %}checked{% endif %}>
+                                        <label class="form-check-label">Enable Discord notifications</label>
+                                    </div>
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label">Discord Webhook URL</label>
+                                    <input class="form-control" name="discord_notification_webhook_url" value="{{ app_settings.discord_notification_webhook_url }}">
+                                    <div class="form-text">Paste the incoming webhook URL from your Discord channel.</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Webhook Username</label>
+                                    <input class="form-control" name="discord_notification_username" value="{{ app_settings.discord_notification_username }}">
+                                    <div class="form-text">Displayed as the sender name in Discord notifications.</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Minimum Severity</label>
+                                    <select class="form-select" name="discord_notification_min_severity">
+                                        {% for level in ["debug", "info", "warning", "error", "critical"] %}
+                                        <option value="{{ level }}" {% if app_settings.discord_notification_min_severity == level %}selected{% endif %}>{{ level|capitalize }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <div class="form-text">Run events below this level stay local. Alerts are still sent when Discord notifications are enabled.</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="d-flex gap-2 flex-wrap mt-4">
+                    <button class="btn btn-primary" type="submit">Save Settings</button>
+                    <button
+                        class="btn btn-outline-primary"
+                        type="submit"
+                        formaction="/settings/test-webhook"
+                        formmethod="post"
+                    >
+                        Save + Send Test Notifications
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <div class="col-12 col-xl-4">
+        <div class="card section-card mb-4">
+            <div class="card-body">
+                <div class="section-kicker mb-2">Runtime Paths</div>
+                <h2 class="h5 mb-3">Instance directories</h2>
+                <dl class="mb-0">
+                    <dt class="small text-secondary">Config Directory</dt>
+                    <dd class="small code-ish">{{ app_settings.config_dir }}</dd>
+                    <dt class="small text-secondary">Env File</dt>
+                    <dd class="small code-ish">{{ app_settings.env_file_path }}</dd>
+                    <dt class="small text-secondary">App Data Directory</dt>
+                    <dd class="small code-ish">{{ app_settings.app_data_dir }}</dd>
+                    <dt class="small text-secondary">Database</dt>
+                    <dd class="small code-ish">{{ app_settings.database_path }}</dd>
+                    <dt class="small text-secondary">Uploads</dt>
+                    <dd class="small code-ish">{{ app_settings.uploads_dir }}</dd>
+                    <dt class="small text-secondary">Imported Media</dt>
+                    <dd class="small code-ish">{{ app_settings.imported_media_dir }}</dd>
+                    <dt class="small text-secondary">Logs</dt>
+                    <dd class="small code-ish">{{ app_settings.logs_dir }}</dd>
+                    <dt class="small text-secondary">Backups</dt>
+                    <dd class="small code-ish">{{ app_settings.backups_dir }}</dd>
+                </dl>
+            </div>
+        </div>
+        <div class="card section-card">
+            <div class="card-body">
+                <div class="section-kicker mb-2">Setup Guide</div>
+                <h2 class="h5 mb-3">Quick notes</h2>
+                <div class="surface-panel-soft mb-3">
+                    <div class="fw-semibold mb-2">Home Assistant</div>
+                    <ol class="small mb-0">
+                        <li>Create a webhook-triggered automation in Home Assistant.</li>
+                        <li>Copy the generated webhook URL.</li>
+                        <li>Paste it into <strong>Webhook Endpoint URL</strong>.</li>
+                        <li>Use <strong>Save + Send Test Notifications</strong> to confirm delivery.</li>
+                    </ol>
+                </div>
+                <div class="surface-panel-soft mb-3">
+                    <div class="fw-semibold mb-2">Discord</div>
+                    <ol class="small mb-0">
+                        <li>Create an incoming webhook in the target Discord channel.</li>
+                        <li>Paste the URL into <strong>Discord Webhook URL</strong>.</li>
+                        <li>Save, then send a test notification.</li>
+                    </ol>
+                </div>
+                <div class="surface-panel-soft">
+                    <div class="fw-semibold mb-2">OIDC</div>
+                    <ol class="small mb-0">
+                        <li>Set <strong>Public Base URL</strong> to the external address users will visit.</li>
+                        <li>Create an OIDC client in Authelia with callback <strong>{{ (app_settings.app_base_url.rstrip('/') if app_settings.app_base_url else 'https://your-app.example.com') }}/auth/callback</strong>.</li>
+                        <li>Fill in the issuer URL, client credentials, and group mapping values here.</li>
+                        <li>Save, then sign out and back in to validate the login flow.</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.querySelectorAll(".secret-toggle-button").forEach((button) => {
+  button.addEventListener("click", () => {
+    const input = button.parentElement.querySelector(".secret-toggle-input");
+    if (!input) return;
+    const isVisible = input.type === "text";
+    input.type = isVisible ? "password" : "text";
+    button.textContent = isVisible ? "Show" : "Hide";
+  });
+});
+</script>
+{% endblock %}

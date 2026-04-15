@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
+    <div>
+        <h1 class="h3 mb-1">Users</h1>
+        <div class="small text-secondary">Review local and OIDC-backed users, see persona ownership, and disable access when needed.</div>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        <span class="badge text-bg-light border">{{ users|length }} total users</span>
+        <span class="badge text-bg-light border">{{ users|selectattr('is_enabled')|list|length }} enabled</span>
+    </div>
+</div>
+
+{% if saved_user_id %}
+<div class="alert alert-success" role="alert">
+    User settings saved.
+</div>
+{% endif %}
+{% if error_message %}
+<div class="alert alert-danger" role="alert">
+    {{ error_message }}
+</div>
+{% endif %}
+
+<div class="card section-card mb-4">
+    <div class="card-body">
+        <div class="small text-secondary">
+            Roles and groups shown here come from OIDC claims when OAuth is enabled. This page is best used for operational tasks like checking who owns personas, reviewing login state, and locally disabling an account if you need to block access.
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    {% for user in users %}
+    <div class="col-12">
+        <div class="card section-card">
+            <div class="card-body">
+                <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3 mb-3">
+                    <div>
+                        <div class="d-flex gap-2 flex-wrap align-items-center">
+                            <h2 class="h5 mb-0">{{ user.display_name }}</h2>
+                            <span class="badge {% if user.role == 'admin' %}text-bg-dark{% else %}text-bg-light border{% endif %}">{{ user.role|capitalize }}</span>
+                            {% if user.is_enabled %}
+                            <span class="badge text-bg-success">Enabled</span>
+                            {% else %}
+                            <span class="badge text-bg-secondary">Disabled</span>
+                            {% endif %}
+                            {% if user.oidc_sub.startswith('local:') %}
+                            <span class="badge text-bg-light border">Local</span>
+                            {% else %}
+                            <span class="badge text-bg-light border">OIDC</span>
+                            {% endif %}
+                        </div>
+                        <div class="small text-secondary mt-2">
+                            {% if user.email %}{{ user.email }}{% elif user.username %}{{ user.username }}{% else %}No email or username stored{% endif %}
+                        </div>
+                        <div class="small text-secondary mt-1">
+                            Subject: <span class="code-ish">{{ user.oidc_sub }}</span>
+                        </div>
+                    </div>
+                    <div class="text-lg-end">
+                        <div class="small text-secondary">Last Login</div>
+                        <div class="fw-semibold">{{ user.last_login_at|datetime_display }}</div>
+                    </div>
+                </div>
+
+                <div class="row g-3 mb-3">
+                    <div class="col-md-4">
+                        <div class="small text-secondary">Owned Personas</div>
+                        <div class="fw-semibold">{{ user.personas|length }}</div>
+                        {% if user.personas %}
+                        <div class="small text-secondary mt-1">
+                            {% for persona in user.personas|sort(attribute='name') %}
+                            {{ persona.name }}{% if not loop.last %}, {% endif %}
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-4">
+                        <div class="small text-secondary">Timezone</div>
+                        <div class="fw-semibold">{{ user.timezone }}</div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="small text-secondary">Groups</div>
+                        <div class="small text-secondary">
+                            {% if user.groups_json %}
+                                {{ user.groups_json|join(', ') }}
+                            {% else %}
+                                No groups stored
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <form method="post" action="/admin/users/{{ user.id }}/page" class="row g-3">
+                    <div class="col-md-5">
+                        <label class="form-label">Timezone</label>
+                        <select class="form-select" name="timezone">
+                            {% for option in timezone_options() %}
+                            <option value="{{ option }}" {% if user.timezone == option %}selected{% endif %}>{{ option }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4 d-flex align-items-end">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="is_enabled" {% if user.is_enabled %}checked{% endif %}>
+                            <label class="form-check-label">User is enabled</label>
+                        </div>
+                    </div>
+                    <div class="col-md-3 d-flex align-items-end">
+                        <button class="btn btn-primary w-100" type="submit">Save User</button>
+                    </div>
+                    {% if current_principal.user_id == user.id %}
+                    <div class="col-12">
+                        <div class="small text-secondary">Your own admin account cannot be disabled from this screen.</div>
+                    </div>
+                    {% endif %}
+                </form>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="col-12">
+        <div class="alert alert-light border mb-0">No users have been created yet.</div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

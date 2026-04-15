@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row g-4">
+    <div class="col-12">
+        <div class="card hero-card section-card">
+            <div class="card-body">
+                <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
+                    <div>
+                        <div class="section-kicker mb-2">Personal Workspace</div>
+                        <h1 class="h3 mb-2">Account Settings</h1>
+                        <div class="text-secondary">Tune how LynxPoster feels for you, including local time rendering, light and dark appearance, and the glass gradient palette.</div>
+                    </div>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <span class="badge soft-badge rounded-pill px-3 py-2">{{ ui_theme_definition(user.ui_theme).label }}</span>
+                        <span class="badge text-bg-light border rounded-pill px-3 py-2" id="account-mode-badge">{{ ui_mode_label(user.ui_mode) }}</span>
+                        <span class="badge text-bg-light border rounded-pill px-3 py-2">{{ user.role|capitalize }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-xl-8">
+        <div class="card section-card">
+            <div class="card-body">
+                <form id="account-settings-form" class="tab-pane-stack">
+                    <div class="surface-panel">
+                        <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 mb-3">
+                            <div>
+                                <div class="section-kicker mb-2">Display</div>
+                                <h2 class="h5 mb-1">Timezone and theme</h2>
+                                <div class="text-secondary">These settings only affect your own workspace and won’t change other users or the server.</div>
+                            </div>
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Timezone</label>
+                                <select class="form-select" name="timezone">
+                                    {% for option in timezone_options() %}
+                                    <option value="{{ option }}" {% if user.timezone == option %}selected{% endif %}>{{ option }}</option>
+                                    {% endfor %}
+                                </select>
+                                <div class="form-text">Used when rendering timestamps and interpreting scheduler times in the UI.</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Current Theme</label>
+                                <input class="form-control" value="{{ ui_theme_definition(user.ui_theme).label }}" disabled>
+                                <div class="form-text">Theme changes preview instantly while you pick one, then save to keep it.</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Appearance Mode</label>
+                                <input class="form-control" id="account-ui-mode-display" value="{{ ui_mode_label(user.ui_mode) }}" disabled>
+                                <div class="form-text">Flip the light and dark toggle in the top bar from any page. It saves with your account automatically.</div>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label">Theme Presets</label>
+                                <div class="theme-picker-grid">
+                                    {% for theme in ui_theme_options() %}
+                                    <label class="theme-option">
+                                        <input
+                                            type="radio"
+                                            name="ui_theme"
+                                            value="{{ theme.id }}"
+                                            {% if user.ui_theme == theme.id %}checked{% endif %}
+                                        >
+                                        <span class="theme-option-card">
+                                            <span class="d-flex justify-content-between align-items-center gap-2 mb-2">
+                                                <span class="theme-option-label">{{ theme.label }}</span>
+                                                <span class="badge text-bg-light border rounded-pill">{{ theme.collection }}</span>
+                                            </span>
+                                            <span class="theme-option-swatches">
+                                                {% for color in theme.swatches %}
+                                                <span class="theme-option-swatch" style="background: {{ color }};"></span>
+                                                {% endfor %}
+                                            </span>
+                                            <span class="theme-option-description d-block">{{ theme.description }}</span>
+                                        </span>
+                                    </label>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="surface-panel">
+                        <div class="section-kicker mb-2">Identity</div>
+                        <h2 class="h5 mb-3">Signed-in profile</h2>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Preferred Name</label>
+                                <input class="form-control" name="preferred_name" value="{{ user.preferred_name or '' }}" placeholder="{{ user.display_name }}">
+                                <div class="form-text">Shown in the top bar and other personal workspace chrome. Leave blank to use your account name.</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Account Name</label>
+                                <input class="form-control" value="{{ user.display_name }}" disabled>
+                                <div class="form-text">Your underlying login or local account name.</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Username</label>
+                                <input class="form-control" value="{{ user.username or '' }}" disabled>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Email</label>
+                                <input class="form-control" value="{{ user.email or '' }}" disabled>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Groups</label>
+                                <input class="form-control" value="{{ user.groups_json|join(', ') }}" disabled>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Last Login</label>
+                                <input class="form-control" value="{{ user.last_login_at|datetime_display }}" disabled>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Role</label>
+                                <input class="form-control" value="{{ user.role|capitalize }}" disabled>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex gap-2 flex-wrap">
+                        <button class="btn btn-primary" type="submit">Save Account Settings</button>
+                        <a class="btn btn-outline-secondary" href="/">Back To Dashboard</a>
+                    </div>
+                </form>
+                <div id="account-settings-feedback" class="small text-secondary mt-3"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-xl-4">
+        <div class="card section-card">
+            <div class="card-body">
+                <div class="section-kicker mb-2">What Changes</div>
+                <h2 class="h5 mb-3">Personal only</h2>
+                <div class="surface-panel-soft">
+                    <div class="small text-secondary mb-2">Theme and Mode</div>
+                    <div class="fw-semibold mb-3">Apply to the whole shell, cards, gradients, and navbar toggle for your account.</div>
+                    <div class="small text-secondary mb-2">Timezone</div>
+                    <div class="fw-semibold">Applies to dashboards, logs, scheduled post forms, and giveaway timers.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const accountSettingsForm = document.getElementById("account-settings-form");
+const feedback = document.getElementById("account-settings-feedback");
+const themeInputs = accountSettingsForm.querySelectorAll("input[name='ui_theme']");
+const modeDisplay = document.getElementById("account-ui-mode-display");
+const modeBadge = document.getElementById("account-mode-badge");
+
+function refreshModeDisplay(mode) {
+  const label = mode === "dark" ? "Dark" : "Light";
+  if (modeDisplay) modeDisplay.value = label;
+  if (modeBadge) modeBadge.textContent = label;
+}
+
+function applyThemePreview() {
+  const selected = accountSettingsForm.querySelector("input[name='ui_theme']:checked");
+  if (!selected) return;
+  refreshModeDisplay(document.body.dataset.uiMode || "light");
+  if (window.applyUiAppearance) {
+    window.applyUiAppearance(selected.value, document.body.dataset.uiMode || "light");
+    return;
+  }
+  document.body.dataset.uiTheme = selected.value;
+}
+
+themeInputs.forEach((input) => {
+  input.addEventListener("change", applyThemePreview);
+});
+
+window.addEventListener("lynxposter:appearance-changed", (event) => {
+  refreshModeDisplay(event.detail?.mode || document.body.dataset.uiMode || "light");
+});
+
+refreshModeDisplay(document.body.dataset.uiMode || "{{ user.ui_mode }}");
+applyThemePreview();
+
+accountSettingsForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  feedback.textContent = "Saving...";
+  const selectedTheme = accountSettingsForm.querySelector("input[name='ui_theme']:checked");
+  const response = await fetch("/account", {
+    method: "PUT",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({
+      timezone: accountSettingsForm.timezone.value,
+      ui_theme: selectedTheme ? selectedTheme.value : null,
+      ui_mode: document.body.dataset.uiMode || "{{ user.ui_mode }}",
+      preferred_name: accountSettingsForm.preferred_name.value,
+    }),
+  });
+  if (!response.ok) {
+    feedback.textContent = await response.text();
+    return;
+  }
+  feedback.textContent = "Saved. Refreshing your workspace...";
+  window.location.reload();
+});
+</script>
+{% endblock %}

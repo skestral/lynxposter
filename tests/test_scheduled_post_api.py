@@ -1,0 +1,315 @@
+from __future__ import annotations
+
+import json
+from contextlib import contextmanager
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
+
+from app.database import Base
+from app.main import app
+from app.services.auth import Principal
+from app.services.personas import create_account, create_persona
+from app.services.posts import create_scheduled_post, get_post
+from app.domain import MediaItem
+from app.schemas import ScheduledPostCreate
+
+
+def _create_persona(session, *, slug: str = "scheduled-post-api"):
+    return create_persona(
+        session,
+        {
+            "name": "Scheduled API Persona",
+            "slug": slug,
+            "is_enabled": True,
+            "timezone": "server",
+            "settings_json": {},
+            "retry_settings_json": {"max_retries": 3},
+            "throttle_settings_json": {"max_per_hour": 0, "overflow_posts": "retry"},
+        },
+    )
+
+
+def _create_destination_account(session, persona, *, service: str = "mastodon", label: str = "Mastodon"):
+    default_credentials = {
+        "mastodon": {"instance": "https://example.social", "token": "secret", "handle": "@me@example.social"},
+        "discord": {"webhook_url": "https://discord.test"},
+    }
+    return create_account(
+        session,
+        persona,
+        {
+            "service": service,
+            "label": label,
+            "handle_or_identifier": label,
+            "is_enabled": True,
+            "source_enabled": False,
+            "destination_enabled": True,
+            "credentials_json": default_credentials[service],
+            "source_settings_json": {},
+            "publish_settings_json": {},
+        },
+    )
+
+
+@pytest.fixture()
+def api_stack(monkeypatch, tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'scheduled-post-api.db'}", future=True, connect_args={"check_same_thread": False})
+    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False, class_=Session)
+    Base.metadata.create_all(engine)
+
+    @contextmanager
+    def _db_session_override():
+        session = SessionLocal()
+        try:
+            yield session
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+    monkeypatch.setattr("app.main.db_session", _db_session_override)
+    monkeypatch.setattr("app.main.bootstrap", lambda: None)
+    monkeypatch.setattr("app.main.CrossposterScheduler.start", lambda self: None)
+    monkeypatch.setattr("app.main.CrossposterScheduler.stop", lambda self: None)
+    monkeypatch.setattr(
+        "app.main.build_principal_from_request",
+        lambda request: Principal(
+            user_id="admin-user",
+            display_name="Lynx",
+            role="admin",
+            timezone="UTC",
+            is_authenticated=True,
+        ),
+    )
+
+    uploads_dir = tmp_path / "uploads"
+
+    def _ensure_storage_dirs_override():
+        uploads_dir.mkdir(parents=True, exist_ok=True)
+
+    def _unique_path_override(directory, original_name):
+        target = uploads_dir / original_name
+        if target.exists():
+            target = uploads_dir / f"{target.stem}-copy{target.suffix}"
+        return target
+
+    monkeypatch.setattr("app.services.storage.ensure_storage_dirs", _ensure_storage_dirs_override)
+    monkeypatch.setattr("app.services.storage._unique_path", _unique_path_override)
+
+    with TestClient(app) as client:
+        yield client, SessionLocal
+
+    Base.metadata.drop_all(engine)
+    engine.dispose()
+
+
+def test_create_scheduled_post_api_persists_multipart_attachments(api_stack):
+    api_client, SessionLocal = api_stack
+    with SessionLocal() as session:
+        persona = _create_persona(session, slug="scheduled-post-api-create")
+        destination = _create_destination_account(session, persona)
+        session.commit()
+        persona_id = persona.id
+        destination_id = destination.id
+
+    response = api_client.post(
+        "/scheduled-posts",
+        data={
+            "persona_id": persona_id,
+            "body": "Hello from API",
+            "status": "draft",
+            "target_account_ids": json.dumps([destination_id]),
+            "publish_overrides_json": json.dumps({}),
+            "metadata_json": json.dumps({}),
+            "scheduled_for": "",
+            "alt_texts": json.dumps(["Cat alt"]),
+        },
+        files=[("uploads", ("cat.jpg", b"fake-jpeg", "image/jpeg"))],
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload["attachments"]) == 1
+    assert payload["attachments"][0]["mime_type"] == "image/jpeg"
+    assert payload["attachments"][0]["alt_text"] == "Cat alt"
+
+    with SessionLocal() as session:
+        saved = get_post(session, payload["id"])
+        assert saved is not None
+        assert len(saved.attachments) == 1
+        assert saved.attachments[0].mime_type == "image/jpeg"
+        assert saved.attachments[0].alt_text == "Cat alt"
+
+
+def test_update_scheduled_post_api_appends_multipart_attachments(api_stack, tmp_path):
+    api_client, SessionLocal = api_stack
+    with SessionLocal() as session:
+        persona = _create_persona(session, slug="scheduled-post-api-update")
+        destination = _create_destination_account(session, persona)
+
+        existing_path = tmp_path / "existing.jpg"
+        existing_path.write_bytes(b"existing-jpeg")
+        post = create_scheduled_post(
+            session,
+            ScheduledPostCreate.model_validate(
+                {
+                    "persona_id": persona.id,
+                    "body": "Draft body",
+                    "status": "draft",
+                    "target_account_ids": [destination.id],
+                    "publish_overrides_json": {},
+                    "metadata_json": {},
+                    "scheduled_for": None,
+                }
+            ),
+            [
+                MediaItem(
+                    storage_path=Path(existing_path),
+                    mime_type="image/jpeg",
+                    alt_text="Existing image",
+                    size_bytes=existing_path.stat().st_size,
+                    checksum="existing-1",
+                    sort_order=0,
+                )
+            ],
+        )
+        session.commit()
+        post_id = post.id
+        destination_id = destination.id
+
+    response = api_client.put(
+        f"/scheduled-posts/{post_id}",
+        data={
+            "body": "Draft body updated",
+            "status": "draft",
+            "target_account_ids": json.dumps([destination_id]),
+            "publish_overrides_json": json.dumps({}),
+            "metadata_json": json.dumps({}),
+            "scheduled_for": "",
+            "alt_texts": json.dumps(["New image"]),
+        },
+        files=[("uploads", ("new.jpg", b"new-jpeg", "image/jpeg"))],
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["body"] == "Draft body updated"
+    assert len(payload["attachments"]) == 2
+    assert [attachment["sort_order"] for attachment in payload["attachments"]] == [0, 1]
+    assert payload["attachments"][1]["alt_text"] == "New image"
+
+    with SessionLocal() as session:
+        saved = get_post(session, post_id)
+        assert saved is not None
+        assert len(saved.attachments) == 2
+        assert [attachment.sort_order for attachment in saved.attachments] == [0, 1]
+        assert saved.attachments[1].alt_text == "New image"
+
+
+def test_scheduled_post_api_exposes_delivery_outcome_breakdown(api_stack):
+    api_client, SessionLocal = api_stack
+    with SessionLocal() as session:
+        persona = _create_persona(session, slug="scheduled-post-api-outcome")
+        mastodon = _create_destination_account(session, persona, service="mastodon", label="Mastodon")
+        discord = _create_destination_account(session, persona, service="discord", label="Discord")
+        post = create_scheduled_post(
+            session,
+            ScheduledPostCreate.model_validate(
+                {
+                    "persona_id": persona.id,
+                    "body": "Mixed results",
+                    "status": "queued",
+                    "target_account_ids": [mastodon.id, discord.id],
+                    "publish_overrides_json": {},
+                    "metadata_json": {},
+                    "scheduled_for": None,
+                }
+            ),
+            [],
+        )
+        jobs = {job.target_account_id: job for job in post.delivery_jobs}
+        jobs[mastodon.id].status = "posted"
+        jobs[mastodon.id].external_url = "https://example.social/@me/1"
+        jobs[discord.id].status = "failed"
+        jobs[discord.id].last_error = "Webhook rejected the payload."
+        session.commit()
+        post_id = post.id
+
+    response = api_client.get(f"/scheduled-posts/{post_id}")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["display_status"] == "partial_failure"
+    assert [item["label"] for item in payload["delivery_breakdown"]["succeeded"]] == ["Mastodon"]
+    assert payload["delivery_breakdown"]["failed"][0]["label"] == "Discord"
+    assert payload["delivery_breakdown"]["failed"][0]["last_error"] == "Webhook rejected the payload."
+
+
+def test_delete_scheduled_post_api_removes_draft(api_stack):
+    api_client, SessionLocal = api_stack
+    with SessionLocal() as session:
+        persona = _create_persona(session, slug="scheduled-post-api-delete")
+        destination = _create_destination_account(session, persona)
+        post = create_scheduled_post(
+            session,
+            ScheduledPostCreate.model_validate(
+                {
+                    "persona_id": persona.id,
+                    "body": "Delete this draft",
+                    "status": "draft",
+                    "target_account_ids": [destination.id],
+                    "publish_overrides_json": {},
+                    "metadata_json": {},
+                    "scheduled_for": None,
+                }
+            ),
+            [],
+        )
+        session.commit()
+        post_id = post.id
+
+    response = api_client.delete(f"/scheduled-posts/{post_id}")
+
+    assert response.status_code == 200
+    assert response.json() == {"deleted_post_id": post_id}
+
+    with SessionLocal() as session:
+        assert get_post(session, post_id) is None
+
+
+def test_delete_scheduled_post_api_rejects_non_draft(api_stack):
+    api_client, SessionLocal = api_stack
+    with SessionLocal() as session:
+        persona = _create_persona(session, slug="scheduled-post-api-delete-reject")
+        destination = _create_destination_account(session, persona)
+        post = create_scheduled_post(
+            session,
+            ScheduledPostCreate.model_validate(
+                {
+                    "persona_id": persona.id,
+                    "body": "Scheduled post",
+                    "status": "scheduled",
+                    "target_account_ids": [destination.id],
+                    "publish_overrides_json": {},
+                    "metadata_json": {},
+                    "scheduled_for": "2026-04-15T12:00:00+00:00",
+                }
+            ),
+            [],
+        )
+        session.commit()
+        post_id = post.id
+
+    response = api_client.delete(f"/scheduled-posts/{post_id}")
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Only draft scheduled posts can be deleted."
+
+    with SessionLocal() as session:
+        assert get_post(session, post_id) is not None
