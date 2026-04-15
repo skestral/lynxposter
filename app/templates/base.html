@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LynxPoster</title>
+    <title>lynxposter</title>
     <link rel="stylesheet" href="/static/vendor/bootstrap/bootstrap.min.css">
     <link rel="stylesheet" href="/static/style.css">
     <style id="theme-runtime-vars">
@@ -36,8 +36,8 @@
             <a class="navbar-brand app-brand" href="/">
                 <span class="app-brand-mark">LP</span>
                 <span class="app-brand-copy">
-                    <span class="app-brand-title">LynxPoster</span>
-                    <span class="app-brand-subtitle">Crossposting control deck</span>
+                    <span class="app-brand-title">lynxposter</span>
+                    <span class="app-brand-subtitle">Post once, prowl everywhere</span>
                 </span>
             </a>
             <button class="navbar-toggler app-nav-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#main-nav">
@@ -63,9 +63,9 @@
                                 </a>
                                 <ul class="dropdown-menu dropdown-menu-end app-glass-menu">
                                     <li><a class="dropdown-item {% if page_path.startswith('/personas') %}active{% endif %}" href="/personas/page">Personas</a></li>
-                                    <li><a class="dropdown-item {% if page_path.startswith('/scheduled-posts') %}active{% endif %}" href="/scheduled-posts/page">Scheduled Posts</a></li>
-                                    <li><a class="dropdown-item {% if page_path.startswith('/sandbox') %}active{% endif %}" href="/sandbox/page">Sandbox</a></li>
-                                    <li><a class="dropdown-item {% if page_path.startswith('/logs') %}active{% endif %}" href="/logs/page">Logs</a></li>
+                                    <li><a class="dropdown-item {% if page_path.startswith('/scheduled-posts') %}active{% endif %}" href="/scheduled-posts/page">Post Planner</a></li>
+                                    <li><a class="dropdown-item {% if page_path.startswith('/sandbox') %}active{% endif %}" href="/sandbox/page">Preview Studio</a></li>
+                                    <li><a class="dropdown-item {% if page_path.startswith('/logs') %}active{% endif %}" href="/logs/page">Activity</a></li>
                                 </ul>
                             </li>
                             {% endif %}
@@ -88,7 +88,7 @@
                             {% endif %}
                             {% if current_principal.user_id %}
                             <li class="nav-item">
-                                <a class="nav-link {% if page_path.startswith('/account') %}active{% endif %}" href="/account/page">Account</a>
+                                <a class="nav-link {% if page_path.startswith('/account') %}active{% endif %}" href="/account/page">My Account</a>
                             </li>
                             {% endif %}
                         {% endif %}
@@ -120,11 +120,11 @@
                                 {% endif %}
                             </span>
                         </div>
-                        <a class="btn btn-outline-secondary btn-sm app-action-button" href="/auth/logout">Log Out</a>
+                        <a class="btn btn-outline-secondary btn-sm app-action-button" href="/auth/logout">Sign Out</a>
                         {% elif auth_enabled %}
-                        <a class="btn btn-primary btn-sm app-action-button" href="/auth/login">Log In</a>
+                        <a class="btn btn-primary btn-sm app-action-button" href="/auth/login">Sign In</a>
                         {% else %}
-                        <a class="btn btn-primary btn-sm app-action-button" href="/auth/select">Choose User</a>
+                        <a class="btn btn-primary btn-sm app-action-button" href="/auth/select">Choose Profile</a>
                         {% endif %}
                     </div>
                 </div>
@@ -189,6 +189,19 @@ function applyUiAppearance(themeId, mode, options = {}) {
     return persistUiAppearance(normalizedTheme, normalizedMode);
   }
   return Promise.resolve();
+}
+
+async function readApiMessage(response, fallback = "Something went sideways. Please try again.") {
+  try {
+    const payload = await response.clone().json();
+    if (typeof payload.detail === "string" && payload.detail.trim()) return payload.detail;
+    if (typeof payload.message === "string" && payload.message.trim()) return payload.message;
+    if (typeof payload.error === "string" && payload.error.trim()) return payload.error;
+  } catch {
+    const text = await response.text();
+    if (text.trim()) return text;
+  }
+  return fallback;
 }
 
 async function persistUiAppearance(themeId, mode) {
@@ -310,10 +323,22 @@ function registerLiveUpdates(config) {
 window.applyUiAppearance = applyUiAppearance;
 window.persistUiAppearance = persistUiAppearance;
 window.registerLiveUpdates = registerLiveUpdates;
+window.readApiMessage = readApiMessage;
 
 const startingTheme = normalizeUiThemeId(document.body.dataset.uiTheme || window.localStorage?.getItem("lynxposter.ui_theme") || "skylight");
 const startingMode = normalizeUiMode(document.body.dataset.uiMode || window.localStorage?.getItem("lynxposter.ui_mode") || "light");
 applyUiAppearance(startingTheme, startingMode);
+
+document.addEventListener("click", (event) => {
+  const button = event.target.closest(".secret-toggle-button");
+  if (!button) return;
+  const scope = button.closest(".input-group") || button.parentElement;
+  const input = scope?.querySelector(".secret-toggle-input");
+  if (!input) return;
+  const isVisible = input.type === "text";
+  input.type = isVisible ? "password" : "text";
+  button.textContent = isVisible ? "Show" : "Hide";
+});
 
 uiModeButtons.forEach((button) => {
   button.addEventListener("click", () => {

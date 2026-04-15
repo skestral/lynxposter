@@ -6,9 +6,9 @@
             <div class="card-body">
                 <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
                     <div>
-                        <div class="section-kicker mb-2">Personal Workspace</div>
-                        <h1 class="h3 mb-2">Account Settings</h1>
-                        <div class="text-secondary">Tune how LynxPoster feels for you, including local time rendering, light and dark appearance, and the glass gradient palette.</div>
+                        <div class="section-kicker mb-2">My Space</div>
+                        <h1 class="h3 mb-2">My Account</h1>
+                        <div class="text-secondary">Make lynxposter feel like yours, from local time to color mood.</div>
                     </div>
                     <div class="d-flex gap-2 flex-wrap">
                         <span class="badge soft-badge rounded-pill px-3 py-2">{{ ui_theme_definition(user.ui_theme).label }}</span>
@@ -28,8 +28,8 @@
                         <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 mb-3">
                             <div>
                                 <div class="section-kicker mb-2">Display</div>
-                                <h2 class="h5 mb-1">Timezone and theme</h2>
-                                <div class="text-secondary">These settings only affect your own workspace and won’t change other users or the server.</div>
+                                <h2 class="h5 mb-1">Timezone and appearance</h2>
+                                <div class="text-secondary">These picks stay with your own account and won’t nudge anyone else’s den.</div>
                             </div>
                         </div>
                         <div class="row g-3">
@@ -40,17 +40,17 @@
                                     <option value="{{ option }}" {% if user.timezone == option %}selected{% endif %}>{{ option }}</option>
                                     {% endfor %}
                                 </select>
-                                <div class="form-text">Used when rendering timestamps and interpreting scheduler times in the UI.</div>
+                                <div class="form-text">Used for timestamps, planner dates, and anything time-based across the app.</div>
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label">Current Theme</label>
-                                <input class="form-control" value="{{ ui_theme_definition(user.ui_theme).label }}" disabled>
-                                <div class="form-text">Theme changes preview instantly while you pick one, then save to keep it.</div>
+                                <label class="form-label">Current theme</label>
+                                <div class="lp-static-field">{{ ui_theme_definition(user.ui_theme).label }}</div>
+                                <div class="form-text">Theme choices preview right away. Save when you find the one that fits.</div>
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label">Appearance Mode</label>
-                                <input class="form-control" id="account-ui-mode-display" value="{{ ui_mode_label(user.ui_mode) }}" disabled>
-                                <div class="form-text">Flip the light and dark toggle in the top bar from any page. It saves with your account automatically.</div>
+                                <label class="form-label">Appearance mode</label>
+                                <div class="lp-static-field" id="account-ui-mode-display">{{ ui_mode_label(user.ui_mode) }}</div>
+                                <div class="form-text">Use the light and dark switch in the top bar from any page. It saves with your account automatically.</div>
                             </div>
                             <div class="col-12">
                                 <label class="form-label">Theme Presets</label>
@@ -89,39 +89,39 @@
                             <div class="col-md-6">
                                 <label class="form-label">Preferred Name</label>
                                 <input class="form-control" name="preferred_name" value="{{ user.preferred_name or '' }}" placeholder="{{ user.display_name }}">
-                                <div class="form-text">Shown in the top bar and other personal workspace chrome. Leave blank to use your account name.</div>
+                                <div class="form-text">Shown in the top bar. Leave blank to keep using your account name.</div>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Account Name</label>
-                                <input class="form-control" value="{{ user.display_name }}" disabled>
-                                <div class="form-text">Your underlying login or local account name.</div>
+                                <div class="lp-static-field">{{ user.display_name }}</div>
+                                <div class="form-text">Your sign-in name for this workspace.</div>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Username</label>
-                                <input class="form-control" value="{{ user.username or '' }}" disabled>
+                                <div class="lp-static-field {% if not user.username %}is-empty{% endif %}">{{ user.username or "Not set" }}</div>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Email</label>
-                                <input class="form-control" value="{{ user.email or '' }}" disabled>
+                                <div class="lp-static-field {% if not user.email %}is-empty{% endif %}">{{ user.email or "Not set" }}</div>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Groups</label>
-                                <input class="form-control" value="{{ user.groups_json|join(', ') }}" disabled>
+                                <div class="lp-static-field {% if not user.groups_json %}is-empty{% endif %}">{{ user.groups_json|join(', ') if user.groups_json else "No groups" }}</div>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Last Login</label>
-                                <input class="form-control" value="{{ user.last_login_at|datetime_display }}" disabled>
+                                <div class="lp-static-field {% if not user.last_login_at %}is-empty{% endif %}">{{ user.last_login_at|datetime_display if user.last_login_at else "No sign-in recorded yet" }}</div>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Role</label>
-                                <input class="form-control" value="{{ user.role|capitalize }}" disabled>
+                                <div class="lp-static-field">{{ user.role|capitalize }}</div>
                             </div>
                         </div>
                     </div>
 
                     <div class="d-flex gap-2 flex-wrap">
-                        <button class="btn btn-primary" type="submit">Save Account Settings</button>
-                        <a class="btn btn-outline-secondary" href="/">Back To Dashboard</a>
+                        <button class="btn btn-primary" type="submit">Save My Settings</button>
+                        <a class="btn btn-outline-secondary" href="/">Back to dashboard</a>
                     </div>
                 </form>
                 <div id="account-settings-feedback" class="small text-secondary mt-3"></div>
@@ -133,12 +133,12 @@
         <div class="card section-card">
             <div class="card-body">
                 <div class="section-kicker mb-2">What Changes</div>
-                <h2 class="h5 mb-3">Personal only</h2>
+                <h2 class="h5 mb-3">Just for you</h2>
                 <div class="surface-panel-soft">
-                    <div class="small text-secondary mb-2">Theme and Mode</div>
-                    <div class="fw-semibold mb-3">Apply to the whole shell, cards, gradients, and navbar toggle for your account.</div>
+                    <div class="small text-secondary mb-2">Theme and mode</div>
+                    <div class="fw-semibold mb-3">Update your navigation, cards, gradients, and overall workspace style.</div>
                     <div class="small text-secondary mb-2">Timezone</div>
-                    <div class="fw-semibold">Applies to dashboards, logs, scheduled post forms, and giveaway timers.</div>
+                    <div class="fw-semibold">Updates the dashboard, activity feed, planner dates, and giveaway timing displays.</div>
                 </div>
             </div>
         </div>
@@ -156,7 +156,7 @@ const modeBadge = document.getElementById("account-mode-badge");
 
 function refreshModeDisplay(mode) {
   const label = mode === "dark" ? "Dark" : "Light";
-  if (modeDisplay) modeDisplay.value = label;
+  if (modeDisplay) modeDisplay.textContent = label;
   if (modeBadge) modeBadge.textContent = label;
 }
 
@@ -184,7 +184,7 @@ applyThemePreview();
 
 accountSettingsForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  feedback.textContent = "Saving...";
+  feedback.textContent = "Saving your settings...";
   const selectedTheme = accountSettingsForm.querySelector("input[name='ui_theme']:checked");
   const response = await fetch("/account", {
     method: "PUT",
@@ -197,10 +197,10 @@ accountSettingsForm.addEventListener("submit", async (event) => {
     }),
   });
   if (!response.ok) {
-    feedback.textContent = await response.text();
+    feedback.textContent = await window.readApiMessage(response);
     return;
   }
-  feedback.textContent = "Saved. Refreshing your workspace...";
+  feedback.textContent = "Saved. Freshening up your workspace...";
   window.location.reload();
 });
 </script>
