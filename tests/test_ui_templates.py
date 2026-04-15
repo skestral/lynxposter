@@ -309,6 +309,8 @@ def test_scheduled_post_templates_render_attachment_previews():
     assert 'kanban-lane-drafts' in planner_html
     assert 'kanban-lane-attention' in planner_html
     assert 'planner-move-modal' in planner_html
+    assert 'document.body.appendChild(plannerMoveModalElement)' in planner_html
+    assert 'function queueMoveModal(post, target)' in planner_html
     assert 'Create Post' in planner_html
     assert 'scheduledPostsPlannerData' in planner_html
     assert 'id="scheduled-detail-tabs"' in detail_html

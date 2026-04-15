@@ -273,6 +273,9 @@ const plannerState = {
   anchorDate: new Date(),
 };
 const plannerMoveModalElement = document.getElementById("planner-move-modal");
+if (plannerMoveModalElement && plannerMoveModalElement.parentElement !== document.body) {
+  document.body.appendChild(plannerMoveModalElement);
+}
 const plannerMoveModal = new bootstrap.Modal(plannerMoveModalElement);
 const plannerMoveForm = document.getElementById("planner-move-form");
 const plannerMoveTitle = document.getElementById("planner-move-title");
@@ -763,6 +766,16 @@ function openMoveModal(post, target) {
   plannerMoveModal.show();
 }
 
+function queueMoveModal(post, target) {
+  const targetConfig = {...target};
+  const postId = post.id;
+  resetDragState();
+  window.setTimeout(() => {
+    const latestPost = plannerPosts.find((item) => item.id === postId) || post;
+    openMoveModal(latestPost, targetConfig);
+  }, 0);
+}
+
 function resetDragState() {
   activeDragPostId = null;
   document.querySelectorAll(".planner-drop-zone").forEach((zone) => zone.classList.remove("is-active-drop"));
@@ -803,16 +816,15 @@ function bindPlannerInteractions() {
       const post = plannerPosts.find((item) => item.id === activeDragPostId);
       if (!post) return;
       if (zone.dataset.dropType === "day") {
-        openMoveModal(post, {type: "day", dateKey: zone.dataset.dropDate});
+        queueMoveModal(post, {type: "day", dateKey: zone.dataset.dropDate});
       } else if (zone.dataset.dropType === "bucket") {
         const currentBucket = statusBucket(post.displayStatus);
         if (currentBucket === zone.dataset.dropBucket) {
           resetDragState();
           return;
         }
-        openMoveModal(post, {type: "bucket", bucket: zone.dataset.dropBucket});
+        queueMoveModal(post, {type: "bucket", bucket: zone.dataset.dropBucket});
       }
-      resetDragState();
     });
   });
 }
@@ -886,6 +898,10 @@ plannerMoveForm.addEventListener("submit", async (event) => {
   } finally {
     plannerMoveSubmit.disabled = false;
   }
+});
+
+plannerMoveModalElement.addEventListener("hidden.bs.modal", () => {
+  currentMoveContext = null;
 });
 
 calendarViewButtons.forEach((button) => {
