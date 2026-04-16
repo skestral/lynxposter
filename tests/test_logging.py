@@ -360,5 +360,89 @@ def test_summarize_run_events_rolls_up_run_and_persona_metrics(session):
     assert run["counts"]["queued"] == 0
     assert run["counts"]["errors"] == 1
     assert len(run["persona_summaries"]) == 2
+    assert len(run["published_posts"]) == 1
+    assert run["published_posts"][0]["deliveries"][0]["account_label"] == "Savannah Discord"
     assert run["persona_summaries"][0]["persona_name"] == "Savannah"
     assert run["persona_summaries"][1]["persona_name"] == "Lynx"
+
+
+def test_summarize_run_events_groups_successful_deliveries_by_post(session):
+    persona = _create_persona(session)
+    discord = create_account(
+        session,
+        persona,
+        {
+            "service": "discord",
+            "label": "Discord",
+            "handle_or_identifier": "Webhook",
+            "is_enabled": True,
+            "source_enabled": False,
+            "destination_enabled": True,
+            "credentials_json": {"webhook_url": "https://discord.test"},
+            "source_settings_json": {},
+            "publish_settings_json": {},
+        },
+    )
+    mastodon = create_account(
+        session,
+        persona,
+        {
+            "service": "mastodon",
+            "label": "Mastodon",
+            "handle_or_identifier": "@lynx@example.social",
+            "is_enabled": True,
+            "source_enabled": False,
+            "destination_enabled": True,
+            "credentials_json": {"instance": "https://example.social", "token": "secret"},
+            "source_settings_json": {},
+            "publish_settings_json": {},
+        },
+    )
+
+    events = [
+        log_run_event(
+            session,
+            run_id="run-published-summary",
+            persona_id=persona.id,
+            persona_name=persona.name,
+            account_id=discord.id,
+            service=discord.service,
+            operation="publish",
+            message="Published post post-123 to Discord",
+            post_id="post-123",
+            delivery_job_id="job-1",
+            metadata={
+                "delivery_status": "posted",
+                "external_id": "discord-123",
+                "post_preview": "Hello from LynxPoster",
+            },
+        ),
+        log_run_event(
+            session,
+            run_id="run-published-summary",
+            persona_id=persona.id,
+            persona_name=persona.name,
+            account_id=mastodon.id,
+            service=mastodon.service,
+            operation="publish",
+            message="Published post post-123 to Mastodon",
+            post_id="post-123",
+            delivery_job_id="job-2",
+            metadata={
+                "delivery_status": "posted",
+                "external_id": "mastodon-123",
+                "external_url": "https://example.social/@lynx/mastodon-123",
+                "post_preview": "Hello from LynxPoster",
+            },
+        ),
+    ]
+
+    grouped = summarize_run_events([serialize_run_event(event) for event in events])
+
+    assert len(grouped) == 1
+    published_posts = grouped[0]["published_posts"]
+    assert len(published_posts) == 1
+    assert published_posts[0]["post_id"] == "post-123"
+    assert published_posts[0]["post_preview"] == "Hello from LynxPoster"
+    assert [delivery["account_label"] for delivery in published_posts[0]["deliveries"]] == ["Mastodon", "Discord"]
+    assert published_posts[0]["deliveries"][0]["external_url"] == "https://example.social/@lynx/mastodon-123"

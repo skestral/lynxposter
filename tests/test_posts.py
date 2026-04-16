@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from datetime import datetime, timezone
 from io import BytesIO
 from types import SimpleNamespace
@@ -17,6 +18,7 @@ from app.domain import CanonicalPostPayload, ExternalPostRefPayload, MediaItem
 from app.models import CanonicalPost, DeliveryJob, MediaAttachment
 from app.schemas import ScheduledPostCreate, ScheduledPostUpdate
 from app.services.personas import create_account, create_persona, get_persona, replace_routes
+from app.services.storage import settings as storage_settings
 from app.services.posts import (
     create_scheduled_post,
     delete_scheduled_post,
@@ -224,11 +226,13 @@ def test_update_scheduled_post_appends_media_attachments(session, tmp_path):
     assert updated.attachments[1].storage_path.endswith("dog.jpg")
 
 
-def test_delete_scheduled_post_removes_draft_and_children(session, tmp_path):
+def test_delete_scheduled_post_removes_draft_and_children(session, tmp_path, monkeypatch):
     persona = _create_persona(session, slug="attachments-delete")
     mastodon = _create_account(session, persona, service="mastodon", label="Mastodon", source_enabled=False, destination_enabled=True)
 
-    file_path = tmp_path / "cat.jpg"
+    uploads_dir = tmp_path / "uploads"
+    uploads_dir.mkdir()
+    file_path = uploads_dir / "cat.jpg"
     file_path.write_bytes(b"fake-jpeg")
 
     post = create_scheduled_post(
@@ -256,11 +260,17 @@ def test_delete_scheduled_post_removes_draft_and_children(session, tmp_path):
         ],
     )
 
+    monkeypatch.setattr(
+        "app.services.storage.settings",
+        replace(storage_settings, uploads_dir=uploads_dir, imported_media_dir=tmp_path / "imported"),
+    )
+
     delete_scheduled_post(session, post)
 
     assert session.get(CanonicalPost, post.id) is None
     assert session.query(MediaAttachment).count() == 0
     assert session.query(DeliveryJob).count() == 0
+    assert not file_path.exists()
 
 
 def test_delete_scheduled_post_rejects_non_draft(session):

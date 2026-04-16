@@ -190,6 +190,55 @@ def _event_trigger(event: RunEventRead) -> str | None:
     return (event.metadata_json or {}).get("trigger")
 
 
+def _successful_publish_events(events: list[RunEventRead]) -> list[RunEventRead]:
+    published = [
+        event
+        for event in events
+        if event.operation == "publish"
+        and event.severity != "error"
+        and ((event.metadata_json or {}).get("delivery_status") == "posted" or event.message.startswith("Published post "))
+    ]
+    return sorted(published, key=lambda event: event.created_at, reverse=True)
+
+
+def _published_posts_summary(events: list[RunEventRead]) -> list[dict[str, Any]]:
+    posts_by_key: OrderedDict[str, dict[str, Any]] = OrderedDict()
+    for event in _successful_publish_events(events):
+        metadata = event.metadata_json or {}
+        post_key = event.post_id or f"event:{event.id}"
+        summary = posts_by_key.get(post_key)
+        if summary is None:
+            summary = {
+                "post_id": event.post_id,
+                "persona_id": event.persona_id,
+                "persona_name": event.persona_name or "Unknown persona",
+                "post_preview": metadata.get("post_preview") or "",
+                "latest_at": event.created_at,
+                "deliveries": [],
+            }
+            posts_by_key[post_key] = summary
+        elif not summary["post_preview"] and metadata.get("post_preview"):
+            summary["post_preview"] = metadata.get("post_preview") or ""
+        summary["latest_at"] = max(summary["latest_at"], event.created_at)
+        summary["deliveries"].append(
+            {
+                "created_at": event.created_at,
+                "account_id": event.account_id,
+                "account_label": event.account_label,
+                "service": event.service,
+                "delivery_job_id": event.delivery_job_id,
+                "external_id": metadata.get("external_id"),
+                "external_url": metadata.get("external_url"),
+                "message": event.message,
+            }
+        )
+
+    summaries = list(posts_by_key.values())
+    for summary in summaries:
+        summary["deliveries"] = sorted(summary["deliveries"], key=lambda delivery: delivery["created_at"], reverse=True)
+    return summaries
+
+
 def _count_summary(events: list[RunEventRead]) -> dict[str, int]:
     persona_ids = {event.persona_id or event.persona_name for event in events if event.persona_id or event.persona_name}
     account_ids = {event.account_id for event in events if event.account_id}
@@ -242,6 +291,7 @@ def summarize_run_events(events: list[RunEventRead], *, limit_runs: int | None =
                     "counts": _count_summary(persona_events),
                     "severity": _highest_severity(persona_events),
                     "latest_at": max(event.created_at for event in persona_events),
+                    "published_posts": _published_posts_summary(persona_events),
                 }
             )
 
@@ -260,6 +310,7 @@ def summarize_run_events(events: list[RunEventRead], *, limit_runs: int | None =
                 "finished_at": max(event.created_at for event in run_events),
                 "counts": _count_summary(run_events),
                 "persona_summaries": persona_summaries,
+                "published_posts": _published_posts_summary(run_events),
                 "system_events": system_events,
                 "events": run_events,
             }

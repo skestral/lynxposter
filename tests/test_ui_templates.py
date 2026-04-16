@@ -449,6 +449,17 @@ def test_dashboard_template_shows_recent_scheduled_post_errors():
                 "severity": "error",
                 "finished_at": None,
                 "counts": {"personas": 2, "accounts": 3, "posts_found": 4, "reposted": 2, "errors": 1},
+                "published_posts": [
+                    SimpleNamespace(
+                        post_id="post-1",
+                        persona_name="Savannah",
+                        post_preview="Launch update",
+                        latest_at=None,
+                        deliveries=[
+                            SimpleNamespace(account_label="Instagram", service="instagram", external_url="https://instagram.example/p/1", external_id="ig-1"),
+                        ],
+                    )
+                ],
                 "system_events": [
                     SimpleNamespace(
                         created_at=None,
@@ -495,6 +506,8 @@ def test_dashboard_template_shows_recent_scheduled_post_errors():
     assert "delivery-summary-pill is-failure" in html
     assert "Recent Automation Runs" in html
     assert "Autorun Run" in html
+    assert "Posted This Run" in html
+    assert "Launch update" in html
     assert "Imported 4 posts from Instagram" in html
 
 
@@ -681,6 +694,17 @@ def test_logs_template_renders_grouped_worker_runs():
                 "severity": "warning",
                 "finished_at": None,
                 "counts": {"personas": 2, "accounts": 2, "posts_found": 3, "reposted": 1, "queued": 1, "errors": 1},
+                "published_posts": [
+                    SimpleNamespace(
+                        post_id="post-44",
+                        persona_name="Savannah",
+                        post_preview="Crossposted launch note",
+                        latest_at=None,
+                        deliveries=[
+                            SimpleNamespace(account_label="Discord", service="discord", external_url=None, external_id="discord-44"),
+                        ],
+                    )
+                ],
                 "system_events": [
                     SimpleNamespace(
                         created_at=None,
@@ -730,6 +754,9 @@ def test_logs_template_renders_grouped_worker_runs():
     assert "Manual Run" in html
     assert "Lynx" in html
     assert "Savannah" in html
+    assert "Posted This Run" in html
+    assert "Crossposted launch note" in html
+    assert "discord-44" in html
     assert "Imported 3 posts from Bluesky" in html
     assert "Webhook rejected the payload" in html
     assert "logs-live-update-status" in html

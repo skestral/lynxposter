@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.adapters import get_destination_adapter_for_account, get_source_adapter_for_account, supports_source
 from app.adapters.common import autorun_initial_import_guard_reason, logical_post_limit_reached, looks_like_historical_backfill, now_utc
+from app.adapters.discord import discord_link_preference_order, discord_should_wait_for_preferred_links
 from app.domain import ExternalPostRefPayload
 from app.models import Account, AccountPostRef, AccountRoute, CanonicalPost, DeliveryAttempt, DeliveryJob, Persona
 from app.services.alerts import AlertDispatcher
@@ -20,10 +21,22 @@ from app.services.posts import (
     sync_delivery_jobs,
     upsert_polled_post,
 )
+from app.utils import to_json_compatible
 
 
 def new_run_id() -> str:
     return str(uuid4())
+
+
+def _log_post_preview(post: CanonicalPost) -> str:
+    body = " ".join(str(post.body or "").split())
+    if body:
+        return f"{body[:117]}..." if len(body) > 120 else body
+    attachment_count = len(post.attachments or [])
+    if attachment_count:
+        suffix = "s" if attachment_count != 1 else ""
+        return f"[media-only post with {attachment_count} attachment{suffix}]"
+    return "[empty post]"
 
 
 def _resolve_delivery_context(session: Session, post: CanonicalPost, target_account: Account) -> dict[str, str | None] | None:
@@ -224,6 +237,20 @@ def _route_is_enabled(session: Session, post: CanonicalPost, target_account: Acc
     return session.scalar(stmt) is not None
 
 
+def _delivery_queue_priority(job: DeliveryJob) -> tuple[int, object]:
+    target_account = job.target_account
+    post = job.post
+    persona = post.persona if post else None
+    if (
+        target_account
+        and target_account.service == "discord"
+        and persona is not None
+        and any(token != "source" for token in discord_link_preference_order(persona, target_account))
+    ):
+        return (1, job.queued_at or now_utc())
+    return (0, job.queued_at or now_utc())
+
+
 def process_delivery_queue(session: Session, alerts: AlertDispatcher, *, run_id: str | None = None) -> str:
     run_id = run_id or new_run_id()
     stmt = (
@@ -239,7 +266,10 @@ def process_delivery_queue(session: Session, alerts: AlertDispatcher, *, run_id:
         .order_by(DeliveryJob.queued_at)
     )
 
-    for job in session.scalars(stmt):
+    queued_jobs = list(session.scalars(stmt))
+    queued_jobs.sort(key=_delivery_queue_priority)
+
+    for job in queued_jobs:
         post = job.post
         persona = post.persona
         target_account = job.target_account
@@ -287,6 +317,8 @@ def process_delivery_queue(session: Session, alerts: AlertDispatcher, *, run_id:
         context = _resolve_delivery_context(session, post, target_account)
         if context is None and (post.reply_to_post_id or post.quote_of_post_id):
             continue
+        if target_account.service == "discord" and discord_should_wait_for_preferred_links(post, persona, target_account):
+            continue
 
         try:
             adapter = get_destination_adapter_for_account(target_account)
@@ -327,9 +359,10 @@ def process_delivery_queue(session: Session, alerts: AlertDispatcher, *, run_id:
 
         try:
             result = adapter.publish(session, post, persona, target_account, context=context)
+            normalized_response_payload = to_json_compatible(result.raw)
             attempt.status = "posted"
             attempt.finished_at = now_utc()
-            attempt.response_payload = result.raw
+            attempt.response_payload = normalized_response_payload if isinstance(normalized_response_payload, dict) else {"value": normalized_response_payload}
             job.status = "posted"
             job.external_id = result.external_id
             job.external_url = result.external_url
@@ -385,6 +418,12 @@ def process_delivery_queue(session: Session, alerts: AlertDispatcher, *, run_id:
                 message=f"Published post {post.id} to {target_account.label}",
                 post_id=post.id,
                 delivery_job_id=job.id,
+                metadata={
+                    "delivery_status": "posted",
+                    "external_id": job.external_id,
+                    "external_url": job.external_url,
+                    "post_preview": _log_post_preview(post),
+                },
             )
         except Exception as exc:
             attempt.status = "failed"

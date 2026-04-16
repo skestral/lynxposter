@@ -261,13 +261,47 @@
                                     <span class="badge text-bg-light border">{{ run.counts.personas }} personas</span>
                                     <span class="badge text-bg-light border">{{ run.counts.accounts }} accounts</span>
                                     <span class="badge text-bg-light border">{{ run.counts.posts_found }} found</span>
-                                    <span class="badge text-bg-light border">{{ run.counts.reposted }} reposted</span>
+                                    <span class="badge text-bg-light border">{{ run.counts.reposted }} posted</span>
                                     <span class="badge text-bg-light border">{{ run.counts.errors }} errors</span>
                                 </div>
                             </div>
                             <div class="small text-secondary">{{ run.summary_message }}</div>
                         </summary>
                         <div class="mt-3 d-flex flex-column gap-3">
+                            {% if run.published_posts %}
+                            <div>
+                                <div class="small fw-semibold text-secondary mb-2">Posted This Run</div>
+                                <div class="d-flex flex-column gap-2">
+                                    {% for published in run.published_posts %}
+                                    <div class="border rounded p-3 bg-white">
+                                        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-2">
+                                            <div>
+                                                <div class="fw-semibold">{{ published.post_preview or ("Post " ~ published.post_id if published.post_id else "Posted item") }}</div>
+                                                <div class="small text-secondary">
+                                                    {{ published.persona_name }}
+                                                    {% if published.post_id %} • <span class="code-ish">{{ published.post_id }}</span>{% endif %}
+                                                </div>
+                                            </div>
+                                            <div class="small text-secondary">{{ published.latest_at|datetime_display }}</div>
+                                        </div>
+                                        <div class="mt-2 d-flex flex-column gap-1">
+                                            {% for delivery in published.deliveries %}
+                                            <div class="small">
+                                                <span class="fw-semibold">{{ delivery.account_label or "Destination" }}</span>
+                                                {% if delivery.service %}<span class="text-secondary">({{ delivery.service }})</span>{% endif %}
+                                                {% if delivery.external_url %}
+                                                • <a href="{{ delivery.external_url }}" target="_blank" rel="noopener noreferrer">open</a>
+                                                {% elif delivery.external_id %}
+                                                • <span class="code-ish">{{ delivery.external_id }}</span>
+                                                {% endif %}
+                                            </div>
+                                            {% endfor %}
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% endif %}
                             {% if run.system_events %}
                             <div>
                                 <div class="small fw-semibold text-secondary mb-2">App-wide notes</div>
@@ -289,7 +323,7 @@
                                         <div class="d-flex gap-2 flex-wrap">
                                             <span class="badge text-bg-light border">{{ persona.counts.accounts }} accounts</span>
                                             <span class="badge text-bg-light border">{{ persona.counts.posts_found }} found</span>
-                                            <span class="badge text-bg-light border">{{ persona.counts.reposted }} reposted</span>
+                                            <span class="badge text-bg-light border">{{ persona.counts.reposted }} posted</span>
                                             <span class="badge text-bg-light border">{{ persona.counts.errors }} errors</span>
                                         </div>
                                     </div>

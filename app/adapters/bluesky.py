@@ -15,7 +15,13 @@ from app.adapters.base import (
     get_account_credentials,
     get_account_publish_setting,
 )
-from app.adapters.common import cutoff_for_initial_poll, import_existing_posts_on_first_scan, is_initial_sync, service_body
+from app.adapters.common import (
+    cutoff_for_initial_poll,
+    import_existing_posts_on_first_scan,
+    is_initial_sync,
+    is_video_attachment,
+    service_body,
+)
 from app.domain import (
     CanonicalPostPayload,
     ExternalPostRefPayload,
@@ -301,12 +307,7 @@ class BlueskyDestinationAdapter(DestinationAdapter):
         body = service_body(post, account)
         issues: list[ValidationIssue] = []
         attachments = sorted(post.attachments, key=lambda item: item.sort_order)
-        video_attachments = [
-            attachment
-            for attachment in attachments
-            if str(attachment.mime_type or "").lower().startswith("video/")
-            or str(attachment.storage_path).lower().endswith(".mp4")
-        ]
+        video_attachments = [attachment for attachment in attachments if is_video_attachment(attachment)]
         if len(body) > 300:
             issues.append(ValidationIssue(service="bluesky", field="body", message="Bluesky posts are limited to 300 characters."))
         if len(attachments) > 4:
@@ -356,7 +357,7 @@ class BlueskyDestinationAdapter(DestinationAdapter):
             "facets": facets,
         }
         action = "send_post"
-        if len(attachments) == 1 and str(attachments[0].storage_path).lower().endswith(".mp4"):
+        if len(attachments) == 1 and is_video_attachment(attachments[0]):
             attachment = attachments[0]
             action = "send_video"
             request_shape["video"] = {
@@ -404,7 +405,7 @@ class BlueskyDestinationAdapter(DestinationAdapter):
         facets = _build_facets(body)
 
         response = None
-        if len(post.attachments) == 1 and str(post.attachments[0].storage_path).lower().endswith(".mp4"):
+        if len(post.attachments) == 1 and is_video_attachment(post.attachments[0]):
             attachment = post.attachments[0]
             with Path(attachment.storage_path).open("rb") as handle:
                 response = client.send_video(body, handle.read(), attachment.alt_text, facets=facets)

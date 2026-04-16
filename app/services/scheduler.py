@@ -12,6 +12,7 @@ from app.services.delivery import enqueue_due_scheduled_posts, new_run_id, poll_
 from app.services.events import log_run_event
 from app.services.giveaways import process_instagram_giveaway_lifecycle
 from app.services.instagram_tokens import check_instagram_token_expiry
+from app.services.media_cleanup import cleanup_stale_media_files
 
 class CrossposterScheduler:
     def __init__(self, alerts: AlertDispatcher) -> None:
@@ -130,6 +131,7 @@ class CrossposterScheduler:
                 process_delivery_queue(session, self.alerts, run_id=run_id)
                 process_instagram_giveaway_lifecycle(session, self.alerts, run_id=run_id)
                 check_instagram_token_expiry(session, self.alerts, run_id=run_id)
+                cleanup_stale_media_files(session, run_id=run_id)
             self._log_scheduler_event(
                 run_id=run_id,
                 message=f"{trigger.title()} automation cycle completed.",

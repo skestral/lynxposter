@@ -5,7 +5,7 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from app.adapters.base import ConfigurationError, DestinationAdapter, get_account_credentials
-from app.adapters.common import service_body
+from app.adapters.common import is_video_attachment, service_body
 from app.domain import PublishPreview, PublishResult, ValidationIssue
 from app.models import Account, CanonicalPost, Persona
 
@@ -15,9 +15,9 @@ class TumblrDestinationAdapter(DestinationAdapter):
 
     def validate(self, post: CanonicalPost, persona: Persona, account: Account) -> list[ValidationIssue]:
         issues: list[ValidationIssue] = []
-        media_paths = [str(Path(attachment.storage_path)).lower() for attachment in sorted(post.attachments, key=lambda item: item.sort_order)]
-        image_count = sum(not path.endswith(".mp4") for path in media_paths)
-        video_count = len(media_paths) - image_count
+        attachments = sorted(post.attachments, key=lambda item: item.sort_order)
+        video_count = sum(1 for attachment in attachments if is_video_attachment(attachment))
+        image_count = len(attachments) - video_count
 
         if video_count > 1:
             issues.append(
@@ -45,11 +45,14 @@ class TumblrDestinationAdapter(DestinationAdapter):
         *,
         context: dict[str, str | None] | None = None,
     ) -> PublishPreview:
-        media_paths = [str(Path(attachment.storage_path)) for attachment in sorted(post.attachments, key=lambda item: item.sort_order)]
+        attachments = sorted(post.attachments, key=lambda item: item.sort_order)
         body = service_body(post, account)
-        if media_paths:
-            image_paths = [path for path in media_paths if not path.lower().endswith(".mp4")]
-            video_path = next((path for path in media_paths if path.lower().endswith(".mp4")), None)
+        if attachments:
+            image_paths = [str(Path(attachment.storage_path)) for attachment in attachments if not is_video_attachment(attachment)]
+            video_path = next(
+                (str(Path(attachment.storage_path)) for attachment in attachments if is_video_attachment(attachment)),
+                None,
+            )
             if video_path:
                 action = "create_video"
                 request_shape = {
@@ -101,11 +104,14 @@ class TumblrDestinationAdapter(DestinationAdapter):
             config["oauth_token"],
             config["oauth_secret"],
         )
-        media_paths = [str(Path(attachment.storage_path)) for attachment in sorted(post.attachments, key=lambda item: item.sort_order)]
+        attachments = sorted(post.attachments, key=lambda item: item.sort_order)
         body = service_body(post, account)
-        if media_paths:
-            image_paths = [path for path in media_paths if not path.lower().endswith(".mp4")]
-            video_path = next((path for path in media_paths if path.lower().endswith(".mp4")), None)
+        if attachments:
+            image_paths = [str(Path(attachment.storage_path)) for attachment in attachments if not is_video_attachment(attachment)]
+            video_path = next(
+                (str(Path(attachment.storage_path)) for attachment in attachments if is_video_attachment(attachment)),
+                None,
+            )
             if video_path:
                 response = client.create_video(config["blog_name"], state="published", caption=body, data=video_path)
             else:

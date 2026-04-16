@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.adapters import get_destination_adapter_for_account
 from app.adapters.common import delivery_summary
-from app.domain import CanonicalPostPayload, MediaItem
+from app.domain import CanonicalPostPayload, ExternalPostRefPayload, MediaItem
 from app.models import Account, AccountPostRef, AccountSyncState, CanonicalPost, DeliveryJob, MediaAttachment, Persona
 from app.schemas import ScheduledPostCreate, ScheduledPostUpdate
 from app.services.giveaways import (
@@ -19,6 +19,7 @@ from app.services.giveaways import (
     sync_instagram_giveaway,
 )
 from app.services.personas import get_persona, persona_destination_accounts, routed_destination_accounts
+from app.services.storage import delete_managed_media_file
 
 
 def utcnow() -> datetime:
@@ -339,6 +340,17 @@ def delete_scheduled_post(session: Session, post: CanonicalPost) -> None:
         raise ValueError("Only scheduled posts created in the composer can be deleted.")
     if post.status != "draft":
         raise ValueError("Only draft scheduled posts can be deleted.")
+    for attachment in list(post.attachments):
+        other_attachment = session.scalar(
+            select(MediaAttachment.id)
+            .where(
+                MediaAttachment.storage_path == attachment.storage_path,
+                MediaAttachment.post_id != post.id,
+            )
+            .limit(1)
+        )
+        if other_attachment is None:
+            delete_managed_media_file(attachment.storage_path)
     session.delete(post)
     session.flush()
 
@@ -381,7 +393,42 @@ def _resolve_pending_post_id(session: Session, source_account_id: str, external_
     return ref.post_id if ref else None
 
 
+def _upsert_account_post_refs(
+    session: Session,
+    post: CanonicalPost,
+    account: Account,
+    external_refs: list[ExternalPostRefPayload],
+) -> None:
+    for external_ref in external_refs:
+        external_id = str(getattr(external_ref, "external_id", "") or "").strip()
+        if not external_id:
+            continue
+        ref = session.scalar(
+            select(AccountPostRef).where(
+                AccountPostRef.account_id == account.id,
+                AccountPostRef.external_id == external_id,
+            )
+        )
+        observed_at = getattr(external_ref, "observed_at", None) or utcnow()
+        external_url = getattr(external_ref, "external_url", None)
+        if ref:
+            ref.post_id = post.id
+            ref.external_url = external_url
+            ref.observed_at = observed_at
+            continue
+        session.add(
+            AccountPostRef(
+                post_id=post.id,
+                account_id=account.id,
+                external_id=external_id,
+                external_url=external_url,
+                observed_at=observed_at,
+            )
+        )
+
+
 def upsert_polled_post(session: Session, persona: Persona, source_account: Account, payload: CanonicalPostPayload) -> CanonicalPost:
+    existing_post: CanonicalPost | None = None
     for external_ref in payload.external_refs:
         stmt = select(AccountPostRef).where(
             AccountPostRef.account_id == source_account.id,
@@ -390,11 +437,17 @@ def upsert_polled_post(session: Session, persona: Persona, source_account: Accou
         existing_ref = session.scalar(stmt)
         if existing_ref:
             existing_post = get_post(session, existing_ref.post_id) or existing_ref.post
+            break
+
+    if existing_post is not None:
+        _upsert_account_post_refs(session, existing_post, source_account, payload.external_refs)
+        if existing_post.origin_account_id == source_account.id:
             target_accounts = routed_destination_accounts(session, source_account)
             if target_accounts:
                 sync_delivery_jobs(session, existing_post, target_accounts, "queued")
                 refresh_post_status(existing_post)
-            return existing_post
+        session.flush()
+        return existing_post
 
     metadata = dict(payload.metadata)
     if payload.reply_to_external:
@@ -431,16 +484,7 @@ def upsert_polled_post(session: Session, persona: Persona, source_account: Accou
 
     for media in payload.media:
         session.add(_create_attachment(post, media))
-    for external_ref in payload.external_refs:
-        session.add(
-            AccountPostRef(
-                post_id=post.id,
-                account_id=source_account.id,
-                external_id=external_ref.external_id,
-                external_url=external_ref.external_url,
-                observed_at=external_ref.observed_at or utcnow(),
-            )
-        )
+    _upsert_account_post_refs(session, post, source_account, payload.external_refs)
     session.flush()
 
     target_accounts = routed_destination_accounts(session, source_account)

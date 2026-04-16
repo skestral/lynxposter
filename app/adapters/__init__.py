@@ -186,6 +186,16 @@ SERVICE_REGISTRY: dict[str, ServiceDefinition] = {
             notes=("Discord webhook file limits depend on the destination server and webhook configuration.",),
         ),
         credential_fields=(AccountFieldDefinition("webhook_url", "Webhook URL", input_type="password"),),
+        publish_setting_fields=(
+            AccountFieldDefinition(
+                "link_preference_order",
+                "Link Preference Order",
+                help_text=(
+                    "Comma-separated services to prefer for the appended Source link, for example "
+                    "instagram,mastodon,source. Use source to fall back to the original imported link."
+                ),
+            ),
+        ),
     ),
     "telegram": ServiceDefinition(
         service="telegram",

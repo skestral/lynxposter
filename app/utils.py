@@ -31,15 +31,22 @@ def detect_mime_type(path: Path) -> str:
     return mime_type or "application/octet-stream"
 
 
-def compact_json(value: Any) -> str:
-    def _default(item: Any) -> str:
-        if isinstance(item, Path):
-            return str(item)
-        if isinstance(item, datetime):
-            return item.isoformat()
-        return str(item)
+def to_json_compatible(value: Any) -> Any:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {str(key): to_json_compatible(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [to_json_compatible(item) for item in value]
+    return str(value)
 
-    return json.dumps(value, indent=2, sort_keys=True, default=_default)
+
+def compact_json(value: Any) -> str:
+    return json.dumps(to_json_compatible(value), indent=2, sort_keys=True)
 
 
 def parse_json_or_default(raw: str | None, default: Any) -> Any:

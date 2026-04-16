@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import shutil
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 from uuid import uuid4
@@ -25,6 +26,68 @@ def ensure_storage_dirs() -> None:
     settings.imported_media_dir.mkdir(parents=True, exist_ok=True)
     settings.logs_dir.mkdir(parents=True, exist_ok=True)
     settings.backups_dir.mkdir(parents=True, exist_ok=True)
+
+
+def managed_media_roots() -> tuple[Path, Path]:
+    return settings.uploads_dir.resolve(), settings.imported_media_dir.resolve()
+
+
+def resolve_managed_media_path(path_like: str | Path) -> Path | None:
+    try:
+        candidate = Path(path_like).resolve(strict=False)
+    except (OSError, RuntimeError, TypeError):
+        return None
+    for root in managed_media_roots():
+        if candidate == root or candidate.is_relative_to(root):
+            return candidate
+    return None
+
+
+def delete_managed_media_file(path_like: str | Path) -> bool:
+    file_path = resolve_managed_media_path(path_like)
+    if file_path is None or not file_path.is_file():
+        return False
+    file_path.unlink(missing_ok=True)
+    return True
+
+
+def prune_unreferenced_managed_media_files(
+    referenced_paths: set[str],
+    *,
+    retention_days: int,
+    now: datetime | None = None,
+) -> dict[str, int]:
+    ensure_storage_dirs()
+    if retention_days <= 0:
+        return {"scanned": 0, "deleted": 0, "errors": 0}
+
+    cutoff = (now or datetime.now(timezone.utc)) - timedelta(days=retention_days)
+    deleted = 0
+    errors = 0
+    scanned = 0
+
+    for root in managed_media_roots():
+        for file_path in root.rglob("*"):
+            if not file_path.is_file():
+                continue
+            resolved = str(file_path.resolve())
+            scanned += 1
+            if resolved in referenced_paths:
+                continue
+            try:
+                modified_at = datetime.fromtimestamp(file_path.stat().st_mtime, tz=timezone.utc)
+            except OSError:
+                errors += 1
+                continue
+            if modified_at > cutoff:
+                continue
+            try:
+                file_path.unlink()
+                deleted += 1
+            except OSError:
+                errors += 1
+
+    return {"scanned": scanned, "deleted": deleted, "errors": errors}
 
 
 def _normalized_filename(original_name: str, *, default_name: str = "media.bin") -> str:

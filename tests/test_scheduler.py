@@ -43,11 +43,12 @@ def test_manual_cycle_logs_and_runs_all_phases(session, monkeypatch):
     monkeypatch.setattr("app.services.scheduler.reconcile_pending_posts", lambda db, *, run_id=None: calls.append("reconcile"))
     monkeypatch.setattr("app.services.scheduler.process_delivery_queue", lambda db, alerts, *, run_id=None: calls.append("delivery"))
     monkeypatch.setattr("app.services.scheduler.process_instagram_giveaway_lifecycle", lambda db, alerts, *, run_id=None: calls.append("giveaways"))
+    monkeypatch.setattr("app.services.scheduler.cleanup_stale_media_files", lambda db, *, run_id=None: calls.append("cleanup"))
 
     result = scheduler.run_manual_cycle()
 
     assert result["status"] == "ok"
-    assert calls == ["poll:manual", "due", "reconcile", "delivery", "giveaways"]
+    assert calls == ["poll:manual", "due", "reconcile", "delivery", "giveaways", "cleanup"]
     events = session.query(RunEvent).filter(RunEvent.operation == "automation_cycle").order_by(RunEvent.created_at).all()
     assert len(events) == 2
     assert "started" in events[0].message.lower()

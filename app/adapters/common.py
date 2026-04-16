@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any
 
 from app.models import Account, AccountSyncState, CanonicalPost, DeliveryJob, Persona
@@ -19,6 +20,29 @@ def service_body(post: CanonicalPost, account: Account) -> str:
         if isinstance(override, dict) and override.get("body") is not None:
             return str(override["body"])
     return post.body
+
+
+def attachment_kind(attachment: Any) -> str:
+    mime_type = str(getattr(attachment, "mime_type", "") or "").lower()
+    if mime_type.startswith("video/"):
+        return "video"
+    if mime_type.startswith("image/"):
+        return "image"
+
+    suffix = Path(str(getattr(attachment, "storage_path", "") or "")).suffix.lower()
+    if suffix in {".mp4", ".mov", ".m4v", ".webm"}:
+        return "video"
+    if suffix in {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tif", ".tiff"}:
+        return "image"
+    return "other"
+
+
+def is_video_attachment(attachment: Any) -> bool:
+    return attachment_kind(attachment) == "video"
+
+
+def is_image_attachment(attachment: Any) -> bool:
+    return attachment_kind(attachment) == "image"
 
 
 def logical_post_limit_reached(persona: Persona, posts_published_within_hour: int) -> bool:
