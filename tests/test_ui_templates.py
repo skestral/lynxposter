@@ -332,43 +332,96 @@ def test_scheduled_post_templates_render_attachment_previews():
     assert 'Drag cards between editable lanes' in planner_html
 
 
-def test_scheduled_post_templates_render_instagram_giveaway_controls():
-    giveaway = SimpleNamespace(
-        status="review_required",
-        giveaway_end_at=None,
-        rules=SimpleNamespace(
-            min_friend_mentions=1,
-            required_keywords=["launch"],
-            required_hashtags=["#giveaway"],
-            require_story_mention=True,
-            require_like=True,
-            require_follow=False,
-        ),
-        audit_summary=SimpleNamespace(entrants=2, eligible=0, provisional=2, disqualified=0),
-        provisional_winner=SimpleNamespace(
-            instagram_username="entrant.one",
-            instagram_user_id="user-1",
-            inconclusive_reasons=["No story mention evidence was captured during the giveaway window."],
-        ),
-        final_winner=None,
-        last_error=None,
-        instagram_media_url="https://instagram.test/p/abc123/",
-        instagram_media_id="abc123",
-        entries=[
-            SimpleNamespace(
-                instagram_username="entrant.one",
-                instagram_user_id="user-1",
-                comment_count=1,
-                mention_count=1,
-                shared_status="inconclusive",
-                liked_status="verified",
-                followed_status="not_required",
-                eligibility_status="provisional",
-                inconclusive_reasons=["No story mention evidence was captured during the giveaway window."],
-                disqualification_reasons=[],
-            )
+def test_scheduled_post_templates_render_generic_giveaway_controls():
+    giveaway = {
+        "status": "review_required",
+        "giveaway_end_at": None,
+        "pool_mode": "separate",
+        "audit_summary": {"entrants": 2, "eligible": 0, "provisional": 2, "disqualified": 0},
+        "channels": [
+            {
+                "service": "instagram",
+                "account_id": "account-ig",
+                "rules": {
+                    "kind": "all",
+                    "children": [
+                        {"kind": "atom", "atom": "comment_present", "params": {}, "children": []},
+                        {"kind": "atom", "atom": "story_mention_present", "params": {}, "children": []},
+                    ],
+                },
+                "summary": {"entrants": 1, "eligible": 0, "provisional": 1, "disqualified": 0},
+                "target_post_url": "https://instagram.test/p/abc123/",
+                "entrants": [
+                    {
+                        "display_label": "entrant.one",
+                        "provider_user_id": "user-1",
+                        "signal_state": {"comment_count": 1, "friend_mention_count": 1, "story_mention_count": 1},
+                        "eligibility_status": "provisional",
+                        "inconclusive_reasons": ["Missing final live check."],
+                        "disqualification_reasons": [],
+                    }
+                ],
+            },
+            {
+                "service": "bluesky",
+                "account_id": "account-bsky",
+                "rules": {
+                    "kind": "all",
+                    "children": [
+                        {"kind": "atom", "atom": "reply_or_quote_present", "params": {}, "children": []},
+                        {"kind": "atom", "atom": "like_present", "params": {}, "children": []},
+                    ],
+                },
+                "summary": {"entrants": 1, "eligible": 0, "provisional": 1, "disqualified": 0},
+                "target_post_url": "https://bsky.app/profile/savannah.test/post/xyz",
+                "entrants": [
+                    {
+                        "display_label": "bsky.one",
+                        "provider_user_id": "did:plc:user-1",
+                        "signal_state": {"reply_present": True, "like_present": True},
+                        "eligibility_status": "provisional",
+                        "inconclusive_reasons": [],
+                        "disqualification_reasons": [],
+                    }
+                ],
+            },
         ],
-    )
+        "pools": [
+            {
+                "pool_key": "instagram",
+                "label": "Instagram",
+                "status": "review_required",
+                "candidate_count": 1,
+                "provisional_winner": {
+                    "display_label": "entrant.one",
+                    "provider_user_id": "user-1",
+                    "inconclusive_reasons": ["Missing final live check."],
+                },
+                "final_winner": None,
+                "selection_log": {
+                    "selection_method": "system_random_shuffle",
+                    "candidate_source": "provisional fallback",
+                    "qualified_member_count": 0,
+                    "candidate_count": 1,
+                    "note": "No fully verified winner was available, so the first provisional candidate was held for manual review.",
+                    "qualified_members": [],
+                    "candidates": [
+                        {
+                            "rank": 1,
+                            "selected": True,
+                            "note": "Selected as the top provisional candidate pending review.",
+                            "entrant": {
+                                "display_label": "entrant.one",
+                                "provider_user_id": "user-1",
+                                "eligibility_status": "provisional",
+                            },
+                        }
+                    ],
+                },
+            }
+        ],
+        "last_error": None,
+    }
     html = templates.env.get_template("scheduled_post_detail.html").render(
         request=_request_with_principal(),
         current_principal=SimpleNamespace(
@@ -382,14 +435,17 @@ def test_scheduled_post_templates_render_instagram_giveaway_controls():
         ),
         auth_enabled=False,
         persona=SimpleNamespace(id="persona-1", name="Savannah"),
-        accounts=[],
+        accounts=[
+            {"id": "account-ig", "label": "Instagram", "service": "instagram"},
+            {"id": "account-bsky", "label": "Bluesky", "service": "bluesky"},
+        ],
         post=SimpleNamespace(
             id="post-1",
             status="draft",
-            post_type="instagram_giveaway",
+            post_type="giveaway",
             giveaway=giveaway,
             display_status="draft",
-            target_account_ids=["account-1"],
+            target_account_ids=["account-ig", "account-bsky"],
             body="Giveaway body",
             scheduled_for=None,
             last_error=None,
@@ -402,12 +458,17 @@ def test_scheduled_post_templates_render_instagram_giveaway_controls():
         service_post_guidance=service_composer_constraints_context(),
     )
 
-    assert "Instagram Giveaway" in html
-    assert "Giveaway Rules" in html
-    assert "Provisional Winner" in html
+    assert "Giveaway Builder" in html
+    assert "Instagram Channel" in html
+    assert "Bluesky Channel" in html
+    assert "Separate" in html
+    assert "Activity Dashboard" in html
+    assert "Entrant Audit Log" in html
+    assert "Selection Log" in html
     assert "Confirm Winner" in html
     assert "Advance To Next Candidate" in html
     assert "Open published Instagram post" in html
+    assert "Open published Bluesky post" in html
 
 
 def test_dashboard_template_shows_recent_scheduled_post_errors():
@@ -495,11 +556,76 @@ def test_dashboard_template_shows_recent_scheduled_post_errors():
             last_run_trigger=None,
             last_run_finished_at=None,
         ),
+        giveaway_activity_monitor={
+            "filters": {"persona_id": "", "service": "", "event_type": ""},
+            "available_services": [
+                {"value": "instagram", "label": "Instagram"},
+                {"value": "bluesky", "label": "Bluesky"},
+            ],
+            "available_event_types": [
+                {"value": "instagram_comment", "label": "Comment"},
+                {"value": "bluesky_reply", "label": "Reply"},
+            ],
+            "metrics": {"campaigns": 1, "channels": 2, "entrants": 2, "activities": 2},
+            "rollups": [
+                {
+                    "label": "Instagram",
+                    "activity_count": 1,
+                    "entrant_count": 1,
+                    "campaign_count": 1,
+                    "latest_activity_at": None,
+                    "event_breakdown": [{"label": "Comment", "count": 1}],
+                },
+                {
+                    "label": "Bluesky",
+                    "activity_count": 1,
+                    "entrant_count": 1,
+                    "campaign_count": 1,
+                    "latest_activity_at": None,
+                    "event_breakdown": [{"label": "Reply", "count": 1}],
+                },
+            ],
+            "recent_events": [
+                {
+                    "created_at": None,
+                    "service_label": "Instagram",
+                    "event_label": "Comment",
+                    "account_label": "Instagram",
+                    "campaign_status": "collecting",
+                    "actor_label": "entrant.one",
+                    "entrant_status": "pending",
+                    "campaign_href": "/scheduled-posts/post-1/page",
+                    "campaign_label": "Spring giveaway",
+                    "persona_name": "Savannah",
+                    "detail": "Count me in @friend",
+                    "activity_href": "https://instagram.example/p/1",
+                    "activity_href_label": "Open Instagram post",
+                },
+                {
+                    "created_at": None,
+                    "service_label": "Bluesky",
+                    "event_label": "Reply",
+                    "account_label": "Bluesky",
+                    "campaign_status": "collecting",
+                    "actor_label": "bsky.one",
+                    "entrant_status": "pending",
+                    "campaign_href": "/scheduled-posts/post-1/page",
+                    "campaign_label": "Spring giveaway",
+                    "persona_name": "Savannah",
+                    "detail": "ready to join",
+                    "activity_href": "https://bsky.app/profile/savannah.test/post/reply-1",
+                    "activity_href_label": "Open reply",
+                },
+            ],
+        },
         admin_mode=False,
         cleared_dashboard_alert_count=0,
         instagram_webhook_observability=None,
     )
 
+    assert "Giveaway Activity Monitor" in html
+    assert "Captured Activities" in html
+    assert "ready to join" in html
     assert "Recent Post Plans" in html
     assert "Instagram session expired." in html
     assert "Failure" in html
@@ -538,6 +664,14 @@ def test_dashboard_template_truncates_long_navbar_identity_text():
             last_run_trigger=None,
             last_run_finished_at=None,
         ),
+        giveaway_activity_monitor={
+            "filters": {"persona_id": "", "service": "", "event_type": ""},
+            "available_services": [],
+            "available_event_types": [],
+            "metrics": {"campaigns": 0, "channels": 0, "entrants": 0, "activities": 0},
+            "rollups": [],
+            "recent_events": [],
+        },
         admin_mode=True,
         cleared_dashboard_alert_count=0,
         instagram_webhook_observability=None,

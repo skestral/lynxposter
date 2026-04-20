@@ -176,6 +176,11 @@ class CanonicalPost(Base):
         cascade="all, delete-orphan",
         uselist=False,
     )
+    giveaway_campaign: Mapped["GiveawayCampaign | None"] = relationship(
+        back_populates="post",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
 
 
 class MediaAttachment(Base):
@@ -273,7 +278,6 @@ class InstagramGiveaway(Base):
     post: Mapped["CanonicalPost"] = relationship(back_populates="instagram_giveaway")
     instagram_account: Mapped["Account"] = relationship()
     entries: Mapped[list["InstagramGiveawayEntry"]] = relationship(back_populates="giveaway", cascade="all, delete-orphan")
-    webhook_events: Mapped[list["InstagramGiveawayWebhookEvent"]] = relationship(back_populates="giveaway")
 
 
 class InstagramGiveawayEntry(Base):
@@ -307,7 +311,7 @@ class InstagramGiveawayWebhookEvent(Base):
     __tablename__ = "instagram_giveaway_webhook_events"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
-    matched_giveaway_id: Mapped[str | None] = mapped_column(ForeignKey("instagram_giveaways.id"), nullable=True, index=True)
+    matched_giveaway_id: Mapped[str | None] = mapped_column(ForeignKey("giveaway_campaigns.id"), nullable=True, index=True)
     matched_post_id: Mapped[str | None] = mapped_column(ForeignKey("canonical_posts.id"), nullable=True, index=True)
     matched_account_id: Mapped[str | None] = mapped_column(ForeignKey("accounts.id"), nullable=True, index=True)
     provider_object_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
@@ -319,7 +323,117 @@ class InstagramGiveawayWebhookEvent(Base):
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
-    giveaway: Mapped["InstagramGiveaway | None"] = relationship(back_populates="webhook_events")
+    giveaway: Mapped["GiveawayCampaign | None"] = relationship(back_populates="webhook_events")
+
+
+class GiveawayCampaign(Base):
+    __tablename__ = "giveaway_campaigns"
+    __table_args__ = (UniqueConstraint("post_id", name="uq_giveaway_campaign_post"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    post_id: Mapped[str] = mapped_column(ForeignKey("canonical_posts.id"), nullable=False, index=True)
+    giveaway_end_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    pool_mode: Mapped[str] = mapped_column(String(32), nullable=False, default="combined")
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="scheduled", index=True)
+    frozen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_evaluated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    post: Mapped["CanonicalPost"] = relationship(back_populates="giveaway_campaign")
+    channels: Mapped[list["GiveawayChannel"]] = relationship(back_populates="campaign", cascade="all, delete-orphan")
+    pools: Mapped[list["GiveawayPoolResult"]] = relationship(back_populates="campaign", cascade="all, delete-orphan")
+    evidence_events: Mapped[list["GiveawayEvidenceEvent"]] = relationship(back_populates="campaign", cascade="all, delete-orphan")
+    webhook_events: Mapped[list["InstagramGiveawayWebhookEvent"]] = relationship(back_populates="giveaway")
+
+
+class GiveawayChannel(Base):
+    __tablename__ = "giveaway_channels"
+    __table_args__ = (UniqueConstraint("campaign_id", "service", name="uq_giveaway_channel_campaign_service"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    campaign_id: Mapped[str] = mapped_column(ForeignKey("giveaway_campaigns.id"), nullable=False, index=True)
+    service: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"), nullable=False, index=True)
+    rules_json: Mapped[dict[str, Any]] = mapped_column(MutableDict.as_mutable(JSON), default=dict, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="scheduled", index=True)
+    target_post_external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    target_post_uri: Mapped[str | None] = mapped_column(Text, nullable=True)
+    target_post_cid: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    target_post_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_collected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    campaign: Mapped["GiveawayCampaign"] = relationship(back_populates="channels")
+    account: Mapped["Account"] = relationship()
+    entrants: Mapped[list["GiveawayEntrant"]] = relationship(back_populates="channel", cascade="all, delete-orphan")
+    evidence_events: Mapped[list["GiveawayEvidenceEvent"]] = relationship(back_populates="channel", cascade="all, delete-orphan")
+
+
+class GiveawayEntrant(Base):
+    __tablename__ = "giveaway_entrants"
+    __table_args__ = (UniqueConstraint("channel_id", "provider_user_id", name="uq_giveaway_entrant_channel_user"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    channel_id: Mapped[str] = mapped_column(ForeignKey("giveaway_channels.id"), nullable=False, index=True)
+    provider_user_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    provider_username: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    display_label: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    signal_state_json: Mapped[dict[str, Any]] = mapped_column(MutableDict.as_mutable(JSON), default=dict, nullable=False)
+    rule_match_details_json: Mapped[dict[str, Any]] = mapped_column(MutableDict.as_mutable(JSON), default=dict, nullable=False)
+    eligibility_status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending", index=True)
+    inconclusive_reasons_json: Mapped[list[str]] = mapped_column(MutableList.as_mutable(JSON), default=list, nullable=False)
+    disqualification_reasons_json: Mapped[list[str]] = mapped_column(MutableList.as_mutable(JSON), default=list, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    channel: Mapped["GiveawayChannel"] = relationship(back_populates="entrants")
+    evidence_events: Mapped[list["GiveawayEvidenceEvent"]] = relationship(back_populates="entrant", cascade="all, delete-orphan")
+
+
+class GiveawayEvidenceEvent(Base):
+    __tablename__ = "giveaway_evidence_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    campaign_id: Mapped[str] = mapped_column(ForeignKey("giveaway_campaigns.id"), nullable=False, index=True)
+    channel_id: Mapped[str] = mapped_column(ForeignKey("giveaway_channels.id"), nullable=False, index=True)
+    entrant_id: Mapped[str | None] = mapped_column(ForeignKey("giveaway_entrants.id"), nullable=True, index=True)
+    provider_event_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    source: Mapped[str] = mapped_column(String(64), nullable=False, default="collector")
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    payload_json: Mapped[dict[str, Any]] = mapped_column(MutableDict.as_mutable(JSON), default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+    campaign: Mapped["GiveawayCampaign"] = relationship(back_populates="evidence_events")
+    channel: Mapped["GiveawayChannel"] = relationship(back_populates="evidence_events")
+    entrant: Mapped["GiveawayEntrant | None"] = relationship(back_populates="evidence_events")
+
+
+class GiveawayPoolResult(Base):
+    __tablename__ = "giveaway_pool_results"
+    __table_args__ = (UniqueConstraint("campaign_id", "pool_key", name="uq_giveaway_pool_campaign_key"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    campaign_id: Mapped[str] = mapped_column(ForeignKey("giveaway_campaigns.id"), nullable=False, index=True)
+    pool_key: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="scheduled", index=True)
+    label: Mapped[str] = mapped_column(String(120), nullable=False, default="Combined")
+    candidate_entry_ids_json: Mapped[list[str]] = mapped_column(MutableList.as_mutable(JSON), default=list, nullable=False)
+    provisional_winner_entry_id: Mapped[str | None] = mapped_column(ForeignKey("giveaway_entrants.id"), nullable=True)
+    final_winner_entry_id: Mapped[str | None] = mapped_column(ForeignKey("giveaway_entrants.id"), nullable=True)
+    frozen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_evaluated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    campaign: Mapped["GiveawayCampaign"] = relationship(back_populates="pools")
+    provisional_winner_entry: Mapped["GiveawayEntrant | None"] = relationship(foreign_keys=[provisional_winner_entry_id])
+    final_winner_entry: Mapped["GiveawayEntrant | None"] = relationship(foreign_keys=[final_winner_entry_id])
 
 
 class AccountSyncState(Base):

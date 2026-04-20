@@ -7,7 +7,8 @@ from sqlalchemy import inspect
 
 from app.config import get_settings
 from app.database import db_session, engine, has_table, init_db
-from app.models import Persona
+from app.models import CanonicalPost, Persona
+from app.services.giveaway_engine import migrate_legacy_instagram_giveaway
 from app.services.importer import import_legacy_install
 from app.services.storage import ensure_storage_dirs
 from app.services.users import ensure_local_admin_user
@@ -62,6 +63,19 @@ def _apply_additive_migrations() -> None:
             if "post_type" not in canonical_post_columns:
                 connection.exec_driver_sql('ALTER TABLE "canonical_posts" ADD COLUMN post_type VARCHAR(32) NOT NULL DEFAULT "standard"')
             connection.exec_driver_sql('CREATE INDEX IF NOT EXISTS "ix_canonical_posts_post_type" ON "canonical_posts" ("post_type")')
+            connection.exec_driver_sql('UPDATE "canonical_posts" SET "post_type" = "giveaway" WHERE "post_type" = "instagram_giveaway"')
+
+
+def _migrate_legacy_giveaways() -> None:
+    with db_session() as session:
+        posts = (
+            session.query(CanonicalPost)
+            .filter(CanonicalPost.origin_kind == "composer")
+            .all()
+        )
+        for post in posts:
+            if post.post_type == "giveaway" and post.giveaway_campaign is None and post.instagram_giveaway is not None:
+                migrate_legacy_instagram_giveaway(session, post)
 
 
 def bootstrap() -> None:
@@ -71,6 +85,7 @@ def bootstrap() -> None:
         _reset_incompatible_database()
     init_db()
     _apply_additive_migrations()
+    _migrate_legacy_giveaways()
     with db_session() as session:
         if not session.query(Persona).first():
             import_legacy_install(session)

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.services.oidc import DEFAULT_OIDC_SCOPE, normalize_oidc_scope
 
@@ -176,39 +176,219 @@ class DeliveryBreakdownRead(BaseModel):
     pending: list[DeliveryStateRead] = Field(default_factory=list)
 
 
-class ScheduledPostBase(BaseModel):
-    persona_id: str
-    body: str = ""
-    post_type: Literal["standard", "instagram_giveaway"] = "standard"
-    status: str = "draft"
-    target_account_ids: list[str] = Field(default_factory=list)
-    publish_overrides_json: dict[str, Any] = Field(default_factory=dict)
-    metadata_json: dict[str, Any] = Field(default_factory=dict)
-    scheduled_for: datetime | None = None
-    giveaway: "InstagramGiveawayConfigInput | None" = None
+class GiveawayRuleNodeInput(BaseModel):
+    kind: Literal["all", "any", "not", "atom"]
+    atom: str | None = None
+    params: dict[str, Any] = Field(default_factory=dict)
+    children: list["GiveawayRuleNodeInput"] = Field(default_factory=list)
+
+    @field_validator("children")
+    @classmethod
+    def _validate_children(cls, value: list["GiveawayRuleNodeInput"], info) -> list["GiveawayRuleNodeInput"]:
+        kind = info.data.get("kind")
+        if kind == "atom" and value:
+            raise ValueError("Atom rules cannot have child rules.")
+        if kind in {"all", "any"} and not value:
+            raise ValueError(f"{kind.upper()} rules require at least one child rule.")
+        if kind == "not" and len(value) != 1:
+            raise ValueError("NOT rules require exactly one child rule.")
+        return value
+
+    @field_validator("atom")
+    @classmethod
+    def _validate_atom(cls, value: str | None, info) -> str | None:
+        kind = info.data.get("kind")
+        if kind == "atom" and not str(value or "").strip():
+            raise ValueError("Atom rules require an atom name.")
+        if kind != "atom" and value is not None:
+            raise ValueError("Group rules do not accept atom names.")
+        return value
 
 
-class ScheduledPostCreate(ScheduledPostBase):
-    pass
+class GiveawayChannelConfigInput(BaseModel):
+    service: Literal["instagram", "bluesky"]
+    account_id: str
+    rules: GiveawayRuleNodeInput
 
 
-class ScheduledPostUpdate(BaseModel):
-    body: str | None = None
-    post_type: Literal["standard", "instagram_giveaway"] | None = None
-    status: str | None = None
-    target_account_ids: list[str] | None = None
-    publish_overrides_json: dict[str, Any] | None = None
-    metadata_json: dict[str, Any] | None = None
-    scheduled_for: datetime | None = None
-    giveaway: "InstagramGiveawayConfigInput | None" = None
+class GiveawayConfigInput(BaseModel):
+    giveaway_end_at: datetime | None = None
+    pool_mode: Literal["combined", "separate"] = "combined"
+    channels: list[GiveawayChannelConfigInput] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_legacy_instagram_shape(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            return value
+        if value.get("channels") is not None:
+            return value
+        legacy_keys = {
+            "min_friend_mentions",
+            "required_keywords",
+            "required_hashtags",
+            "require_story_mention",
+            "require_like",
+            "require_follow",
+        }
+        if not legacy_keys.intersection(value.keys()):
+            return value
+        children: list[dict[str, Any]] = [{"kind": "atom", "atom": "comment_present", "params": {}}]
+        min_friend_mentions = int(value.get("min_friend_mentions") or 0)
+        if min_friend_mentions > 0:
+            children.append(
+                {
+                    "kind": "atom",
+                    "atom": "friend_mention_count_gte",
+                    "params": {"count": min_friend_mentions},
+                }
+            )
+        keywords = [str(item).strip() for item in value.get("required_keywords") or [] if str(item).strip()]
+        if keywords:
+            children.append(
+                {
+                    "kind": "atom",
+                    "atom": "comment_keywords_all",
+                    "params": {"keywords": keywords},
+                }
+            )
+        hashtags = [str(item).strip() for item in value.get("required_hashtags") or [] if str(item).strip()]
+        if hashtags:
+            children.append(
+                {
+                    "kind": "atom",
+                    "atom": "comment_hashtags_all",
+                    "params": {"hashtags": hashtags},
+                }
+            )
+        if bool(value.get("require_story_mention")):
+            children.append({"kind": "atom", "atom": "story_mention_present", "params": {}})
+        if bool(value.get("require_like")):
+            children.append({"kind": "atom", "atom": "like_present", "params": {}})
+        if bool(value.get("require_follow")):
+            children.append({"kind": "atom", "atom": "follow_present", "params": {}})
+        return {
+            "giveaway_end_at": value.get("giveaway_end_at"),
+            "pool_mode": value.get("pool_mode") or "combined",
+            "channels": [
+                {
+                    "service": "instagram",
+                    "account_id": value.get("account_id") or "",
+                    "rules": {"kind": "all", "children": children},
+                }
+            ],
+        }
+
+
+class GiveawayEntrantRead(BaseModel):
+    id: str
+    service: str
+    provider_user_id: str
+    provider_username: str | None = None
+    display_label: str | None = None
+    signal_state: dict[str, Any] = Field(default_factory=dict)
+    rule_match_details: dict[str, Any] = Field(default_factory=dict)
+    activity_total: int = 0
+    activity_breakdown: dict[str, int] = Field(default_factory=dict)
+    checks: list["GiveawayRuleCheckRead"] = Field(default_factory=list)
+    eligibility_status: str = "pending"
+    inconclusive_reasons: list[str] = Field(default_factory=list)
+    disqualification_reasons: list[str] = Field(default_factory=list)
+
+
+class GiveawayRuleCheckRead(BaseModel):
+    atom: str
+    label: str
+    status: Literal["passed", "failed", "inconclusive"]
+    detail: str | None = None
+    params: dict[str, Any] = Field(default_factory=dict)
+
+
+class GiveawaySelectionCandidateRead(BaseModel):
+    rank: int
+    selected: bool = False
+    note: str | None = None
+    entrant: GiveawayEntrantRead
+
+
+class GiveawaySelectionLogRead(BaseModel):
+    selection_method: str
+    candidate_source: str
+    note: str | None = None
+    qualified_member_count: int = 0
+    candidate_count: int = 0
+    qualified_members: list[GiveawayEntrantRead] = Field(default_factory=list)
+    candidates: list[GiveawaySelectionCandidateRead] = Field(default_factory=list)
+
+
+class GiveawayPoolRead(BaseModel):
+    id: str
+    pool_key: str
+    label: str
+    status: str
+    frozen_at: datetime | None = None
+    last_evaluated_at: datetime | None = None
+    last_error: str | None = None
+    candidate_count: int = 0
+    provisional_winner: GiveawayEntrantRead | None = None
+    final_winner: GiveawayEntrantRead | None = None
+    selection_log: GiveawaySelectionLogRead | None = None
+
+
+class GiveawayChannelSummaryRead(BaseModel):
+    entrants: int = 0
+    eligible: int = 0
+    provisional: int = 0
+    disqualified: int = 0
+    engagement_activities: int = 0
+    activity_breakdown: dict[str, int] = Field(default_factory=dict)
+
+
+class GiveawayChannelRead(BaseModel):
+    id: str
+    service: str
+    account_id: str
+    status: str
+    rules: GiveawayRuleNodeInput
+    target_post_external_id: str | None = None
+    target_post_uri: str | None = None
+    target_post_cid: str | None = None
+    target_post_url: str | None = None
+    last_collected_at: datetime | None = None
+    last_error: str | None = None
+    summary: GiveawayChannelSummaryRead = Field(default_factory=GiveawayChannelSummaryRead)
+    entrants: list[GiveawayEntrantRead] = Field(default_factory=list)
+
+
+class GiveawayAuditSummaryRead(BaseModel):
+    entrants: int = 0
+    eligible: int = 0
+    provisional: int = 0
+    disqualified: int = 0
+    engagement_activities: int = 0
+    per_channel: dict[str, GiveawayChannelSummaryRead] = Field(default_factory=dict)
+
+
+class GiveawayRead(BaseModel):
+    id: str
+    post_id: str
+    giveaway_end_at: datetime
+    pool_mode: Literal["combined", "separate"]
+    status: str
+    frozen_at: datetime | None = None
+    last_evaluated_at: datetime | None = None
+    last_error: str | None = None
+    audit_summary: GiveawayAuditSummaryRead = Field(default_factory=GiveawayAuditSummaryRead)
+    channels: list[GiveawayChannelRead] = Field(default_factory=list)
+    pools: list[GiveawayPoolRead] = Field(default_factory=list)
 
 
 class InstagramGiveawayConfigInput(BaseModel):
     giveaway_end_at: datetime | None = None
-    min_friend_mentions: int = Field(default=1, ge=0, le=20)
+    min_friend_mentions: int = 0
     required_keywords: list[str] = Field(default_factory=list)
     required_hashtags: list[str] = Field(default_factory=list)
-    require_story_mention: bool = True
+    require_story_mention: bool = False
     require_like: bool = False
     require_follow: bool = False
 
@@ -262,6 +442,49 @@ class InstagramGiveawayRead(BaseModel):
     entries: list[InstagramGiveawayEntryRead] = Field(default_factory=list)
 
 
+class ScheduledPostBase(BaseModel):
+    persona_id: str
+    body: str = ""
+    post_type: Literal["standard", "giveaway", "instagram_giveaway"] = "standard"
+    status: str = "draft"
+    target_account_ids: list[str] = Field(default_factory=list)
+    publish_overrides_json: dict[str, Any] = Field(default_factory=dict)
+    metadata_json: dict[str, Any] = Field(default_factory=dict)
+    scheduled_for: datetime | None = None
+    giveaway: "GiveawayConfigInput | None" = None
+
+    @field_validator("post_type", mode="before")
+    @classmethod
+    def _normalize_post_type(cls, value: Any) -> str:
+        if str(value or "") == "instagram_giveaway":
+            return "giveaway"
+        return str(value or "standard")
+
+
+class ScheduledPostCreate(ScheduledPostBase):
+    pass
+
+
+class ScheduledPostUpdate(BaseModel):
+    body: str | None = None
+    post_type: Literal["standard", "giveaway", "instagram_giveaway"] | None = None
+    status: str | None = None
+    target_account_ids: list[str] | None = None
+    publish_overrides_json: dict[str, Any] | None = None
+    metadata_json: dict[str, Any] | None = None
+    scheduled_for: datetime | None = None
+    giveaway: "GiveawayConfigInput | None" = None
+
+    @field_validator("post_type", mode="before")
+    @classmethod
+    def _normalize_post_type(cls, value: Any) -> str | None:
+        if value is None:
+            return None
+        if str(value or "") == "instagram_giveaway":
+            return "giveaway"
+        return str(value)
+
+
 class ScheduledPostRead(ScheduledPostBase):
     id: str
     origin_kind: str
@@ -274,7 +497,7 @@ class ScheduledPostRead(ScheduledPostBase):
     deliveries: dict[str, DeliveryStateRead] = Field(default_factory=dict)
     delivery_breakdown: DeliveryBreakdownRead = Field(default_factory=DeliveryBreakdownRead)
     attachments: list[MediaAttachmentRead] = Field(default_factory=list)
-    giveaway: InstagramGiveawayRead | None = None
+    giveaway: GiveawayRead | None = None
 
 
 class SandboxAttachmentInput(BaseModel):
@@ -426,3 +649,9 @@ class UserSettingsUpdate(BaseModel):
 class AdminUserUpdate(BaseModel):
     is_enabled: bool
     timezone: str
+
+
+GiveawayRuleNodeInput.model_rebuild()
+GiveawayEntrantRead.model_rebuild()
+GiveawaySelectionCandidateRead.model_rebuild()
+GiveawaySelectionLogRead.model_rebuild()

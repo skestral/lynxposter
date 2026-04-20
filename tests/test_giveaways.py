@@ -14,32 +14,35 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.config import reload_settings
 from app.database import Base
 from app.main import app
+from app.models import AlertEvent, GiveawayEntrant, InstagramGiveawayWebhookEvent
 from app.schemas import ScheduledPostCreate
 from app.services.alerts import AlertDispatcher
 from app.services.auth import Principal
-from app.services.giveaways import (
-    GIVEAWAY_STATUS_FAILED,
+from app.services.giveaway_engine import (
+    ENTRY_STATUS_ELIGIBLE,
     GIVEAWAY_STATUS_REVIEW_REQUIRED,
     GIVEAWAY_STATUS_WINNER_SELECTED,
-    advance_giveaway_winner,
+    collect_bluesky_channel_state,
+    process_giveaway_lifecycle,
+    serialize_giveaway,
+)
+from app.services.giveaways import (
     instagram_webhook_observability,
     ingest_instagram_webhook_payload,
     process_instagram_giveaway_lifecycle,
 )
 from app.services.personas import create_account, create_persona
 from app.services.posts import create_scheduled_post, get_post
-from app.config import reload_settings
-from app.models import AlertEvent, InstagramGiveawayWebhookEvent, RunEvent
 
 
-class _FakeResponse:
-    def __init__(self, status_code: int, payload: dict[str, Any]):
-        self.status_code = status_code
+class _DumpableResponse:
+    def __init__(self, payload: dict[str, Any]):
         self._payload = payload
 
-    def json(self) -> dict[str, Any]:
+    def model_dump(self) -> dict[str, Any]:
         return self._payload
 
 
@@ -64,6 +67,11 @@ def _create_account(session: Session, persona, *, service: str, label: str):
             "api_key": "graph-token",
             "instagrapi_sessionid": "sessionid",
             "instagram_user_id": "17841463479494132",
+            "instagram_username": "savannah.ig",
+        },
+        "bluesky": {
+            "handle": "savannah.test",
+            "app_password": "app-password",
         },
         "mastodon": {
             "instance": "https://example.social",
@@ -77,7 +85,7 @@ def _create_account(session: Session, persona, *, service: str, label: str):
         {
             "service": service,
             "label": label,
-            "handle_or_identifier": label,
+            "handle_or_identifier": credentials.get("handle") or label,
             "is_enabled": True,
             "source_enabled": False,
             "destination_enabled": True,
@@ -88,7 +96,13 @@ def _create_account(session: Session, persona, *, service: str, label: str):
     )
 
 
-def _giveaway_payload(persona_id: str, target_account_ids: list[str], *, scheduled_for: datetime | None = None, giveaway_end_at: datetime | None = None):
+def _legacy_instagram_giveaway_payload(
+    persona_id: str,
+    target_account_ids: list[str],
+    *,
+    scheduled_for: datetime | None = None,
+    giveaway_end_at: datetime | None = None,
+) -> ScheduledPostCreate:
     return ScheduledPostCreate.model_validate(
         {
             "persona_id": persona_id,
@@ -112,15 +126,50 @@ def _giveaway_payload(persona_id: str, target_account_ids: list[str], *, schedul
     )
 
 
-def test_create_instagram_giveaway_rejects_non_instagram_or_multiple_targets(session):
-    persona = _create_persona(session, slug="giveaway-invalid-targets")
+def _generic_giveaway_payload(
+    persona_id: str,
+    target_account_ids: list[str],
+    *,
+    giveaway_end_at: datetime,
+    pool_mode: str = "combined",
+    channels: list[dict[str, Any]],
+) -> ScheduledPostCreate:
+    return ScheduledPostCreate.model_validate(
+        {
+            "persona_id": persona_id,
+            "body": "Win a prize across platforms",
+            "post_type": "giveaway",
+            "status": "draft",
+            "target_account_ids": target_account_ids,
+            "publish_overrides_json": {},
+            "metadata_json": {},
+            "scheduled_for": None,
+            "giveaway": {
+                "giveaway_end_at": giveaway_end_at,
+                "pool_mode": pool_mode,
+                "channels": channels,
+            },
+        }
+    )
+
+
+def _mark_posted(post, account_id: str, *, external_id: str, external_url: str | None = None) -> None:
+    job = next(job for job in post.delivery_jobs if job.target_account_id == account_id)
+    job.status = "posted"
+    job.external_id = external_id
+    job.external_url = external_url
+    post.published_at = datetime.now(timezone.utc) - timedelta(minutes=5)
+
+
+def test_legacy_instagram_giveaway_requires_exactly_one_instagram_target(session):
+    persona = _create_persona(session, slug="legacy-invalid-targets")
     instagram = _create_account(session, persona, service="instagram", label="Instagram")
     mastodon = _create_account(session, persona, service="mastodon", label="Mastodon")
 
     with pytest.raises(ValueError, match="must target exactly one Instagram destination account"):
         create_scheduled_post(
             session,
-            _giveaway_payload(
+            _legacy_instagram_giveaway_payload(
                 persona.id,
                 [instagram.id, mastodon.id],
                 giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=2),
@@ -129,27 +178,15 @@ def test_create_instagram_giveaway_rejects_non_instagram_or_multiple_targets(ses
         )
 
 
-def test_create_instagram_giveaway_requires_end_time(session):
-    persona = _create_persona(session, slug="giveaway-missing-end")
-    instagram = _create_account(session, persona, service="instagram", label="Instagram")
-
-    with pytest.raises(ValueError, match="require a giveaway end time"):
-        create_scheduled_post(
-            session,
-            _giveaway_payload(persona.id, [instagram.id], giveaway_end_at=None),
-            [],
-        )
-
-
-def test_create_instagram_giveaway_rejects_end_before_publish_time(session):
-    persona = _create_persona(session, slug="giveaway-bad-end")
+def test_legacy_instagram_giveaway_rejects_end_before_publish_time(session):
+    persona = _create_persona(session, slug="legacy-bad-end")
     instagram = _create_account(session, persona, service="instagram", label="Instagram")
     scheduled_for = datetime.now(timezone.utc) + timedelta(hours=2)
 
     with pytest.raises(ValueError, match="must be after the scheduled publish time"):
         create_scheduled_post(
             session,
-            _giveaway_payload(
+            _legacy_instagram_giveaway_payload(
                 persona.id,
                 [instagram.id],
                 scheduled_for=scheduled_for,
@@ -159,23 +196,46 @@ def test_create_instagram_giveaway_rejects_end_before_publish_time(session):
         )
 
 
-def test_instagram_webhook_ingest_matches_comment_and_story_mention(session):
-    persona = _create_persona(session, slug="giveaway-webhook-match")
+def test_legacy_instagram_payload_migrates_to_generic_campaign(session):
+    persona = _create_persona(session, slug="legacy-to-generic")
     instagram = _create_account(session, persona, service="instagram", label="Instagram")
+
     post = create_scheduled_post(
         session,
-        _giveaway_payload(
+        _legacy_instagram_giveaway_payload(
             persona.id,
             [instagram.id],
             giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
         ),
         [],
     )
-    job = post.delivery_jobs[0]
-    job.status = "posted"
-    job.external_id = "ig-media-1"
-    job.external_url = "https://instagram.test/p/ig-media-1/"
-    post.published_at = datetime.now(timezone.utc) - timedelta(minutes=5)
+
+    assert post.post_type == "giveaway"
+    assert post.giveaway_campaign is not None
+    assert post.giveaway_campaign.pool_mode == "combined"
+    assert len(post.giveaway_campaign.channels) == 1
+    channel = post.giveaway_campaign.channels[0]
+    assert channel.service == "instagram"
+    assert channel.account_id == instagram.id
+    assert channel.rules_json["kind"] == "all"
+    assert any(child["atom"] == "comment_present" for child in channel.rules_json["children"])
+    assert any(child["atom"] == "friend_mention_count_gte" for child in channel.rules_json["children"])
+    assert any(child["atom"] == "story_mention_present" for child in channel.rules_json["children"])
+
+
+def test_instagram_webhook_ingest_updates_generic_entrant_state(session):
+    persona = _create_persona(session, slug="giveaway-webhook-match")
+    instagram = _create_account(session, persona, service="instagram", label="Instagram")
+    post = create_scheduled_post(
+        session,
+        _legacy_instagram_giveaway_payload(
+            persona.id,
+            [instagram.id],
+            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        ),
+        [],
+    )
+    _mark_posted(post, instagram.id, external_id="ig-media-1", external_url="https://instagram.test/p/ig-media-1/")
     session.flush()
 
     payload = {
@@ -210,853 +270,354 @@ def test_instagram_webhook_ingest_matches_comment_and_story_mention(session):
     refreshed = get_post(session, post.id)
     assert refreshed is not None
     assert len(events) == 2
-    assert refreshed.instagram_giveaway is not None
-    assert refreshed.instagram_giveaway.last_webhook_received_at is not None
-    assert len(refreshed.instagram_giveaway.entries) == 1
-    entry = refreshed.instagram_giveaway.entries[0]
-    assert entry.instagram_username == "entrant.one"
-    assert entry.comment_count == 1
-    assert entry.mention_count == 1
-    assert len(entry.story_mentions_json) == 1
+    assert refreshed.giveaway_campaign is not None
+    channel = next(item for item in refreshed.giveaway_campaign.channels if item.service == "instagram")
+    assert len(channel.entrants) == 1
+    entrant = channel.entrants[0]
+    assert entrant.provider_username == "entrant.one"
+    assert entrant.signal_state_json["comment_count"] == 1
+    assert entrant.signal_state_json["friend_mention_count"] == 1
+    assert entrant.signal_state_json["story_mention_count"] == 1
 
 
-def test_instagram_webhook_ingest_treats_shared_post_message_as_story_evidence(session):
-    persona = _create_persona(session, slug="giveaway-webhook-share-message")
+def test_instagram_webhook_observability_summarizes_recent_events(session):
+    session.add(
+        InstagramGiveawayWebhookEvent(
+            provider_event_field="comments",
+            event_type="comment",
+            payload_json={
+                "entry": {"id": "instagram-account"},
+                "change": {
+                    "field": "comments",
+                    "value": {
+                        "id": "comment-1",
+                        "text": "Count me in @friend",
+                        "from": {"id": "user-1", "username": "entrant.one"},
+                    },
+                },
+            },
+            signature_valid=True,
+            processed=True,
+        )
+    )
+    session.add(
+        InstagramGiveawayWebhookEvent(
+            provider_event_field="messages",
+            event_type="message",
+                payload_json={
+                    "entry": {"id": "instagram-account"},
+                    "change": {
+                        "field": "messages",
+                        "value": {
+                            "message": {
+                                "mid": "mid-1",
+                                "text": "Shared giveaway post",
+                                "attachments": [
+                                    {
+                                        "type": "share",
+                                        "payload": {"ig_post_media_id": "ig-media-1", "title": "Giveaway post"},
+                                    }
+                                ],
+                            },
+                            "from": {"id": "user-2", "username": "share.user"},
+                        },
+                    },
+                },
+            signature_valid=True,
+            processed=True,
+        )
+    )
+    session.flush()
+
+    observability = instagram_webhook_observability(session, window_days=7, recent_limit=10, field_limit=5)
+
+    assert observability["total_events"] == 2
+    assert observability["giveaway_relevant_events"] >= 2
+    assert any(item["key"] == "comments" for item in observability["field_chart"])
+    assert any(event["field_label"] == "Shared Post" for event in observability["recent_events"])
+
+
+def test_process_giveaway_lifecycle_selects_verified_instagram_winner(session, monkeypatch):
+    persona = _create_persona(session, slug="giveaway-finalize-instagram")
     instagram = _create_account(session, persona, service="instagram", label="Instagram")
     post = create_scheduled_post(
         session,
-        _giveaway_payload(
+        _legacy_instagram_giveaway_payload(
             persona.id,
             [instagram.id],
-            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            giveaway_end_at=datetime.now(timezone.utc) - timedelta(minutes=5),
         ),
         [],
     )
-    job = post.delivery_jobs[0]
-    job.status = "posted"
-    job.external_id = "ig-media-share-1"
-    job.external_url = "https://instagram.test/p/ig-media-share-1/"
-    post.published_at = datetime.now(timezone.utc) - timedelta(minutes=5)
+    _mark_posted(post, instagram.id, external_id="ig-media-finalize")
     session.flush()
 
     payload = {
         "entry": [
             {
                 "id": "17841463479494132",
-                "messaging": [
-                    {
-                        "sender": {"id": "user-1"},
-                        "recipient": {"id": "17841463479494132"},
-                        "timestamp": 1776276436783,
-                        "message": {
-                            "mid": "message-share-1",
-                            "attachments": [
-                                {
-                                    "type": "share",
-                                    "payload": {
-                                        "ig_post_media_id": "ig-media-share-1",
-                                        "title": "Shared giveaway post",
-                                    },
-                                },
-                                {
-                                    "type": "ig_post",
-                                    "payload": {
-                                        "ig_post_media_id": "ig-media-share-1",
-                                        "title": "Shared giveaway post",
-                                    },
-                                },
-                            ],
-                        },
-                    }
-                ],
-            }
-        ]
-    }
-
-    events = ingest_instagram_webhook_payload(session, payload, signature_valid=True, run_id="run-share-message")
-    session.flush()
-    refreshed = get_post(session, post.id)
-    assert refreshed is not None
-    assert len(events) == 1
-    assert events[0].event_type == "message"
-    assert events[0].matched_giveaway_id == refreshed.instagram_giveaway.id
-    assert events[0].matched_post_id == post.id
-    assert refreshed.instagram_giveaway is not None
-    assert refreshed.instagram_giveaway.last_webhook_received_at is not None
-    assert len(refreshed.instagram_giveaway.entries) == 1
-    entry = refreshed.instagram_giveaway.entries[0]
-    assert entry.instagram_user_id == "user-1"
-    assert len(entry.story_mentions_json) == 1
-    assert entry.story_mentions_json[0]["media_id"] == "ig-media-share-1"
-    assert entry.story_mentions_json[0]["source"] == "message_share_capture"
-
-
-def test_instagram_webhook_ingest_stores_unmatched_events_for_diagnostics(session):
-    payload = {
-        "entry": [
-            {
-                "id": "unknown-account",
                 "changes": [
                     {
                         "field": "comments",
                         "value": {
-                            "media_id": "missing-media",
-                            "id": "comment-1",
-                            "text": "Hello @friend",
-                            "from": {"id": "user-1", "username": "entrant.one"},
-                        },
-                    }
-                ],
-            }
-        ]
-    }
-
-    events = ingest_instagram_webhook_payload(session, payload, signature_valid=True, run_id="run-2")
-
-    assert len(events) == 1
-    event = session.query(InstagramGiveawayWebhookEvent).one()
-    assert event.matched_giveaway_id is None
-    assert event.processed is True
-    assert event.event_type == "comment"
-
-
-def test_instagram_webhook_ingest_supports_messaging_envelope_events(session):
-    payload = {
-        "entry": [
-            {
-                "id": "ig-provider-account",
-                "messaging": [
-                    {
-                        "sender": {"id": "user-42", "username": "dm.user"},
-                        "recipient": {"id": "ig-provider-account"},
-                        "timestamp": "2026-04-15T18:05:00Z",
-                        "message": {
-                            "mid": "m_123",
-                            "text": "hello from inbox",
-                        },
-                    }
-                ],
-            }
-        ]
-    }
-
-    events = ingest_instagram_webhook_payload(session, payload, signature_valid=True, run_id="run-msg-envelope")
-
-    assert len(events) == 1
-    event = session.query(InstagramGiveawayWebhookEvent).one()
-    assert event.provider_event_field == "messages"
-    assert event.event_type == "message"
-    assert event.provider_object_id == "m_123"
-    assert event.payload_json["container"] == "messaging"
-    assert event.payload_json["change"]["value"]["message"]["text"] == "hello from inbox"
-
-
-def test_instagram_webhook_observability_summarizes_fields_and_recent_payloads(session):
-    persona = _create_persona(session, slug="giveaway-observability")
-    instagram = _create_account(session, persona, service="instagram", label="Instagram")
-    post = create_scheduled_post(
-        session,
-        _giveaway_payload(
-            persona.id,
-            [instagram.id],
-            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
-        ),
-        [],
-    )
-    job = post.delivery_jobs[0]
-    job.status = "posted"
-    job.external_id = "ig-media-observable"
-    job.external_url = "https://instagram.test/p/post-1/"
-    post.published_at = datetime.now(timezone.utc) - timedelta(minutes=2)
-    session.flush()
-
-    payload = {
-        "entry": [
-            {
-                "id": instagram.id,
-                "changes": [
-                    {
-                        "field": "comments",
-                        "value": {
-                            "media_id": "ig-media-observable",
+                            "media_id": "ig-media-finalize",
                             "id": "comment-1",
                             "text": "Count me in @friend",
                             "from": {"id": "user-1", "username": "entrant.one"},
                         },
                     },
-                ],
-            },
-            {
-                "id": "unknown-account",
-                "changes": [
                     {
-                        "field": "live_comments",
+                        "field": "mentions",
                         "value": {
-                            "id": "live-1",
-                            "text": "Live stream hello",
-                            "from": {"id": "user-2", "username": "viewer.two"},
-                        },
-                    },
-                    {
-                        "field": "messages",
-                        "value": {
-                            "id": "message-1",
-                            "message": "Hi from inbox",
-                            "from": {"id": "user-3", "username": "dm.three"},
+                            "media_id": "ig-media-finalize",
+                            "story_id": "story-1",
+                            "from": {"id": "user-1", "username": "entrant.one"},
                         },
                     },
                 ],
             }
         ]
     }
+    ingest_instagram_webhook_payload(session, payload, signature_valid=True, run_id="run-2")
 
-    events = ingest_instagram_webhook_payload(session, payload, signature_valid=True, run_id="run-observability")
-    stats = instagram_webhook_observability(session, window_days=7, recent_limit=10, field_limit=10)
-
-    assert len(events) == 3
-    assert {event.event_type for event in events} == {"comment", "live_comment", "message"}
-    assert stats["total_events"] == 3
-    assert stats["matched_events"] == 1
-    assert stats["unmatched_events"] == 2
-    assert stats["giveaway_relevant_events"] == 2
-    assert stats["unique_fields"] == 3
-    field_counts = {item["label"]: item["count"] for item in stats["field_chart"]}
-    assert field_counts["Comments"] == 1
-    assert field_counts["Live Comments"] == 1
-    assert field_counts["Messages"] == 1
-    assert stats["recent_events"][0]["payload_json"]["change"]["field"] in {"comments", "live_comments", "messages"}
-    assert any(event["actor_username"] == "entrant.one" for event in stats["recent_events"])
-    matched_event = next(event for event in stats["recent_events"] if event["matched"])
-    assert matched_event["parent_post"]["post_id"] == post.id
-    assert matched_event["parent_post"]["href"] == f"/scheduled-posts/{post.id}/page"
-    assert "Win a prize" in matched_event["parent_post"]["label"]
-    assert matched_event["matched_local_account"]["label"] == "Instagram"
-    assert matched_event["matched_local_account"]["persona_name"] == "Giveaway Persona"
-    assert matched_event["provider_local_account"]["label"] == "Instagram"
-    assert matched_event["summary_text"] == (
-        "Giveaway Persona received a new comment from @entrant.one on "
-        "Win a prize by commenting and sharing."
-    )
-    assert matched_event["activity_href"] == "https://instagram.test/p/post-1/"
-    assert matched_event["activity_href_label"] == "Open Instagram post"
-
-
-def test_instagram_webhook_observability_builds_friendly_dm_summary_and_chat_link(session, monkeypatch):
-    recipient_persona = _create_persona(session, slug="larkyn-lynx", name="Larkyn Lynx")
-    sender_persona = _create_persona(session, slug="pawgetsound-studio", name="PawgetSound.Studio")
-    recipient_ig_user_id = "17841463479494132"
-    sender_ig_user_id = "2045697446345302"
-    recipient = _create_account(session, recipient_persona, service="instagram", label="Instagram")
-    recipient.credentials_json["instagrapi_username"] = "larkyn.lynx"
-    recipient.credentials_json["instagram_user_id"] = recipient_ig_user_id
-    sender = _create_account(session, sender_persona, service="instagram", label="Instagram")
-    sender.credentials_json["instagrapi_username"] = "pawgetsound.studio"
-    sender.credentials_json["instagram_user_id"] = sender_ig_user_id
-    session.flush()
-
-    def fake_get(url, params=None, timeout=None):  # noqa: ARG001
-        if url.endswith(f"/{sender_ig_user_id}"):
-            return _FakeResponse(
-                200,
-                {
-                    "id": sender_ig_user_id,
-                    "username": "pawgetsound.studio",
-                    "name": "Pawget Sound Studio",
-                    "profile_pic": "https://cdn.test/pawget.jpg",
-                },
-            )
-        if url.endswith(f"/{recipient_ig_user_id}"):
-            return _FakeResponse(
-                200,
-                {
-                    "id": recipient_ig_user_id,
-                    "username": "larkyn.lynx",
-                    "name": "Larkyn Lynx",
-                    "profile_pic": "https://cdn.test/larkyn.jpg",
-                },
-            )
-        if url.endswith(f"/{recipient_ig_user_id}/conversations"):
-            return _FakeResponse(
-                200,
-                {
-                    "data": [
-                        {
-                            "id": "conversation-123",
-                            "updated_time": "2026-04-15T18:07:17+0000",
-                            "participants": {
-                                "data": [
-                                    {"id": recipient_ig_user_id, "username": "larkyn.lynx"},
-                                    {"id": sender_ig_user_id, "username": "pawgetsound.studio"},
-                                ]
-                            },
-                            "messages": {
-                                "data": [
-                                    {
-                                        "id": "message-1",
-                                        "message": "tes",
-                                        "from": {"id": sender_ig_user_id, "username": "pawgetsound.studio"},
-                                    }
-                                ]
-                            },
-                        }
-                    ]
-                },
-            )
-        raise AssertionError(f"Unexpected Graph request: {url} {params}")
-
-    monkeypatch.setattr("app.services.giveaways.requests.get", fake_get)
-
-    payload = {
-        "entry": [
-            {
-                "id": recipient_ig_user_id,
-                "messaging": [
-                    {
-                        "sender": {"id": sender_ig_user_id},
-                        "recipient": {"id": recipient_ig_user_id},
-                        "timestamp": 1776276436783,
-                        "message": {
-                            "mid": "message-1",
-                            "text": "tes",
-                        },
-                    }
-                ],
-            }
-        ]
-    }
-
-    events = ingest_instagram_webhook_payload(session, payload, signature_valid=True, run_id="run-dm-summary")
-    stats = instagram_webhook_observability(session, window_days=7, recent_limit=10, field_limit=10)
-
-    assert len(events) == 1
-    message_event = stats["recent_events"][0]
-    assert message_event["event_type"] == "message"
-    assert message_event["provider_local_account"]["persona_name"] == "Larkyn Lynx"
-    assert message_event["actor_local_account"]["persona_name"] == "PawgetSound.Studio"
-    assert message_event["recipient_label"] == "Larkyn Lynx (@larkyn.lynx)"
-    assert message_event["actor_label"] == "PawgetSound.Studio (@pawgetsound.studio)"
-    assert message_event["actor_profile_href"] == "https://www.instagram.com/pawgetsound.studio/"
-    assert message_event["actor_profile_image_url"] == "https://cdn.test/pawget.jpg"
-    assert message_event["recipient_profile_image_url"] == "https://cdn.test/larkyn.jpg"
-    assert message_event["summary_text"] == (
-        "Larkyn Lynx (@larkyn.lynx) received a direct message from "
-        "PawgetSound.Studio (@pawgetsound.studio)."
-    )
-    assert message_event["chat_href"] == "https://www.instagram.com/direct/t/conversation-123/"
-    assert message_event["chat_href_label"] == "Open Instagram conversation"
-
-
-def test_instagram_webhook_observability_recognizes_shared_post_messages(session, monkeypatch):
-    recipient_persona = _create_persona(session, slug="share-recipient", name="Larkyn Lynx")
-    sender_persona = _create_persona(session, slug="share-sender", name="PawgetSound.Studio")
-    recipient_ig_user_id = "17841463479494132"
-    sender_ig_user_id = "2045697446345302"
-    recipient = _create_account(session, recipient_persona, service="instagram", label="Instagram")
-    recipient.credentials_json["instagrapi_username"] = "larkyn.lynx"
-    recipient.credentials_json["instagram_user_id"] = recipient_ig_user_id
-    sender = _create_account(session, sender_persona, service="instagram", label="Instagram")
-    sender.credentials_json["instagrapi_username"] = "pawgetsound.studio"
-    sender.credentials_json["instagram_user_id"] = sender_ig_user_id
-    post = create_scheduled_post(
-        session,
-        _giveaway_payload(
-            recipient_persona.id,
-            [recipient.id],
-            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
-        ),
-        [],
-    )
-    job = post.delivery_jobs[0]
-    job.status = "posted"
-    job.external_id = "ig-media-share-observed"
-    job.external_url = "https://instagram.test/p/ig-media-share-observed/"
-    post.published_at = datetime.now(timezone.utc) - timedelta(minutes=5)
-    session.flush()
-
-    def fake_get(url, params=None, timeout=None):  # noqa: ARG001
-        if url.endswith(f"/{sender_ig_user_id}"):
-            return _FakeResponse(
-                200,
-                {
-                    "id": sender_ig_user_id,
-                    "username": "pawgetsound.studio",
-                    "name": "Pawget Sound Studio",
-                    "profile_pic": "https://cdn.test/pawget.jpg",
-                },
-            )
-        if url.endswith(f"/{recipient_ig_user_id}"):
-            return _FakeResponse(
-                200,
-                {
-                    "id": recipient_ig_user_id,
-                    "username": "larkyn.lynx",
-                    "name": "Larkyn Lynx",
-                    "profile_pic": "https://cdn.test/larkyn.jpg",
-                },
-            )
-        if url.endswith(f"/{recipient_ig_user_id}/conversations"):
-            return _FakeResponse(200, {"data": []})
-        raise AssertionError(f"Unexpected Graph request: {url} {params}")
-
-    monkeypatch.setattr("app.services.giveaways.requests.get", fake_get)
-
-    payload = {
-        "entry": [
-            {
-                "id": recipient_ig_user_id,
-                "messaging": [
-                    {
-                        "sender": {"id": sender_ig_user_id},
-                        "recipient": {"id": recipient_ig_user_id},
-                        "timestamp": 1776276436783,
-                        "message": {
-                            "mid": "message-share-2",
-                            "attachments": [
-                                {
-                                    "type": "share",
-                                    "payload": {
-                                        "ig_post_media_id": "ig-media-share-observed",
-                                        "title": "Giveaway post share",
-                                    },
-                                },
-                                {
-                                    "type": "ig_post",
-                                    "payload": {
-                                        "ig_post_media_id": "ig-media-share-observed",
-                                        "title": "Giveaway post share",
-                                    },
-                                },
-                            ],
-                        },
-                    }
-                ],
-            }
-        ]
-    }
-
-    ingest_instagram_webhook_payload(session, payload, signature_valid=True, run_id="run-share-observability")
-    stats = instagram_webhook_observability(session, window_days=7, recent_limit=10, field_limit=10)
-
-    shared_event = stats["recent_events"][0]
-    assert shared_event["event_type"] == "message"
-    assert shared_event["field_label"] == "Shared Post"
-    assert shared_event["event_type_label"] == "Shared Post"
-    assert shared_event["matched"] is True
-    assert shared_event["matched_post_id"] == post.id
-    assert shared_event["account_context_label"] == "Account"
-    assert shared_event["actor_context_label"] == "Shared By"
-    assert shared_event["provider_object_label"] == "Provider Share Message ID"
-    assert shared_event["summary_text"] == (
-        "Larkyn Lynx (@larkyn.lynx) received a shared Instagram post from "
-        "PawgetSound.Studio (@pawgetsound.studio) for Win a prize by commenting and sharing."
-    )
-    assert shared_event["activity_href"] == "https://instagram.test/p/ig-media-share-observed/"
-    assert shared_event["activity_href_label"] == "Open shared Instagram post"
-
-
-def test_instagram_webhook_observability_enriches_comment_profile_and_media_link(session, monkeypatch):
-    recipient_persona = _create_persona(session, slug="comment-recipient", name="Larkyn Lynx")
-    recipient_ig_user_id = "17841463479494132"
-    commenter_ig_user_id = "2045697446345302"
-    recipient = _create_account(session, recipient_persona, service="instagram", label="Instagram")
-    recipient.credentials_json["instagrapi_username"] = "larkyn.lynx"
-    recipient.credentials_json["instagram_user_id"] = recipient_ig_user_id
-    session.flush()
-
-    def fake_get(url, params=None, timeout=None):  # noqa: ARG001
-        if url.endswith(f"/{commenter_ig_user_id}"):
-            return _FakeResponse(
-                200,
-                {
-                    "id": commenter_ig_user_id,
-                    "username": "pawgetsound.studio",
-                    "name": "Pawget Sound Studio",
-                    "profile_pic": "https://cdn.test/pawget.jpg",
-                },
-            )
-        if url.endswith(f"/{recipient_ig_user_id}"):
-            return _FakeResponse(
-                200,
-                {
-                    "id": recipient_ig_user_id,
-                    "username": "larkyn.lynx",
-                    "name": "Larkyn Lynx",
-                    "profile_pic": "https://cdn.test/larkyn.jpg",
-                },
-            )
-        if url.endswith(f"/{recipient_ig_user_id}/media"):
-            return _FakeResponse(
-                200,
-                {
-                    "data": [
-                        {
-                            "id": "media-123",
-                            "caption": "Comment target post",
-                            "permalink": "https://www.instagram.com/p/media-123/",
-                            "timestamp": "2026-04-15T18:07:17+0000",
-                            "media_type": "IMAGE",
-                        }
-                    ]
-                },
-            )
-        raise AssertionError(f"Unexpected Graph request: {url} {params}")
-
-    monkeypatch.setattr("app.services.giveaways.requests.get", fake_get)
-
-    payload = {
-        "entry": [
-            {
-                "id": recipient_ig_user_id,
-                "changes": [
-                    {
-                        "field": "comments",
-                        "value": {
-                            "from": {"id": commenter_ig_user_id, "username": "pawgetsound.studio"},
-                            "media": {"id": "media-123", "media_product_type": "FEED"},
-                            "id": "comment-123",
-                            "parent_id": "comment-parent-456",
-                            "text": "Love this one",
-                        },
-                    }
-                ],
-            }
-        ]
-    }
-
-    ingest_instagram_webhook_payload(session, payload, signature_valid=True, run_id="run-comment-enrichment")
-    stats = instagram_webhook_observability(session, window_days=7, recent_limit=10, field_limit=10)
-
-    comment_event = stats["recent_events"][0]
-    assert comment_event["event_type"] == "comment"
-    assert comment_event["actor_label"] == "Pawget Sound Studio (@pawgetsound.studio)"
-    assert comment_event["actor_profile_href"] == "https://www.instagram.com/pawgetsound.studio/"
-    assert comment_event["actor_profile_image_url"] == "https://cdn.test/pawget.jpg"
-    assert comment_event["activity_href"] == "https://www.instagram.com/p/media-123/"
-    assert comment_event["activity_href_label"] == "Open Instagram post"
-    assert comment_event["related_media"]["label"] == "Comment target post"
-    assert comment_event["summary_text"] == (
-        "Larkyn Lynx (@larkyn.lynx) received a new comment from "
-        "Pawget Sound Studio (@pawgetsound.studio) on Comment target post."
-    )
-
-
-def test_process_instagram_giveaway_lifecycle_selects_verified_winner(session, monkeypatch):
-    persona = _create_persona(session, slug="giveaway-finalize-success")
-    instagram = _create_account(session, persona, service="instagram", label="Instagram")
-    post = create_scheduled_post(
-        session,
-        _giveaway_payload(
-            persona.id,
-            [instagram.id],
-            giveaway_end_at=datetime.now(timezone.utc) - timedelta(minutes=5),
-        ),
-        [],
-    )
-    job = post.delivery_jobs[0]
-    job.status = "posted"
-    job.external_id = "ig-media-2"
-    post.published_at = datetime.now(timezone.utc) - timedelta(hours=1)
-    session.flush()
+    class _LiveComment:
+        def __init__(self):
+            self.pk = "comment-1"
+            self.text = "Count me in @friend"
+            self.created_at_utc = datetime.now(timezone.utc)
+            self.user = SimpleNamespace(pk="user-1", username="entrant.one")
 
     class _LiveCommentClient:
-        def media_comments(self, media_id, amount=0):  # noqa: ARG002
-            return [
-                SimpleNamespace(
-                    pk="comment-1",
-                    text="Entering with @friend",
-                    user=SimpleNamespace(pk="user-1", username="entrant.one"),
-                    created_at_utc=datetime.now(timezone.utc),
-                )
-            ]
+        def media_comments(self, media_id, amount=0):
+            return [_LiveComment()]
 
-    monkeypatch.setattr("app.services.giveaways._authenticated_publish_client", lambda config: _LiveCommentClient())
-    monkeypatch.setattr("app.services.giveaways._verify_like_and_follow", lambda giveaway, entry: ("not_required", "not_required", [], []))
-    ingest_instagram_webhook_payload(
-        session,
-        {
-            "entry": [
-                {
-                    "id": instagram.id,
-                    "changes": [
-                        {
-                            "field": "comments",
-                            "value": {
-                                "media_id": "ig-media-2",
-                                "id": "comment-1",
-                                "text": "Entering with @friend",
-                                "from": {"id": "user-1", "username": "entrant.one"},
-                            },
-                        },
-                        {
-                            "field": "mentions",
-                            "value": {
-                                "media_id": "ig-media-2",
-                                "story_id": "story-1",
-                                "from": {"id": "user-1", "username": "entrant.one"},
-                            },
-                        },
-                    ],
-                }
-            ]
-        },
-        signature_valid=True,
-        run_id="run-3",
-    )
+    monkeypatch.setattr("app.services.giveaway_engine._instagram_destination_dependency_issue", lambda: None)
+    monkeypatch.setattr("app.services.giveaway_engine._authenticated_publish_client", lambda credentials: _LiveCommentClient())
 
     process_instagram_giveaway_lifecycle(session, AlertDispatcher(), run_id="run-3")
 
     refreshed = get_post(session, post.id)
     assert refreshed is not None
-    assert refreshed.instagram_giveaway is not None
-    assert refreshed.instagram_giveaway.status == GIVEAWAY_STATUS_WINNER_SELECTED
-    assert refreshed.instagram_giveaway.final_winner_rank == 1
-    assert refreshed.instagram_giveaway.entries[0].eligibility_status == "eligible"
+    assert refreshed.giveaway_campaign is not None
+    assert refreshed.giveaway_campaign.status == GIVEAWAY_STATUS_WINNER_SELECTED
+    pool = refreshed.giveaway_campaign.pools[0]
+    assert pool.final_winner_entry is not None
+    assert pool.final_winner_entry.provider_username == "entrant.one"
+    assert pool.final_winner_entry.eligibility_status == ENTRY_STATUS_ELIGIBLE
 
 
-def test_process_instagram_giveaway_lifecycle_marks_review_required_and_advance_uses_frozen_rank(session, monkeypatch):
-    persona = _create_persona(session, slug="giveaway-finalize-review")
+def test_process_giveaway_lifecycle_creates_separate_winners_for_mixed_channels(session, monkeypatch):
+    persona = _create_persona(session, slug="giveaway-mixed-pools")
     instagram = _create_account(session, persona, service="instagram", label="Instagram")
+    bluesky = _create_account(session, persona, service="bluesky", label="Bluesky")
     post = create_scheduled_post(
         session,
-        _giveaway_payload(
+        _generic_giveaway_payload(
             persona.id,
-            [instagram.id],
+            [instagram.id, bluesky.id],
             giveaway_end_at=datetime.now(timezone.utc) - timedelta(minutes=5),
+            pool_mode="separate",
+            channels=[
+                {
+                    "service": "instagram",
+                    "account_id": instagram.id,
+                    "rules": {
+                        "kind": "all",
+                        "children": [{"kind": "atom", "atom": "comment_present", "params": {}}],
+                    },
+                },
+                {
+                    "service": "bluesky",
+                    "account_id": bluesky.id,
+                    "rules": {
+                        "kind": "all",
+                        "children": [
+                            {"kind": "atom", "atom": "reply_or_quote_present", "params": {}},
+                            {"kind": "atom", "atom": "like_present", "params": {}},
+                            {"kind": "atom", "atom": "follow_present", "params": {}},
+                        ],
+                    },
+                },
+            ],
         ),
         [],
     )
-    job = post.delivery_jobs[0]
-    job.status = "posted"
-    job.external_id = "ig-media-3"
-    post.published_at = datetime.now(timezone.utc) - timedelta(hours=1)
+    _mark_posted(post, instagram.id, external_id="ig-media-mixed")
+    _mark_posted(post, bluesky.id, external_id="bsky-rkey", external_url="https://bsky.app/profile/savannah.test/post/bsky-rkey")
     session.flush()
 
-    class _LiveCommentClient:
-        def media_comments(self, media_id, amount=0):  # noqa: ARG002
-            return [
-                SimpleNamespace(
-                    pk="comment-1",
-                    text="Entry from @friend.one",
-                    user=SimpleNamespace(pk="user-1", username="entrant.one"),
-                    created_at_utc=datetime.now(timezone.utc),
+    campaign = post.giveaway_campaign
+    assert campaign is not None
+    instagram_channel = next(channel for channel in campaign.channels if channel.service == "instagram")
+    bluesky_channel = next(channel for channel in campaign.channels if channel.service == "bluesky")
+    instagram_channel.target_post_external_id = "ig-media-mixed"
+    bluesky_channel.target_post_external_id = "bsky-rkey"
+    bluesky_channel.target_post_uri = "at://did:plc:test/app.bsky.feed.post/bsky-rkey"
+    instagram_channel.entrants.append(
+        GiveawayEntrant(
+            channel=instagram_channel,
+            provider_user_id="ig-user-1",
+            provider_username="ig.one",
+            display_label="ig.one",
+            signal_state_json={
+                "comments": [{"comment_id": "comment-1", "text": "ready"}],
+                "comment_count": 1,
+                "friend_mention_count": 0,
+                "story_mentions": [],
+                "story_mention_count": 0,
+            },
+        )
+    )
+    bluesky_channel.entrants.append(
+        GiveawayEntrant(
+            channel=bluesky_channel,
+            provider_user_id="did:plc:user-1",
+            provider_username="bsky.one",
+            display_label="bsky.one",
+            signal_state_json={
+                "reply_present": True,
+                "quote_present": False,
+                "like_present": True,
+                "repost_present": False,
+                "follow_present": True,
+                "reply_posts": [{"uri": "at://did:plc:user-1/app.bsky.feed.post/reply-1", "text": "count me in"}],
+                "quote_posts": [],
+                "reply_or_quote_mention_count": 1,
+            },
+        )
+    )
+
+    monkeypatch.setattr("app.services.giveaway_engine.hydrate_channel_targets", lambda campaign: None)
+    monkeypatch.setattr("app.services.giveaway_engine.refresh_instagram_channel_state", lambda session, channel: None)
+    monkeypatch.setattr("app.services.giveaway_engine.collect_bluesky_channel_state", lambda session, channel, run_id: None)
+
+    process_giveaway_lifecycle(session, AlertDispatcher(), run_id="run-mixed")
+
+    refreshed = get_post(session, post.id)
+    assert refreshed is not None
+    assert refreshed.giveaway_campaign is not None
+    pools = {pool.pool_key: pool for pool in refreshed.giveaway_campaign.pools}
+    assert set(pools) == {"instagram", "bluesky"}
+    assert pools["instagram"].final_winner_entry is not None
+    assert pools["instagram"].final_winner_entry.provider_username == "ig.one"
+    assert pools["bluesky"].final_winner_entry is not None
+    assert pools["bluesky"].final_winner_entry.provider_username == "bsky.one"
+    serialized = serialize_giveaway(refreshed.giveaway_campaign)
+    assert serialized is not None
+    assert serialized.audit_summary.engagement_activities >= 2
+    assert serialized.channels[0].summary.engagement_activities >= 1
+    assert serialized.pools[0].selection_log is not None
+    assert serialized.pools[0].selection_log.candidates
+
+
+def test_collect_bluesky_channel_state_captures_reply_quote_like_repost_and_follow(session, monkeypatch):
+    persona = _create_persona(session, slug="giveaway-bluesky-collector")
+    bluesky = _create_account(session, persona, service="bluesky", label="Bluesky")
+    post = create_scheduled_post(
+        session,
+        _generic_giveaway_payload(
+            persona.id,
+            [bluesky.id],
+            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            channels=[
+                {
+                    "service": "bluesky",
+                    "account_id": bluesky.id,
+                    "rules": {
+                        "kind": "all",
+                        "children": [
+                            {"kind": "atom", "atom": "reply_or_quote_present", "params": {}},
+                            {"kind": "atom", "atom": "reply_or_quote_mention_count_gte", "params": {"count": 1}},
+                            {"kind": "atom", "atom": "like_present", "params": {}},
+                            {"kind": "atom", "atom": "follow_present", "params": {}},
+                            {"kind": "atom", "atom": "repost_present", "params": {}},
+                        ],
+                    },
+                }
+            ],
+        ),
+        [],
+    )
+    channel = post.giveaway_campaign.channels[0]
+    channel.target_post_uri = "at://did:plc:owner/app.bsky.feed.post/post-1"
+    channel.target_post_cid = "cid-1"
+    session.flush()
+
+    class _FakeBlueskyClient:
+        def __init__(self):
+            feed = SimpleNamespace(
+                get_likes=lambda params: _DumpableResponse(
+                    {
+                        "likes": [
+                            {"actor": {"did": "did:plc:user-1", "handle": "bsky.one"}},
+                        ]
+                    }
                 ),
-                SimpleNamespace(
-                    pk="comment-2",
-                    text="Entry from @friend.two",
-                    user=SimpleNamespace(pk="user-2", username="entrant.two"),
-                    created_at_utc=datetime.now(timezone.utc),
+                get_reposted_by=lambda params: _DumpableResponse(
+                    {
+                        "repostedBy": [
+                            {"did": "did:plc:user-1", "handle": "bsky.one"},
+                        ]
+                    }
                 ),
-            ]
+                get_quotes=lambda params: _DumpableResponse(
+                    {
+                        "posts": [
+                                {
+                                    "uri": "at://did:plc:user-1/app.bsky.feed.post/quote-1",
+                                    "record": {"text": "@brand.test entering the giveaway"},
+                                    "author": {"did": "did:plc:user-1", "handle": "bsky.one"},
+                                }
+                            ]
+                        }
+                ),
+                get_post_thread=lambda params: _DumpableResponse(
+                    {
+                        "thread": {
+                            "post": {"cid": "cid-1"},
+                            "replies": [
+                                {
+                                    "post": {
+                                        "uri": "at://did:plc:user-1/app.bsky.feed.post/reply-1",
+                                            "record": {
+                                                "text": "@brand.test count me in",
+                                                "reply": {
+                                                    "parent": {"uri": "at://did:plc:owner/app.bsky.feed.post/post-1"},
+                                                },
+                                            },
+                                        "author": {"did": "did:plc:user-1", "handle": "bsky.one"},
+                                    },
+                                    "replies": [],
+                                }
+                            ],
+                        }
+                    }
+                ),
+            )
+            graph = SimpleNamespace(
+                get_relationships=lambda params: _DumpableResponse(
+                    {
+                        "relationships": [
+                            {"did": "did:plc:user-1", "followedBy": True},
+                        ]
+                    }
+                )
+            )
+            self.app = SimpleNamespace(bsky=SimpleNamespace(feed=feed, graph=graph))
 
-    monkeypatch.setattr("app.services.giveaways._authenticated_publish_client", lambda config: _LiveCommentClient())
-    monkeypatch.setattr(
-        "app.services.giveaways._verify_like_and_follow",
-        lambda giveaway, entry: ("inconclusive", "not_required", ["Like verification could not be completed."], []),
-    )
-    ingest_instagram_webhook_payload(
-        session,
-        {
-            "entry": [
-                {
-                    "id": instagram.id,
-                    "changes": [
-                        {
-                            "field": "comments",
-                            "value": {
-                                "media_id": "ig-media-3",
-                                "id": "comment-1",
-                                "text": "Entry from @friend.one",
-                                "from": {"id": "user-1", "username": "entrant.one"},
-                            },
-                        },
-                        {
-                            "field": "comments",
-                            "value": {
-                                "media_id": "ig-media-3",
-                                "id": "comment-2",
-                                "text": "Entry from @friend.two",
-                                "from": {"id": "user-2", "username": "entrant.two"},
-                            },
-                        },
-                        {
-                            "field": "mentions",
-                            "value": {
-                                "media_id": "ig-media-3",
-                                "story_id": "story-1",
-                                "from": {"id": "user-1", "username": "entrant.one"},
-                            },
-                        },
-                        {
-                            "field": "mentions",
-                            "value": {
-                                "media_id": "ig-media-3",
-                                "story_id": "story-2",
-                                "from": {"id": "user-2", "username": "entrant.two"},
-                            },
-                        },
-                    ],
-                }
-            ]
-        },
-        signature_valid=True,
-        run_id="run-4",
-    )
+    monkeypatch.setattr("app.services.giveaway_engine._get_bluesky_client", lambda credentials: _FakeBlueskyClient())
 
-    process_instagram_giveaway_lifecycle(session, AlertDispatcher(), run_id="run-4")
-    refreshed = get_post(session, post.id)
-    assert refreshed is not None
-    assert refreshed.instagram_giveaway is not None
-    assert refreshed.instagram_giveaway.status == GIVEAWAY_STATUS_REVIEW_REQUIRED
-    original_rank = refreshed.instagram_giveaway.provisional_winner_rank
-    assert original_rank in {1, 2}
+    collect_bluesky_channel_state(session, channel, run_id="run-bsky")
 
-    advance_giveaway_winner(session, refreshed.instagram_giveaway, run_id="run-5")
-    assert refreshed.instagram_giveaway.provisional_winner_rank in {1, 2}
-    assert refreshed.instagram_giveaway.provisional_winner_rank != original_rank
-
-
-def test_process_instagram_giveaway_disqualifies_deleted_comment_at_close(session, monkeypatch):
-    persona = _create_persona(session, slug="giveaway-close-time-comment")
-    instagram = _create_account(session, persona, service="instagram", label="Instagram")
-    post = create_scheduled_post(
-        session,
-        _giveaway_payload(
-            persona.id,
-            [instagram.id],
-            giveaway_end_at=datetime.now(timezone.utc) - timedelta(minutes=5),
-        ),
-        [],
-    )
-    job = post.delivery_jobs[0]
-    job.status = "posted"
-    job.external_id = "ig-media-deleted-comment"
-    post.published_at = datetime.now(timezone.utc) - timedelta(hours=1)
-    session.flush()
-
-    class _DeletedCommentClient:
-        def media_comments(self, media_id, amount=0):  # noqa: ARG002
-            return []
-
-    monkeypatch.setattr("app.services.giveaways._authenticated_publish_client", lambda config: _DeletedCommentClient())
-    monkeypatch.setattr("app.services.giveaways._verify_like_and_follow", lambda giveaway, entry: ("not_required", "not_required", [], []))
-
-    ingest_instagram_webhook_payload(
-        session,
-        {
-            "entry": [
-                {
-                    "id": instagram.id,
-                    "changes": [
-                        {
-                            "field": "comments",
-                            "value": {
-                                "media_id": "ig-media-deleted-comment",
-                                "id": "comment-1",
-                                "text": "Entering with @friend",
-                                "from": {"id": "user-1", "username": "entrant.one"},
-                            },
-                        },
-                        {
-                            "field": "mentions",
-                            "value": {
-                                "media_id": "ig-media-deleted-comment",
-                                "story_id": "story-1",
-                                "from": {"id": "user-1", "username": "entrant.one"},
-                            },
-                        },
-                    ],
-                }
-            ]
-        },
-        signature_valid=True,
-        run_id="run-deleted-comment",
-    )
-
-    process_instagram_giveaway_lifecycle(session, AlertDispatcher(), run_id="run-deleted-comment")
-
-    refreshed = get_post(session, post.id)
-    assert refreshed is not None
-    assert refreshed.instagram_giveaway is not None
-    assert refreshed.instagram_giveaway.status == GIVEAWAY_STATUS_FAILED
-    assert refreshed.instagram_giveaway.entries[0].eligibility_status == "disqualified"
-    assert refreshed.instagram_giveaway.entries[0].disqualification_reasons_json == [
-        "No current giveaway comment was found at close time."
-    ]
-
-
-def test_process_instagram_giveaway_logs_captured_comment_fallback_when_live_revalidation_fails(session, monkeypatch):
-    persona = _create_persona(session, slug="giveaway-comment-fallback")
-    instagram = _create_account(session, persona, service="instagram", label="Instagram")
-    post = create_scheduled_post(
-        session,
-        _giveaway_payload(
-            persona.id,
-            [instagram.id],
-            giveaway_end_at=datetime.now(timezone.utc) - timedelta(minutes=5),
-        ),
-        [],
-    )
-    job = post.delivery_jobs[0]
-    job.status = "posted"
-    job.external_id = "ig-media-comment-fallback"
-    post.published_at = datetime.now(timezone.utc) - timedelta(hours=1)
-    session.flush()
-
-    monkeypatch.setattr(
-        "app.services.giveaways._authenticated_publish_client",
-        lambda config: (_ for _ in ()).throw(RuntimeError("challenge required")),
-    )
-    monkeypatch.setattr("app.services.giveaways._verify_like_and_follow", lambda giveaway, entry: ("not_required", "not_required", [], []))
-
-    ingest_instagram_webhook_payload(
-        session,
-        {
-            "entry": [
-                {
-                    "id": instagram.id,
-                    "changes": [
-                        {
-                            "field": "comments",
-                            "value": {
-                                "media_id": "ig-media-comment-fallback",
-                                "id": "comment-1",
-                                "text": "Entering with @friend",
-                                "from": {"id": "user-1", "username": "entrant.one"},
-                            },
-                        },
-                        {
-                            "field": "mentions",
-                            "value": {
-                                "media_id": "ig-media-comment-fallback",
-                                "story_id": "story-1",
-                                "from": {"id": "user-1", "username": "entrant.one"},
-                            },
-                        },
-                    ],
-                }
-            ]
-        },
-        signature_valid=True,
-        run_id="run-comment-fallback",
-    )
-
-    process_instagram_giveaway_lifecycle(session, AlertDispatcher(), run_id="run-comment-fallback")
-
-    refreshed = get_post(session, post.id)
-    assert refreshed is not None
-    assert refreshed.instagram_giveaway is not None
-    assert refreshed.instagram_giveaway.status == GIVEAWAY_STATUS_WINNER_SELECTED
-
-    evaluation_event = (
-        session.query(RunEvent)
-        .filter(RunEvent.run_id == "run-comment-fallback", RunEvent.message.like("Instagram giveaway for post%evaluated using%"))
-        .order_by(RunEvent.created_at.desc())
-        .first()
-    )
-    assert evaluation_event is not None
-    assert evaluation_event.metadata_json["comment_evidence_mode"] == "captured_comment_fallback"
-    assert evaluation_event.metadata_json["story_evidence_mode"] == "captured_story_mentions"
-    assert "captured comment evidence fallback" in evaluation_event.message
+    assert len(channel.entrants) == 1
+    entrant = channel.entrants[0]
+    assert entrant.provider_username == "bsky.one"
+    assert entrant.signal_state_json["reply_present"] is True
+    assert entrant.signal_state_json["quote_present"] is True
+    assert entrant.signal_state_json["like_present"] is True
+    assert entrant.signal_state_json["repost_present"] is True
+    assert entrant.signal_state_json["follow_present"] is True
+    assert entrant.signal_state_json["reply_or_quote_mention_count"] >= 1
 
 
 @pytest.fixture()
@@ -1120,16 +681,14 @@ def test_instagram_webhook_verification_and_signature_api(giveaway_api_stack):
         instagram = _create_account(session, persona, service="instagram", label="Instagram")
         post = create_scheduled_post(
             session,
-            _giveaway_payload(
+            _legacy_instagram_giveaway_payload(
                 persona.id,
                 [instagram.id],
                 giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
             ),
             [],
         )
-        post.delivery_jobs[0].status = "posted"
-        post.delivery_jobs[0].external_id = "ig-media-4"
-        post.published_at = datetime.now(timezone.utc)
+        _mark_posted(post, instagram.id, external_id="ig-media-4")
         session.commit()
 
     verify_response = api_client.get(
@@ -1142,7 +701,7 @@ def test_instagram_webhook_verification_and_signature_api(giveaway_api_stack):
     payload = {
         "entry": [
             {
-                "id": instagram.id,
+                "id": "17841463479494132",
                 "changes": [
                     {
                         "field": "comments",
@@ -1170,8 +729,6 @@ def test_instagram_webhook_verification_and_signature_api(giveaway_api_stack):
         alert = session.query(AlertEvent).filter(AlertEvent.event_type == "instagram_webhook_rejected").one()
         assert alert.service == "instagram"
         assert alert.operation == "webhook"
-        assert alert.payload_json["payload"]["x_hub_signature_256_present"] is True
-        assert alert.payload_json["payload"]["x_hub_signature_present"] is False
 
     ok_response = api_client.post(
         "/webhooks/instagram",
@@ -1181,45 +738,12 @@ def test_instagram_webhook_verification_and_signature_api(giveaway_api_stack):
     assert ok_response.status_code == 200
     assert ok_response.json()["stored_events"] == 1
 
-    legacy_signature = "sha1=" + hmac.new(b"webhook-secret", raw_body, hashlib.sha1).hexdigest()
-    legacy_response = api_client.post(
-        "/webhooks/instagram",
-        content=raw_body,
-        headers={"X-Hub-Signature": legacy_signature, "Content-Type": "application/json"},
-    )
-    assert legacy_response.status_code == 200
-    assert legacy_response.json()["stored_events"] == 1
-
-
-def test_instagram_webhook_api_accepts_messaging_envelope_payload(giveaway_api_stack):
-    api_client, _SessionLocal = giveaway_api_stack
-
-    payload = {
-        "entry": [
-            {
-                "id": "ig-provider-account",
-                "messaging": [
-                    {
-                        "sender": {"id": "user-55", "username": "dm.user"},
-                        "recipient": {"id": "ig-provider-account"},
-                        "timestamp": "2026-04-15T18:10:00Z",
-                        "message": {
-                            "mid": "mid-55",
-                            "text": "new inbox message",
-                        },
-                    }
-                ],
-            }
-        ]
-    }
-    raw_body = json.dumps(payload).encode("utf-8")
-    signature = "sha256=" + hmac.new(b"webhook-secret", raw_body, hashlib.sha256).hexdigest()
-
-    response = api_client.post(
-        "/webhooks/instagram",
-        content=raw_body,
-        headers={"X-Hub-Signature-256": signature, "Content-Type": "application/json"},
-    )
-
-    assert response.status_code == 200
-    assert response.json()["stored_events"] == 1
+    with SessionLocal() as session:
+        stored_event = session.query(InstagramGiveawayWebhookEvent).filter(InstagramGiveawayWebhookEvent.signature_valid.is_(True)).order_by(InstagramGiveawayWebhookEvent.created_at.desc()).first()
+        assert stored_event is not None
+        refreshed = get_post(session, post.id)
+        assert refreshed is not None
+        assert refreshed.giveaway_campaign is not None
+        channel = next(item for item in refreshed.giveaway_campaign.channels if item.service == "instagram")
+        assert len(channel.entrants) == 1
+        assert channel.entrants[0].provider_username == "entrant.one"

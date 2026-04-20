@@ -103,6 +103,9 @@
             </div>
         </div>
     </div>
+    <div class="col-12">
+        {% include "_giveaway_activity_monitor.html" %}
+    </div>
     {% if current_principal.is_user %}
     <div class="col-12 col-xl-6">
         <div class="card section-card h-100">
@@ -359,7 +362,7 @@
 {% block scripts %}
 <script>
 window.registerLiveUpdates?.({
-  topics: {{ (["run_events", "alert_events", "scheduled_posts"] + (["instagram_webhooks"] if current_principal.is_admin else [])) | tojson }},
+  topics: {{ (["dashboard", "run_events", "alert_events", "scheduled_posts"] + (["instagram_webhooks"] if current_principal.is_admin else [])) | tojson }},
   statusElementId: "dashboard-live-update-status",
   readyLabel: "Live updates purring",
   updatingLabel: "Refreshing…",

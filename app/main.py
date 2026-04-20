@@ -62,15 +62,18 @@ from app.services.app_settings import read_app_settings, send_settings_test_webh
 from app.services.delivery import new_run_id
 from app.services.events import log_run_event
 from app.services.bootstrap import bootstrap
-from app.services.giveaways import (
-    POST_TYPE_INSTAGRAM_GIVEAWAY,
+from app.services.giveaway_activity import build_dashboard_giveaway_activity_monitor
+from app.services.giveaway_engine import (
+    POST_TYPE_GIVEAWAY,
     advance_giveaway_winner,
     confirm_giveaway_winner,
+    serialize_giveaway,
+)
+from app.services.giveaways import (
     instagram_webhook_callback_url,
     instagram_webhook_observability,
     ingest_instagram_webhook_payload,
     latest_instagram_webhook_event,
-    serialize_giveaway,
     verify_instagram_webhook_signature,
 )
 from app.services.logs import list_alert_events, list_run_events, summarize_run_events
@@ -325,7 +328,7 @@ def _serialize_post(post: CanonicalPost) -> ScheduledPostRead:
         publish_overrides_json=post.publish_overrides_json,
         metadata_json=post.metadata_json,
         scheduled_for=post.scheduled_for,
-        giveaway=serialize_giveaway(post.instagram_giveaway),
+        giveaway=serialize_giveaway(post.giveaway_campaign),
         origin_kind=post.origin_kind,
         origin_account_id=post.origin_account_id,
         published_at=post.published_at,
@@ -532,6 +535,14 @@ def _log_filters_from_request(request: Request) -> dict[str, str | None]:
         "severity": request.query_params.get("severity"),
         "operation": request.query_params.get("operation"),
         "since": since,
+    }
+
+
+def _dashboard_activity_filters_from_request(request: Request) -> dict[str, str | None]:
+    return {
+        "persona_id": request.query_params.get("activity_persona_id") or None,
+        "service": request.query_params.get("activity_service") or None,
+        "event_type": request.query_params.get("activity_event_type") or None,
     }
 
 
@@ -772,6 +783,7 @@ def dashboard(request: Request) -> HTMLResponse:
     principal = guarded
     with db_session() as session:
         owner_user_id = _owner_user_id_for_principal(principal)
+        activity_filters = _dashboard_activity_filters_from_request(request)
         personas = list_personas(session, owner_user_id=owner_user_id)
         posts = list_scheduled_posts(session, owner_user_id=owner_user_id)[:10]
         run_events = [serialize_run_event(event) for event in list_run_events(session, limit=60, owner_user_id=owner_user_id)]
@@ -782,6 +794,11 @@ def dashboard(request: Request) -> HTMLResponse:
         run_groups = summarize_run_events(run_events, limit_runs=6)
         account_count = sum(len(persona.accounts) for persona in personas)
         webhook_observability = instagram_webhook_observability(session, window_days=7, recent_limit=12, field_limit=6) if principal.is_admin else None
+        giveaway_activity_monitor = build_dashboard_giveaway_activity_monitor(
+            session,
+            owner_user_id=owner_user_id,
+            filters=activity_filters,
+        )
         return templates.TemplateResponse(
             name="dashboard.html",
             request=request,
@@ -794,6 +811,7 @@ def dashboard(request: Request) -> HTMLResponse:
                 run_groups=run_groups,
                 alert_events=alert_events,
                 instagram_webhook_observability=webhook_observability,
+                giveaway_activity_monitor=giveaway_activity_monitor,
                 scheduler_status=_scheduler_service(request).get_status(),
                 admin_mode=bool(auth_enabled() and principal.is_admin),
                 cleared_dashboard_alert_count=_coerce_int_query_param(request.query_params.get("alerts_cleared")),
@@ -1593,11 +1611,11 @@ def api_scheduled_post_giveaway(post_id: str, request: Request):
     principal = require_api_access(request, role="user")
     with db_session() as session:
         post = get_post(session, post_id, owner_user_id=_owner_user_id_for_principal(principal))
-        if not post or post.origin_kind != "composer" or post.post_type != POST_TYPE_INSTAGRAM_GIVEAWAY:
-            raise HTTPException(status_code=404, detail="Instagram giveaway not found.")
-        if post.instagram_giveaway is None:
-            raise HTTPException(status_code=404, detail="Instagram giveaway not found.")
-        return serialize_giveaway(post.instagram_giveaway)
+        if not post or post.origin_kind != "composer" or post.post_type != POST_TYPE_GIVEAWAY:
+            raise HTTPException(status_code=404, detail="Giveaway not found.")
+        if post.giveaway_campaign is None:
+            raise HTTPException(status_code=404, detail="Giveaway not found.")
+        return serialize_giveaway(post.giveaway_campaign)
 
 
 @app.put("/scheduled-posts/{post_id}")
@@ -1650,12 +1668,13 @@ def api_delete_scheduled_post(post_id: str, request: Request) -> dict[str, Any]:
 @app.post("/scheduled-posts/{post_id}/giveaway/review/confirm")
 def api_confirm_giveaway_winner(post_id: str, request: Request):
     principal = require_api_access(request, role="user")
+    pool_key = request.query_params.get("pool_key") or None
     with db_session() as session:
         post = get_post(session, post_id, owner_user_id=_owner_user_id_for_principal(principal))
-        if not post or post.origin_kind != "composer" or post.instagram_giveaway is None:
-            raise HTTPException(status_code=404, detail="Instagram giveaway not found.")
+        if not post or post.origin_kind != "composer" or post.giveaway_campaign is None:
+            raise HTTPException(status_code=404, detail="Giveaway not found.")
         try:
-            updated = confirm_giveaway_winner(session, post.instagram_giveaway, run_id=new_run_id())
+            updated = confirm_giveaway_winner(session, post.giveaway_campaign, run_id=new_run_id(), pool_key=pool_key)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         publish_live_update(
@@ -1669,12 +1688,13 @@ def api_confirm_giveaway_winner(post_id: str, request: Request):
 @app.post("/scheduled-posts/{post_id}/giveaway/review/advance")
 def api_advance_giveaway_winner(post_id: str, request: Request):
     principal = require_api_access(request, role="user")
+    pool_key = request.query_params.get("pool_key") or None
     with db_session() as session:
         post = get_post(session, post_id, owner_user_id=_owner_user_id_for_principal(principal))
-        if not post or post.origin_kind != "composer" or post.instagram_giveaway is None:
-            raise HTTPException(status_code=404, detail="Instagram giveaway not found.")
+        if not post or post.origin_kind != "composer" or post.giveaway_campaign is None:
+            raise HTTPException(status_code=404, detail="Giveaway not found.")
         try:
-            updated = advance_giveaway_winner(session, post.instagram_giveaway, run_id=new_run_id())
+            updated = advance_giveaway_winner(session, post.giveaway_campaign, run_id=new_run_id(), pool_key=pool_key)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         publish_live_update(

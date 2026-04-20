@@ -520,7 +520,7 @@ function plannerCardMarkup(post, compact = false) {
         <div>
           <div class="d-flex gap-1 flex-wrap mb-2">
             <span class="badge ${statusBadgeClass(post.displayStatus)}">${escapeHtml(statusLabel(post.displayStatus))}</span>
-            ${post.postType === "instagram_giveaway" ? '<span class="badge text-bg-warning-subtle border text-dark">Giveaway</span>' : ""}
+            ${post.postType === "giveaway" ? '<span class="badge text-bg-warning-subtle border text-dark">Giveaway</span>' : ""}
           </div>
           <div class="planner-card-title">${escapeHtml(compact ? summarizeBody(post.body) : post.personaName)}</div>
           <div class="planner-card-copy">${escapeHtml(compact ? compactMeta : summarizeBody(post.body))}</div>
@@ -620,7 +620,7 @@ function renderWeekCalendar() {
 
 function renderCalendar() {
   const visibleScheduled = plannerPosts.filter((post) => isCalendarPost(post));
-  const visibleGiveaways = visibleScheduled.filter((post) => post.postType === "instagram_giveaway");
+  const visibleGiveaways = visibleScheduled.filter((post) => post.postType === "giveaway");
   calendarSummaryTotal.textContent = `${visibleScheduled.length} scheduled`;
   calendarSummaryGiveaways.textContent = `${visibleGiveaways.length} giveaways`;
 
@@ -693,7 +693,7 @@ function buildMoveContext(post, target) {
       requireSchedule: true,
       suggestedSchedule: suggestedScheduleValue(post, target.dateKey),
       allowClearSchedule: false,
-      showGiveawayEnd: post.postType === "instagram_giveaway",
+      showGiveawayEnd: post.postType === "giveaway",
       suggestedGiveawayEnd: suggestedGiveawayEndValue(post, suggestedScheduleValue(post, target.dateKey)),
     };
   }
@@ -722,7 +722,7 @@ function buildMoveContext(post, target) {
         requireSchedule: true,
         suggestedSchedule: suggestedScheduleValue(post),
         allowClearSchedule: false,
-        showGiveawayEnd: post.postType === "instagram_giveaway",
+        showGiveawayEnd: post.postType === "giveaway",
         suggestedGiveawayEnd: suggestedGiveawayEndValue(post, suggestedScheduleValue(post)),
       };
     }
@@ -737,7 +737,7 @@ function buildMoveContext(post, target) {
         requireSchedule: true,
         suggestedSchedule: suggestedNow,
         allowClearSchedule: false,
-        showGiveawayEnd: post.postType === "instagram_giveaway",
+        showGiveawayEnd: post.postType === "giveaway",
         suggestedGiveawayEnd: suggestedGiveawayEndValue(post, suggestedNow),
       };
     }

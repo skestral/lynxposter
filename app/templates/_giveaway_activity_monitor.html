@@ -1,0 +1,159 @@
+{% set activity_monitor = giveaway_activity_monitor %}
+{% if activity_monitor %}
+<div class="card section-card">
+    <div class="card-body">
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
+            <div>
+                <h2 class="h5 mb-1">Giveaway Activity Monitor</h2>
+                <div class="small text-secondary">Watch Instagram and Bluesky engagement for open giveaways in one rollup while entrants keep coming in.</div>
+            </div>
+            <a href="/scheduled-posts/page" class="btn btn-sm btn-outline-secondary">Open Planner</a>
+        </div>
+        <form method="get" action="/" class="row g-3 mb-4">
+            <div class="col-md-4">
+                <label class="form-label">Persona</label>
+                <select class="form-select" name="activity_persona_id">
+                    <option value="">All personas</option>
+                    {% for persona in personas %}
+                    <option value="{{ persona.id }}" {% if activity_monitor.filters.persona_id == persona.id %}selected{% endif %}>{{ persona.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Service</label>
+                <select class="form-select" name="activity_service">
+                    <option value="">All services</option>
+                    {% for service in activity_monitor.available_services %}
+                    <option value="{{ service.value }}" {% if activity_monitor.filters.service == service.value %}selected{% endif %}>{{ service.label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Activity</label>
+                <select class="form-select" name="activity_event_type">
+                    <option value="">All activities</option>
+                    {% for event_type in activity_monitor.available_event_types %}
+                    <option value="{{ event_type.value }}" {% if activity_monitor.filters.event_type == event_type.value %}selected{% endif %}>{{ event_type.label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-12">
+                <div class="d-flex gap-2 flex-wrap">
+                    <button class="btn btn-primary" type="submit">Apply Filters</button>
+                    <a class="btn btn-outline-secondary" href="/">Reset</a>
+                </div>
+            </div>
+        </form>
+        <div class="row g-3 mb-4">
+            <div class="col-6 col-lg-3">
+                <div class="border rounded p-3 h-100 bg-body-tertiary">
+                    <div class="small text-secondary">Open Giveaways</div>
+                    <div class="h4 mb-0">{{ activity_monitor.metrics.campaigns }}</div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="border rounded p-3 h-100 bg-body-tertiary">
+                    <div class="small text-secondary">Active Channels</div>
+                    <div class="h4 mb-0">{{ activity_monitor.metrics.channels }}</div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="border rounded p-3 h-100 bg-body-tertiary">
+                    <div class="small text-secondary">Tracked Entrants</div>
+                    <div class="h4 mb-0">{{ activity_monitor.metrics.entrants }}</div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="border rounded p-3 h-100 bg-body-tertiary">
+                    <div class="small text-secondary">Captured Activities</div>
+                    <div class="h4 mb-0">{{ activity_monitor.metrics.activities }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="row g-4">
+            <div class="col-12 col-xl-5">
+                <div class="border rounded p-3 h-100">
+                    <div class="fw-semibold mb-2">Service Rollup</div>
+                    <div class="table-responsive">
+                        <table class="table align-middle mb-0">
+                            <thead>
+                                <tr><th>Service</th><th>Activities</th><th>Entrants</th><th>Giveaways</th><th>Breakdown</th></tr>
+                            </thead>
+                            <tbody>
+                                {% for row in activity_monitor.rollups %}
+                                <tr>
+                                    <td>
+                                        <div class="fw-semibold">{{ row.label }}</div>
+                                        {% if row.latest_activity_at %}
+                                        <div class="small text-secondary">Latest {{ row.latest_activity_at|datetime_display }}</div>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ row.activity_count }}</td>
+                                    <td>{{ row.entrant_count }}</td>
+                                    <td>{{ row.campaign_count }}</td>
+                                    <td class="small">
+                                        {% for item in row.event_breakdown %}
+                                        <div>{{ item.label }}: {{ item.count }}</div>
+                                        {% else %}
+                                        <div class="text-secondary">No captured activity yet.</div>
+                                        {% endfor %}
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr><td colspan="5" class="text-secondary">No open giveaways match the current filters.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-xl-7">
+                <div class="border rounded p-3 h-100">
+                    <div class="fw-semibold mb-2">Recent Activity</div>
+                    <div class="table-responsive">
+                        <table class="table align-middle mb-0">
+                            <thead>
+                                <tr><th>When</th><th>Activity</th><th>Entrant</th><th>Giveaway</th><th>Detail</th></tr>
+                            </thead>
+                            <tbody>
+                                {% for event in activity_monitor.recent_events %}
+                                <tr>
+                                    <td class="small">
+                                        <div>{{ event.created_at|datetime_display }}</div>
+                                        <div class="text-secondary">{{ event.service_label }}</div>
+                                    </td>
+                                    <td>
+                                        <div class="fw-semibold">{{ event.event_label }}</div>
+                                        <div class="small text-secondary">{{ event.account_label }} • {{ event.campaign_status|replace('_', ' ')|title }}</div>
+                                    </td>
+                                    <td class="small">
+                                        <div class="fw-semibold">{{ event.actor_label }}</div>
+                                        {% if event.entrant_status %}
+                                        <div class="text-secondary">{{ event.entrant_status|replace('_', ' ')|title }}</div>
+                                        {% endif %}
+                                    </td>
+                                    <td class="small">
+                                        <div><a href="{{ event.campaign_href }}">{{ event.campaign_label }}</a></div>
+                                        <div class="text-secondary">{{ event.persona_name }}</div>
+                                    </td>
+                                    <td class="small">
+                                        {% if event.detail %}
+                                        <div>{{ event.detail }}</div>
+                                        {% endif %}
+                                        {% if event.activity_href %}
+                                        <div class="mt-1"><a href="{{ event.activity_href }}" target="_blank" rel="noreferrer">{{ event.activity_href_label or "Open activity" }}</a></div>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr><td colspan="5" class="text-secondary">No giveaway activity has been captured for the current filters yet.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}

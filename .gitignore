@@ -16,3 +16,4 @@ alembic/__pycache__/
 app/__pycache__/
 .codex-home
 .venv-linux
+.aider*

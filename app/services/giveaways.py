@@ -14,7 +14,18 @@ from sqlalchemy import Select, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.adapters.instagram import _authenticated_publish_client, _instagram_destination_dependency_issue
-from app.models import Account, CanonicalPost, DeliveryJob, InstagramGiveaway, InstagramGiveawayEntry, InstagramGiveawayWebhookEvent, Persona
+from app.models import (
+    Account,
+    CanonicalPost,
+    DeliveryJob,
+    GiveawayCampaign,
+    GiveawayChannel,
+    GiveawayEntrant,
+    InstagramGiveaway,
+    InstagramGiveawayEntry,
+    InstagramGiveawayWebhookEvent,
+    Persona,
+)
 from app.schemas import (
     InstagramGiveawayAuditSummaryRead,
     InstagramGiveawayConfigInput,
@@ -23,6 +34,24 @@ from app.schemas import (
 )
 from app.services.alerts import AlertDispatcher
 from app.services.events import log_run_event
+from app.services.giveaway_engine import (
+    ENTRY_STATUS_ELIGIBLE as GENERIC_ENTRY_STATUS_ELIGIBLE,
+    ENTRY_STATUS_PROVISIONAL as GENERIC_ENTRY_STATUS_PROVISIONAL,
+    GIVEAWAY_STATUS_COLLECTING as GENERIC_GIVEAWAY_STATUS_COLLECTING,
+    GIVEAWAY_STATUS_FAILED as GENERIC_GIVEAWAY_STATUS_FAILED,
+    GIVEAWAY_STATUS_REVIEW_REQUIRED as GENERIC_GIVEAWAY_STATUS_REVIEW_REQUIRED,
+    GIVEAWAY_STATUS_SCHEDULED as GENERIC_GIVEAWAY_STATUS_SCHEDULED,
+    GIVEAWAY_STATUS_WINNER_CONFIRMED as GENERIC_GIVEAWAY_STATUS_WINNER_CONFIRMED,
+    GIVEAWAY_STATUS_WINNER_SELECTED as GENERIC_GIVEAWAY_STATUS_WINNER_SELECTED,
+    POST_TYPE_GIVEAWAY,
+    advance_giveaway_winner as advance_generic_giveaway_winner,
+    confirm_giveaway_winner as confirm_generic_giveaway_winner,
+    get_giveaway_by_post_id as get_generic_giveaway_by_post_id,
+    get_or_create_channel_entrant,
+    hydrate_channel_targets,
+    process_giveaway_lifecycle,
+    _record_evidence_event,
+)
 from app.services.live_updates import (
     LIVE_UPDATE_TOPIC_DASHBOARD,
     LIVE_UPDATE_TOPIC_INSTAGRAM_WEBHOOKS,
@@ -31,18 +60,18 @@ from app.services.live_updates import (
 )
 
 POST_TYPE_STANDARD = "standard"
-POST_TYPE_INSTAGRAM_GIVEAWAY = "instagram_giveaway"
+POST_TYPE_INSTAGRAM_GIVEAWAY = POST_TYPE_GIVEAWAY
 
-GIVEAWAY_STATUS_SCHEDULED = "scheduled"
-GIVEAWAY_STATUS_COLLECTING = "collecting"
-GIVEAWAY_STATUS_REVIEW_REQUIRED = "review_required"
-GIVEAWAY_STATUS_WINNER_SELECTED = "winner_selected"
-GIVEAWAY_STATUS_WINNER_CONFIRMED = "winner_confirmed"
-GIVEAWAY_STATUS_FAILED = "failed"
+GIVEAWAY_STATUS_SCHEDULED = GENERIC_GIVEAWAY_STATUS_SCHEDULED
+GIVEAWAY_STATUS_COLLECTING = GENERIC_GIVEAWAY_STATUS_COLLECTING
+GIVEAWAY_STATUS_REVIEW_REQUIRED = GENERIC_GIVEAWAY_STATUS_REVIEW_REQUIRED
+GIVEAWAY_STATUS_WINNER_SELECTED = GENERIC_GIVEAWAY_STATUS_WINNER_SELECTED
+GIVEAWAY_STATUS_WINNER_CONFIRMED = GENERIC_GIVEAWAY_STATUS_WINNER_CONFIRMED
+GIVEAWAY_STATUS_FAILED = GENERIC_GIVEAWAY_STATUS_FAILED
 
 ENTRY_STATUS_PENDING = "pending"
-ENTRY_STATUS_ELIGIBLE = "eligible"
-ENTRY_STATUS_PROVISIONAL = "provisional"
+ENTRY_STATUS_ELIGIBLE = GENERIC_ENTRY_STATUS_ELIGIBLE
+ENTRY_STATUS_PROVISIONAL = GENERIC_ENTRY_STATUS_PROVISIONAL
 ENTRY_STATUS_DISQUALIFIED = "disqualified"
 
 RULE_STATUS_UNKNOWN = "unknown"
@@ -437,7 +466,7 @@ def _is_shared_post_event(event_type: str, value: dict[str, Any]) -> bool:
     return event_type == "message" and _is_shared_post_message(value)
 
 
-def _giveaway_window_accepts_event(giveaway: InstagramGiveaway, *, occurred_at: datetime | None) -> bool:
+def _giveaway_window_accepts_event(giveaway: GiveawayCampaign, *, occurred_at: datetime | None) -> bool:
     if occurred_at is None:
         return True
     published_at = normalize_datetime(giveaway.post.published_at)
@@ -447,47 +476,58 @@ def _giveaway_window_accepts_event(giveaway: InstagramGiveaway, *, occurred_at: 
     return giveaway_end_at is None or occurred_at <= giveaway_end_at
 
 
-def _find_giveaway_for_event(session: Session, account_id: str | None, provider_object_id: str | None) -> InstagramGiveaway | None:
+def _find_instagram_channel_for_event(
+    session: Session,
+    account_id: str | None,
+    provider_object_id: str | None,
+) -> GiveawayChannel | None:
     if provider_object_id:
         stmt = (
-            list_instagram_giveaways_stmt()
-            .join(InstagramGiveaway.post)
+            select(GiveawayChannel)
+            .join(GiveawayChannel.campaign)
+            .join(GiveawayCampaign.post)
             .join(CanonicalPost.delivery_jobs)
             .where(
+                GiveawayChannel.service == "instagram",
                 DeliveryJob.external_id == provider_object_id,
                 DeliveryJob.status == "posted",
+                DeliveryJob.target_account_id == GiveawayChannel.account_id,
             )
         )
-        giveaway = session.scalar(stmt)
-        if giveaway:
-            return giveaway
+        channel = session.scalar(stmt)
+        if channel:
+            return channel
     if account_id:
         stmt = (
-            list_instagram_giveaways_stmt()
+            select(GiveawayChannel)
+            .join(GiveawayChannel.campaign)
             .where(
-                InstagramGiveaway.instagram_account_id == account_id,
-                InstagramGiveaway.status.in_([GIVEAWAY_STATUS_SCHEDULED, GIVEAWAY_STATUS_COLLECTING, GIVEAWAY_STATUS_REVIEW_REQUIRED]),
+                GiveawayChannel.service == "instagram",
+                GiveawayChannel.account_id == account_id,
+                GiveawayCampaign.status.in_([GIVEAWAY_STATUS_SCHEDULED, GIVEAWAY_STATUS_COLLECTING, GIVEAWAY_STATUS_REVIEW_REQUIRED]),
             )
-            .order_by(InstagramGiveaway.giveaway_end_at.asc())
+            .order_by(GiveawayCampaign.giveaway_end_at.asc())
         )
-        giveaways = list(session.scalars(stmt))
-        if len(giveaways) == 1:
-            return giveaways[0]
+        channels = list(session.scalars(stmt))
+        if len(channels) == 1:
+            return channels[0]
     return None
 
 
-def _entry_for_user(giveaway: InstagramGiveaway, instagram_user_id: str, instagram_username: str | None) -> InstagramGiveawayEntry:
-    for entry in giveaway.entries:
-        if entry.instagram_user_id == instagram_user_id:
+def _entry_for_user(channel: GiveawayChannel, instagram_user_id: str, instagram_username: str | None) -> GiveawayEntrant:
+    for entry in channel.entrants:
+        if entry.provider_user_id == instagram_user_id:
             if instagram_username:
-                entry.instagram_username = instagram_username
+                entry.provider_username = instagram_username
+                entry.display_label = instagram_username
             return entry
-    entry = InstagramGiveawayEntry(
-        giveaway_id=giveaway.id,
-        instagram_user_id=instagram_user_id,
-        instagram_username=instagram_username,
+    entry = GiveawayEntrant(
+        channel=channel,
+        provider_user_id=instagram_user_id,
+        provider_username=instagram_username,
+        display_label=instagram_username or instagram_user_id,
     )
-    giveaway.entries.append(entry)
+    channel.entrants.append(entry)
     return entry
 
 
@@ -734,6 +774,20 @@ def _iter_instagram_webhook_events(entry_payload: dict[str, Any]) -> list[dict[s
     return parsed
 
 
+def _instagram_signal_state(entrant: GiveawayEntrant) -> dict[str, Any]:
+    state = dict(entrant.signal_state_json or {})
+    comments = _normalize_evidence_items(state.get("comments"), default_source=COMMENT_EVIDENCE_SOURCE_WEBHOOK)
+    story_mentions = _normalize_evidence_items(state.get("story_mentions"), default_source=STORY_EVIDENCE_SOURCE_WEBHOOK)
+    combined_text = " ".join(str(item.get("text") or "") for item in comments if isinstance(item, dict))
+    return {
+        "comments": comments,
+        "comment_count": len(comments),
+        "friend_mention_count": len({match.lower() for match in MENTION_PATTERN.findall(combined_text)}),
+        "story_mentions": story_mentions,
+        "story_mention_count": len(story_mentions),
+    }
+
+
 def ingest_instagram_webhook_payload(
     session: Session,
     payload: dict[str, Any],
@@ -754,12 +808,15 @@ def ingest_instagram_webhook_payload(
             event_type = _webhook_event_type(field, value)
             provider_object_id = _provider_object_id(value)
             related_media_id = _webhook_media_id(value)
-            giveaway = _find_giveaway_for_event(session, account_id, related_media_id or provider_object_id)
+            channel = _find_instagram_channel_for_event(session, account_id, related_media_id or provider_object_id)
+            campaign = channel.campaign if channel else None
+            if campaign:
+                hydrate_channel_targets(campaign)
             counts_as_story_share = event_type == "message" and _is_shared_post_message(value)
             webhook_event = InstagramGiveawayWebhookEvent(
-                matched_giveaway_id=giveaway.id if giveaway else None,
-                matched_post_id=giveaway.post_id if giveaway else None,
-                matched_account_id=giveaway.instagram_account_id if giveaway else None,
+                matched_giveaway_id=campaign.id if campaign else None,
+                matched_post_id=campaign.post_id if campaign else None,
+                matched_account_id=channel.account_id if channel else None,
                 provider_object_id=provider_object_id,
                 provider_event_field=field or None,
                 event_type=event_type,
@@ -771,7 +828,7 @@ def ingest_instagram_webhook_payload(
             session.flush()
             stored_events.append(webhook_event)
 
-            if giveaway is None or (event_type not in {"comment", "story_mention"} and not counts_as_story_share):
+            if channel is None or campaign is None or (event_type not in {"comment", "story_mention"} and not counts_as_story_share):
                 webhook_event.processed = True
                 webhook_event.processed_at = utcnow()
                 continue
@@ -783,7 +840,7 @@ def ingest_instagram_webhook_payload(
                     occurred_at = normalize_datetime(datetime.fromisoformat(timestamp.replace("Z", "+00:00")))
                 except ValueError:
                     occurred_at = None
-            if not _giveaway_window_accepts_event(giveaway, occurred_at=occurred_at):
+            if not _giveaway_window_accepts_event(campaign, occurred_at=occurred_at):
                 webhook_event.processed = True
                 webhook_event.processed_at = utcnow()
                 continue
@@ -794,22 +851,17 @@ def ingest_instagram_webhook_payload(
                 webhook_event.processed_at = utcnow()
                 continue
 
-            giveaway.last_webhook_received_at = utcnow()
-            entry = _entry_for_user(giveaway, instagram_user_id, instagram_username)
+            entry = _entry_for_user(channel, instagram_user_id, instagram_username)
+            state = _instagram_signal_state(entry)
             if event_type == "comment":
                 summary = _comment_payload_summary(value)
-                comments = list(entry.comments_json or [])
+                comments = list(state.get("comments") or [])
                 comment_id = summary.get("comment_id")
-                if comment_id and any(existing.get("comment_id") == comment_id for existing in comments if isinstance(existing, dict)):
-                    pass
-                else:
+                if not (comment_id and any(existing.get("comment_id") == comment_id for existing in comments if isinstance(existing, dict))):
                     comments.append(summary)
-                    entry.comments_json = comments
-                comment_text = " ".join(str(item.get("text") or "") for item in entry.comments_json if isinstance(item, dict))
-                entry.comment_count = len(entry.comments_json or [])
-                entry.mention_count = len({match.lower() for match in MENTION_PATTERN.findall(comment_text)})
+                state["comments"] = comments
             elif event_type == "story_mention" or counts_as_story_share:
-                mentions = list(entry.story_mentions_json or [])
+                mentions = list(state.get("story_mentions") or [])
                 summary = _story_mention_payload_summary(
                     value,
                     source=(
@@ -819,11 +871,28 @@ def ingest_instagram_webhook_payload(
                     ),
                 )
                 story_id = summary.get("story_id")
-                if story_id and any(existing.get("story_id") == story_id for existing in mentions if isinstance(existing, dict)):
-                    pass
-                else:
+                if not (story_id and any(existing.get("story_id") == story_id for existing in mentions if isinstance(existing, dict))):
                     mentions.append(summary)
-                    entry.story_mentions_json = mentions
+                state["story_mentions"] = mentions
+            entry.signal_state_json = state
+            entry.signal_state_json = _instagram_signal_state(entry)
+            _record_evidence_event(
+                session,
+                campaign,
+                channel,
+                entrant=entry,
+                provider_event_id=provider_object_id,
+                event_type="instagram_story_mention" if (event_type == "story_mention" or counts_as_story_share) else "instagram_comment",
+                source=(
+                    STORY_EVIDENCE_SOURCE_MESSAGE_SHARE
+                    if counts_as_story_share and event_type != "story_mention"
+                    else COMMENT_EVIDENCE_SOURCE_WEBHOOK if event_type == "comment"
+                    else STORY_EVIDENCE_SOURCE_WEBHOOK
+                ),
+                payload=event_payload["payload_json"],
+            )
+            channel.last_collected_at = utcnow()
+            channel.last_error = None
             webhook_event.processed = True
             webhook_event.processed_at = utcnow()
             if run_id:
@@ -831,13 +900,13 @@ def ingest_instagram_webhook_payload(
                 log_run_event(
                     session,
                     run_id=run_id,
-                    persona_id=giveaway.post.persona_id,
-                    persona_name=giveaway.post.persona.name if giveaway.post.persona else None,
-                    account_id=giveaway.instagram_account_id,
+                    persona_id=campaign.post.persona_id,
+                    persona_name=campaign.post.persona.name if campaign.post.persona else None,
+                    account_id=channel.account_id,
                     service="instagram",
                     operation="giveaway_webhook",
-                    message=f"Captured Instagram {captured_event_type} evidence for giveaway post {giveaway.post_id}.",
-                    post_id=giveaway.post_id,
+                    message=f"Captured Instagram {captured_event_type} evidence for giveaway post {campaign.post_id}.",
+                    post_id=campaign.post_id,
                     metadata={
                         "event_type": event_type,
                         "instagram_user_id": instagram_user_id,
@@ -2159,118 +2228,34 @@ def process_instagram_giveaway_lifecycle(
     *,
     run_id: str,
 ) -> str:
-    now = utcnow()
-    stmt = list_instagram_giveaways_stmt().where(
-        InstagramGiveaway.status.in_([GIVEAWAY_STATUS_SCHEDULED, GIVEAWAY_STATUS_COLLECTING])
-    )
-    for giveaway in session.scalars(stmt):
-        media_job = _instagram_media_job(giveaway)
-        if media_job and giveaway.status == GIVEAWAY_STATUS_SCHEDULED:
-            giveaway.status = GIVEAWAY_STATUS_COLLECTING
-            giveaway.last_error = None
-            log_run_event(
-                session,
-                run_id=run_id,
-                persona_id=giveaway.post.persona_id,
-                persona_name=giveaway.post.persona.name if giveaway.post.persona else None,
-                account_id=giveaway.instagram_account_id,
-                service="instagram",
-                operation="giveaway",
-                message=f"Instagram giveaway opened for scheduled post {giveaway.post_id}.",
-                post_id=giveaway.post_id,
-                metadata={"status": giveaway.status, "instagram_media_id": media_job.external_id},
-            )
-        giveaway_end_at = normalize_datetime(giveaway.giveaway_end_at)
-        if media_job and giveaway_end_at is not None and giveaway_end_at <= now and giveaway.status in {GIVEAWAY_STATUS_COLLECTING, GIVEAWAY_STATUS_SCHEDULED}:
-            try:
-                finalize_instagram_giveaway(session, giveaway, alerts, run_id=run_id)
-            except Exception as exc:
-                giveaway.status = GIVEAWAY_STATUS_FAILED
-                giveaway.last_error = str(exc)
-                log_run_event(
-                    session,
-                    run_id=run_id,
-                    persona_id=giveaway.post.persona_id,
-                    persona_name=giveaway.post.persona.name if giveaway.post.persona else None,
-                    account_id=giveaway.instagram_account_id,
-                    service="instagram",
-                    operation="giveaway",
-                    severity="error",
-                    message=f"Instagram giveaway finalization failed: {exc}",
-                    post_id=giveaway.post_id,
-                    metadata={"status": giveaway.status},
-                )
-                alerts.emit_hard_failure(
-                    session,
-                    run_id=run_id,
-                    persona=giveaway.post.persona,
-                    account=giveaway.instagram_account,
-                    service="instagram",
-                    post=giveaway.post,
-                    operation="giveaway",
-                    message=str(exc),
-                    error_class=exc.__class__.__name__,
-                    event_type="instagram_giveaway_failed",
-                )
-    session.flush()
-    return run_id
+    return process_giveaway_lifecycle(session, alerts, run_id=run_id)
 
 
-def confirm_giveaway_winner(session: Session, giveaway: InstagramGiveaway, *, run_id: str) -> InstagramGiveaway:
-    if giveaway.status != GIVEAWAY_STATUS_REVIEW_REQUIRED or giveaway.provisional_winner_rank is None:
-        raise ValueError("This giveaway does not have a provisional winner to confirm.")
-    giveaway.final_winner_rank = giveaway.provisional_winner_rank
-    giveaway.status = GIVEAWAY_STATUS_WINNER_CONFIRMED
-    giveaway.last_error = None
-    winner = _winner_entry_by_rank(giveaway, giveaway.final_winner_rank)
-    log_run_event(
-        session,
-        run_id=run_id,
-        persona_id=giveaway.post.persona_id,
-        persona_name=giveaway.post.persona.name if giveaway.post.persona else None,
-        account_id=giveaway.instagram_account_id,
-        service="instagram",
-        operation="giveaway",
-        message=(
-            f"Confirmed Instagram giveaway winner {winner.instagram_username or winner.instagram_user_id if winner else giveaway.final_winner_rank} "
-            f"for post {giveaway.post_id}."
-        ),
-        post_id=giveaway.post_id,
-        metadata={"status": giveaway.status, "winner_rank": giveaway.final_winner_rank},
-    )
-    session.flush()
-    return giveaway
+def confirm_giveaway_winner(
+    session: Session,
+    giveaway: GiveawayCampaign | InstagramGiveaway,
+    *,
+    run_id: str,
+) -> GiveawayCampaign:
+    if isinstance(giveaway, InstagramGiveaway):
+        campaign = get_generic_giveaway_by_post_id(session, giveaway.post_id)
+        if campaign is None:
+            raise ValueError("Giveaway not found.")
+    else:
+        campaign = giveaway
+    return confirm_generic_giveaway_winner(session, campaign, run_id=run_id)
 
 
-def advance_giveaway_winner(session: Session, giveaway: InstagramGiveaway, *, run_id: str) -> InstagramGiveaway:
-    if giveaway.status != GIVEAWAY_STATUS_REVIEW_REQUIRED or giveaway.provisional_winner_rank is None:
-        raise ValueError("This giveaway does not have a provisional winner to advance.")
-    candidates = sorted(
-        _giveaway_candidate_pool(giveaway),
-        key=lambda item: (item.frozen_rank is None, item.frozen_rank or 999999),
-    )
-    next_entry = next(
-        (entry for entry in candidates if entry.frozen_rank and entry.frozen_rank > int(giveaway.provisional_winner_rank)),
-        None,
-    )
-    if next_entry is None:
-        raise ValueError("There are no remaining giveaway candidates to advance to.")
-    giveaway.provisional_winner_rank = next_entry.frozen_rank
-    log_run_event(
-        session,
-        run_id=run_id,
-        persona_id=giveaway.post.persona_id,
-        persona_name=giveaway.post.persona.name if giveaway.post.persona else None,
-        account_id=giveaway.instagram_account_id,
-        service="instagram",
-        operation="giveaway",
-        severity="warning",
-        message=(
-            f"Advanced Instagram giveaway provisional winner to "
-            f"{next_entry.instagram_username or next_entry.instagram_user_id} for post {giveaway.post_id}."
-        ),
-        post_id=giveaway.post_id,
-        metadata={"status": giveaway.status, "winner_rank": giveaway.provisional_winner_rank},
-    )
-    session.flush()
-    return giveaway
+def advance_giveaway_winner(
+    session: Session,
+    giveaway: GiveawayCampaign | InstagramGiveaway,
+    *,
+    run_id: str,
+) -> GiveawayCampaign:
+    if isinstance(giveaway, InstagramGiveaway):
+        campaign = get_generic_giveaway_by_post_id(session, giveaway.post_id)
+        if campaign is None:
+            raise ValueError("Giveaway not found.")
+    else:
+        campaign = giveaway
+    return advance_generic_giveaway_winner(session, campaign, run_id=run_id)

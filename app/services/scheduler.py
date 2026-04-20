@@ -10,9 +10,12 @@ from app.database import db_session
 from app.services.alerts import AlertDispatcher
 from app.services.delivery import enqueue_due_scheduled_posts, new_run_id, poll_sources, process_delivery_queue, reconcile_pending_posts
 from app.services.events import log_run_event
-from app.services.giveaways import process_instagram_giveaway_lifecycle
+from app.services.giveaway_engine import process_giveaway_lifecycle
 from app.services.instagram_tokens import check_instagram_token_expiry
 from app.services.media_cleanup import cleanup_stale_media_files
+
+process_instagram_giveaway_lifecycle = process_giveaway_lifecycle
+
 
 class CrossposterScheduler:
     def __init__(self, alerts: AlertDispatcher) -> None:

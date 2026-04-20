@@ -11,12 +11,13 @@ from app.adapters.common import delivery_summary
 from app.domain import CanonicalPostPayload, ExternalPostRefPayload, MediaItem
 from app.models import Account, AccountPostRef, AccountSyncState, CanonicalPost, DeliveryJob, MediaAttachment, Persona
 from app.schemas import ScheduledPostCreate, ScheduledPostUpdate
-from app.services.giveaways import (
-    POST_TYPE_INSTAGRAM_GIVEAWAY,
+from app.services.giveaway_engine import (
+    POST_TYPE_GIVEAWAY,
     POST_TYPE_STANDARD,
-    giveaway_rules_input_from_json,
+    giveaway_config_input_from_json,
     giveaway_selectinloads,
-    sync_instagram_giveaway,
+    migrate_legacy_instagram_giveaway,
+    sync_giveaway_campaign,
 )
 from app.services.personas import get_persona, persona_destination_accounts, routed_destination_accounts
 from app.services.storage import delete_managed_media_file
@@ -278,7 +279,7 @@ def create_scheduled_post(session: Session, payload: ScheduledPostCreate, media_
     session.flush()
 
     sync_delivery_jobs(session, post, target_accounts, _desired_job_status(post.status))
-    sync_instagram_giveaway(session, post, target_accounts, payload.giveaway)
+    sync_giveaway_campaign(session, post, target_accounts, payload.giveaway)
     validation_errors = validate_post_for_target_accounts(post, target_accounts)
     post.last_error = "; ".join(validation_errors) if validation_errors else None
     if validation_errors and post.status in {"scheduled", "queued", "posting"}:
@@ -320,10 +321,25 @@ def update_scheduled_post(
     target_accounts = resolve_target_accounts(session, post.persona, target_ids)
     sync_delivery_jobs(session, post, target_accounts, _desired_job_status(post.status))
     giveaway_config = payload.giveaway
-    if post.post_type == POST_TYPE_INSTAGRAM_GIVEAWAY and giveaway_config is None and post.instagram_giveaway is not None:
-        giveaway_config = giveaway_rules_input_from_json(post.instagram_giveaway.rules_json or {})
-        giveaway_config.giveaway_end_at = post.instagram_giveaway.giveaway_end_at
-    sync_instagram_giveaway(session, post, target_accounts, giveaway_config)
+    if post.post_type == POST_TYPE_GIVEAWAY and giveaway_config is None:
+        if post.giveaway_campaign is None and post.instagram_giveaway is not None:
+            migrate_legacy_instagram_giveaway(session, post)
+        if post.giveaway_campaign is not None:
+            giveaway_config = giveaway_config_input_from_json(
+                {
+                    "giveaway_end_at": post.giveaway_campaign.giveaway_end_at.isoformat() if post.giveaway_campaign.giveaway_end_at else None,
+                    "pool_mode": post.giveaway_campaign.pool_mode,
+                    "channels": [
+                        {
+                            "service": channel.service,
+                            "account_id": channel.account_id,
+                            "rules": channel.rules_json,
+                        }
+                        for channel in post.giveaway_campaign.channels
+                    ],
+                }
+            )
+    sync_giveaway_campaign(session, post, target_accounts, giveaway_config)
 
     validation_errors = validate_post_for_target_accounts(post, target_accounts)
     post.last_error = "; ".join(validation_errors) if validation_errors else None

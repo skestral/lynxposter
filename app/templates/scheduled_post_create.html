@@ -69,7 +69,7 @@
                                         <label class="form-label">Post Type</label>
                                         <select class="form-select" name="post_type" id="post-type-select">
                                             <option value="standard">Standard Post</option>
-                                            <option value="instagram_giveaway">Instagram Giveaway</option>
+                                            <option value="giveaway">Giveaway</option>
                                         </select>
                                     </div>
                                     <div class="col-md-6">
@@ -105,55 +105,16 @@
                             <div class="surface-panel giveaway-only d-none" id="giveaway-config-panel">
                                 <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
                                     <div>
-                                        <div class="fw-semibold">Instagram Giveaway Rules</div>
-                                        <div class="small text-secondary">Giveaways need exactly one Instagram destination. Shares count as story mentions while the giveaway is live.</div>
+                                        <div class="fw-semibold">Giveaway Builder</div>
+                                        <div class="small text-secondary">Mix Instagram and Bluesky channels, choose a pool mode, and define the qualifying actions visually.</div>
                                     </div>
-                                    <span class="badge text-bg-light border">One lucky winner</span>
+                                    <span class="badge text-bg-light border">Generic engine</span>
                                 </div>
-                                <div class="row g-3">
-                                    <div class="col-md-6">
-                                        <label class="form-label">Giveaway End Time</label>
-                                        <input class="form-control" name="giveaway_end_at" type="datetime-local">
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label">Friend Mentions Required</label>
-                                        <input class="form-control" name="giveaway_min_friend_mentions" type="number" min="0" max="20" value="1">
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label">Required Keywords</label>
-                                        <input class="form-control" name="giveaway_required_keywords" placeholder="launch, giveaway">
-                                        <div class="form-text">Optional comma-separated keywords that must appear in the entrant's comment.</div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label">Required Hashtags</label>
-                                        <input class="form-control" name="giveaway_required_hashtags" placeholder="#giveaway, #launch">
-                                        <div class="form-text">Optional comma-separated hashtags.</div>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <div class="form-check mt-2">
-                                            <input class="form-check-input" type="checkbox" name="giveaway_require_story_mention" checked>
-                                            <label class="form-check-label">Require story mention</label>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <div class="form-check mt-2">
-                                            <input class="form-check-input" type="checkbox" name="giveaway_require_like">
-                                            <label class="form-check-label">Require like</label>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <div class="form-check mt-2">
-                                            <input class="form-check-input" type="checkbox" name="giveaway_require_follow">
-                                            <label class="form-check-label">Require follow</label>
-                                        </div>
-                                    </div>
-                                    <div class="col-12">
-                                        <div class="small text-secondary" id="giveaway-target-hint">Select exactly one Instagram destination account for giveaway posts.</div>
-                                    </div>
-                                </div>
+                                <div id="giveaway-builder-root"></div>
+                                <div class="small text-secondary mt-3" id="giveaway-target-hint">Switch to giveaway mode to sync destinations from the enabled channels.</div>
                             </div>
                             <div class="surface-panel-soft">
-                                <div class="small text-secondary">This tab wakes up when the post type is <strong>Instagram Giveaway</strong>.</div>
+                                <div class="small text-secondary">This tab wakes up when the post type is <strong>Giveaway</strong>.</div>
                             </div>
                         </div>
 
@@ -246,6 +207,7 @@
 
 {% block scripts %}
 {% if personas %}
+<script src="/static/giveaway_builder.js"></script>
 <script>
 const personaTargets = {{ persona_targets | tojson }};
 const servicePostGuidance = {{ service_post_guidance | tojson }};
@@ -264,6 +226,7 @@ const statusSelect = document.getElementById("status-select");
 const scheduledForInput = document.getElementById("scheduled-for-input");
 const giveawayConfigPanel = document.getElementById("giveaway-config-panel");
 const giveawayTargetHint = document.getElementById("giveaway-target-hint");
+const giveawayBuilderRoot = document.getElementById("giveaway-builder-root");
 const previewPersonaName = document.getElementById("preview-persona-name");
 const previewScheduleLabel = document.getElementById("preview-schedule-label");
 const previewBodyCopy = document.getElementById("preview-body-copy");
@@ -271,6 +234,21 @@ const previewMediaSummary = document.getElementById("preview-media-summary");
 const previewTargetCount = document.getElementById("preview-target-count");
 const previewAttachmentCount = document.getElementById("preview-attachment-count");
 const previewStatusPill = document.getElementById("preview-status-pill");
+
+function currentGiveawayServiceAccounts() {
+  const accounts = personaTargets[personaSelect.value] || [];
+  return {
+    instagram: accounts.filter((account) => account.service === "instagram"),
+    bluesky: accounts.filter((account) => account.service === "bluesky"),
+  };
+}
+
+const giveawayBuilder = window.LynxGiveawayBuilder.create({
+  root: giveawayBuilderRoot,
+  getServiceAccounts: currentGiveawayServiceAccounts,
+  initialValue: null,
+  onChange: () => refreshGiveawayState(),
+});
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -440,41 +418,41 @@ function renderTargetAccounts() {
   refreshPostGuidance();
 }
 
-function parseCommaSeparated(value) {
-  return String(value || "")
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function buildGiveawayPayload(form) {
-  if (postTypeSelect.value !== "instagram_giveaway") {
+function buildGiveawayPayload() {
+  if (postTypeSelect.value !== "giveaway") {
     return null;
   }
-  return {
-    giveaway_end_at: form.giveaway_end_at.value || null,
-    min_friend_mentions: Number.parseInt(form.giveaway_min_friend_mentions.value || "0", 10) || 0,
-    required_keywords: parseCommaSeparated(form.giveaway_required_keywords.value),
-    required_hashtags: parseCommaSeparated(form.giveaway_required_hashtags.value),
-    require_story_mention: form.giveaway_require_story_mention.checked,
-    require_like: form.giveaway_require_like.checked,
-    require_follow: form.giveaway_require_follow.checked,
-  };
+  return giveawayBuilder.getValue();
+}
+
+function syncGiveawayTargets() {
+  const giveawayMode = postTypeSelect.value === "giveaway";
+  const selectedIds = new Set(giveawayMode ? giveawayBuilder.getChannelAccountIds() : []);
+  targetAccountList.querySelectorAll(".target-checkbox").forEach((checkbox) => {
+    if (giveawayMode) {
+      checkbox.checked = selectedIds.has(checkbox.value);
+      checkbox.disabled = true;
+    } else {
+      checkbox.disabled = false;
+    }
+  });
 }
 
 function refreshGiveawayState() {
-  const isGiveaway = postTypeSelect.value === "instagram_giveaway";
+  const isGiveaway = postTypeSelect.value === "giveaway";
   giveawayConfigPanel.classList.toggle("d-none", !isGiveaway);
   giveawayConfigPanel.classList.toggle("giveaway-only", isGiveaway);
-  const selectedInstagramTargets = Array.from(targetAccountList.querySelectorAll(".target-checkbox"))
-    .filter((checkbox) => checkbox.checked)
-    .map((checkbox) => checkbox.closest("[data-account-service]"))
-    .filter((wrapper) => wrapper?.dataset.accountService === "instagram").length;
+  syncGiveawayTargets();
   if (isGiveaway) {
-    giveawayTargetHint.className = selectedInstagramTargets === 1 ? "small text-success" : "small text-danger";
-    giveawayTargetHint.textContent = selectedInstagramTargets === 1
-      ? "Exactly one Instagram destination is selected."
-      : "Instagram giveaway posts must target exactly one Instagram destination account.";
+    const validation = giveawayBuilder.validate();
+    const selectedTargets = giveawayBuilder.getChannelAccountIds();
+    giveawayTargetHint.className = validation.ok ? "small text-success" : "small text-danger";
+    giveawayTargetHint.textContent = validation.ok
+      ? `Targets sync from giveaway channels: ${selectedTargets.length} destination${selectedTargets.length === 1 ? "" : "s"} selected.`
+      : validation.message;
+  } else {
+    giveawayTargetHint.className = "small text-secondary";
+    giveawayTargetHint.textContent = "Switch to giveaway mode to sync destinations from the enabled channels.";
   }
 }
 
@@ -551,8 +529,8 @@ function refreshComposerPreview() {
 
 function refreshPostGuidance() {
   const snapshot = attachmentSnapshot(uploadsInput.files || []);
+  refreshGiveawayState();
   const selectedTargets = Array.from(targetAccountList.querySelectorAll(".target-checkbox")).filter((checkbox) => checkbox.checked).length;
-
   bodyLengthIndicator.textContent = `${bodyTextarea.value.length} chars`;
   uploadSummary.textContent = snapshot.total
     ? `${describeAttachmentSnapshot(snapshot)} will travel with this post plan.`
@@ -560,7 +538,6 @@ function refreshPostGuidance() {
   snapshotBodyLength.textContent = `${bodyTextarea.value.length} chars`;
   snapshotAttachments.textContent = `${snapshot.total} attachment${snapshot.total === 1 ? "" : "s"}`;
   snapshotTargets.textContent = `${selectedTargets} target${selectedTargets === 1 ? "" : "s"}`;
-  refreshGiveawayState();
   refreshComposerPreview();
 
   targetAccountList.querySelectorAll(".col-12[data-account-service]").forEach((wrapper) => {
@@ -587,7 +564,10 @@ function refreshPostGuidance() {
   });
 }
 
-personaSelect.addEventListener("change", renderTargetAccounts);
+personaSelect.addEventListener("change", () => {
+  giveawayBuilder.refresh();
+  renderTargetAccounts();
+});
 renderTargetAccounts();
 
 uploadsInput.addEventListener("change", () => {
@@ -607,7 +587,7 @@ document.getElementById("scheduled-post-form").addEventListener("submit", async 
   event.preventDefault();
   const form = event.currentTarget;
   const payload = new FormData();
-  const targetAccountIds = Array.from(form.querySelectorAll(".target-checkbox"))
+  let targetAccountIds = Array.from(form.querySelectorAll(".target-checkbox"))
     .filter((checkbox) => checkbox.checked)
     .map((checkbox) => checkbox.value);
   const publishOverrides = {};
@@ -619,21 +599,15 @@ document.getElementById("scheduled-post-form").addEventListener("submit", async 
   const metadata = {};
   if (form.source_link.value.trim()) metadata.link = form.source_link.value.trim();
   if (form.visibility.value) metadata.visibility = form.visibility.value;
-  const giveaway = buildGiveawayPayload(form);
+  const giveaway = buildGiveawayPayload();
 
-  if (postTypeSelect.value === "instagram_giveaway") {
-    const instagramTargetIds = Array.from(form.querySelectorAll(".target-checkbox"))
-      .filter((checkbox) => checkbox.checked)
-      .filter((checkbox) => checkbox.closest("[data-account-service]")?.dataset.accountService === "instagram")
-      .map((checkbox) => checkbox.value);
-    if (instagramTargetIds.length !== 1 || targetAccountIds.length !== 1) {
-      alert("Instagram giveaway posts need exactly one Instagram destination account.");
+  if (postTypeSelect.value === "giveaway") {
+    const validation = giveawayBuilder.validate();
+    if (!validation.ok) {
+      alert(validation.message);
       return;
     }
-    if (!giveaway?.giveaway_end_at) {
-      alert("Instagram giveaway posts need an end time.");
-      return;
-    }
+    targetAccountIds = giveawayBuilder.getChannelAccountIds();
   }
 
   payload.append("persona_id", form.persona_id.value);
