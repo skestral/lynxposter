@@ -73,7 +73,10 @@
                                         </select>
                                     </div>
                                     <div class="col-md-6">
-                                        <label class="form-label">Scheduled For</label>
+                                        <label class="form-label d-flex align-items-center gap-2 flex-wrap">
+                                            <span>Scheduled For</span>
+                                            <span class="badge text-bg-light border rounded-pill">{{ timezone_indicator() }}</span>
+                                        </label>
                                         <input class="form-control" name="scheduled_for" type="datetime-local" value="{{ post.scheduled_for|datetime_local_input if post.scheduled_for else '' }}">
                                     </div>
                                     <div class="col-md-6">
@@ -183,7 +186,10 @@
         {% if post.giveaway %}
         <div class="card section-card mb-4">
             <div class="card-body">
-                <h2 class="h5">Giveaway</h2>
+                <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
+                    <h2 class="h5 mb-0">Giveaway</h2>
+                    <span class="badge text-bg-light border rounded-pill">{{ timezone_indicator() }}</span>
+                </div>
                 <div class="mb-3">
                     <div class="fw-semibold">{{ post.giveaway.status|replace('_', ' ')|title }}</div>
                     <div class="small text-secondary">Ends {{ post.giveaway.giveaway_end_at|datetime_display }}</div>
@@ -658,6 +664,7 @@ giveawayBuilder = window.LynxGiveawayBuilder.create({
   root: giveawayBuilderRoot,
   getServiceAccounts: detailGiveawayServiceAccounts,
   initialValue: initialGiveaway,
+  timezoneLabel: {{ timezone_indicator() | tojson }},
   onChange: () => {
     if (giveawayBuilder) {
       refreshGiveawayState();

@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 from starlette.requests import Request
 
-from app.main import _datetime_display, _local_timezone_to_utc, _owner_user_id_for_principal
+from app.main import _datetime_display, _local_timezone_to_utc, _owner_user_id_for_principal, _timezone_indicator, _timezone_name
 from app.models import Persona
 from app.services.auth import Principal, _enforce_role, build_principal_from_request
 from app.services.personas import get_persona, list_personas
@@ -312,8 +312,12 @@ def test_timezone_helpers_render_and_parse_user_timezone():
     timestamp = datetime(2026, 4, 15, 13, 30, tzinfo=timezone.utc)
 
     rendered = _datetime_display(SimpleNamespace(get=context.get), timestamp)
+    timezone_name = _timezone_name(SimpleNamespace(get=context.get))
+    timezone_indicator = _timezone_indicator(SimpleNamespace(get=context.get))
     parsed = _local_timezone_to_utc("2026-04-15T09:30", "America/New_York")
 
     assert "Apr 15, 2026" in rendered
     assert rendered.endswith("EDT")
+    assert timezone_name == "America/New_York"
+    assert timezone_indicator == "Timezone: America/New_York"
     assert parsed == timestamp

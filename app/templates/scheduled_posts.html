@@ -63,6 +63,7 @@
                         <p class="text-secondary mb-0">Drop cards onto a day, then pick the exact time in the quick pop-up.</p>
                     </div>
                     <div class="d-flex flex-wrap gap-2 align-items-center">
+                        <span class="badge text-bg-light border rounded-pill px-3 py-2">{{ timezone_indicator() }}</span>
                         <div class="btn-group" role="group" aria-label="Calendar view switcher">
                             <button class="btn btn-outline-secondary active" type="button" id="calendar-view-month" data-calendar-view="month">Month</button>
                             <button class="btn btn-outline-secondary" type="button" id="calendar-view-week" data-calendar-view="week">Week</button>
@@ -183,7 +184,10 @@
                     </div>
                     <div class="alert alert-danger d-none mb-0" id="planner-move-error"></div>
                     <div class="d-none" id="planner-move-scheduled-group">
-                        <label class="form-label" for="planner-move-scheduled-for">Scheduled For</label>
+                        <label class="form-label d-flex align-items-center gap-2 flex-wrap" for="planner-move-scheduled-for">
+                            <span>Scheduled For</span>
+                            <span class="badge text-bg-light border rounded-pill">{{ timezone_indicator() }}</span>
+                        </label>
                         <input class="form-control" id="planner-move-scheduled-for" type="datetime-local">
                         <div class="form-text">Choose when this post should appear on the calendar.</div>
                     </div>
@@ -192,7 +196,10 @@
                         <label class="form-check-label" for="planner-move-clear-schedule">Clear the saved scheduled time while moving back to drafts</label>
                     </div>
                     <div class="d-none" id="planner-move-giveaway-group">
-                        <label class="form-label" for="planner-move-giveaway-end">Giveaway End Time</label>
+                        <label class="form-label d-flex align-items-center gap-2 flex-wrap" for="planner-move-giveaway-end">
+                            <span>Giveaway End Time</span>
+                            <span class="badge text-bg-light border rounded-pill">{{ timezone_indicator() }}</span>
+                        </label>
                         <input class="form-control" id="planner-move-giveaway-end" type="datetime-local">
                         <div class="form-text">Giveaway posts need an end time before they can go live.</div>
                     </div>
@@ -222,6 +229,7 @@
 {%- endmacro %}
 <script>
 const personaNameById = {{ persona_name_by_id | tojson }};
+const plannerTimezoneName = {{ timezone_name() | tojson }};
 const scheduledPostsPlannerData = [
 {% for post in posts %}
   {
@@ -400,12 +408,13 @@ function formatDayLabel(date, options) {
 
 function formatDateTime(date) {
   if (!date) return "Unscheduled";
-  return new Intl.DateTimeFormat(undefined, {
+  const formatted = new Intl.DateTimeFormat(undefined, {
     month: "short",
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
   }).format(date);
+  return `${formatted} ${plannerTimezoneName}`;
 }
 
 function summarizeBody(body) {

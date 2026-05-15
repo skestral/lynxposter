@@ -167,14 +167,27 @@ def _principal_timezone(principal: Principal | None) -> str:
     return normalize_timezone(timezone_name)
 
 
+def _context_principal(context) -> Principal | None:
+    request = context.get("request")
+    return getattr(getattr(request, "state", None), "principal", None)
+
+
+@pass_context
+def _timezone_name(context, timezone_name: str | None = None) -> str:
+    return normalize_timezone(timezone_name or _principal_timezone(_context_principal(context)))
+
+
+@pass_context
+def _timezone_indicator(context, timezone_name: str | None = None) -> str:
+    return f"Timezone: {_timezone_name(context, timezone_name)}"
+
+
 @pass_context
 def _datetime_display(context, value: datetime | str | None, timezone_name: str | None = None) -> str:
     dt = _coerce_datetime(value)
     if dt is None:
         return "-"
-    request = context.get("request")
-    principal = getattr(getattr(request, "state", None), "principal", None)
-    tz_name = normalize_timezone(timezone_name or _principal_timezone(principal))
+    tz_name = _timezone_name(context, timezone_name)
     local_dt = dt.astimezone(ZoneInfo(tz_name))
     return local_dt.strftime("%b %d, %Y %I:%M %p %Z")
 
@@ -184,15 +197,15 @@ def _datetime_local_input(context, value: datetime | str | None, timezone_name: 
     dt = _coerce_datetime(value)
     if dt is None:
         return ""
-    request = context.get("request")
-    principal = getattr(getattr(request, "state", None), "principal", None)
-    tz_name = normalize_timezone(timezone_name or _principal_timezone(principal))
+    tz_name = _timezone_name(context, timezone_name)
     local_dt = dt.astimezone(ZoneInfo(tz_name))
     return local_dt.strftime("%Y-%m-%dT%H:%M")
 
 
 templates.env.filters["datetime_display"] = _datetime_display
 templates.env.filters["datetime_local_input"] = _datetime_local_input
+templates.env.globals["timezone_name"] = _timezone_name
+templates.env.globals["timezone_indicator"] = _timezone_indicator
 templates.env.globals["timezone_options"] = timezone_options
 templates.env.globals["ui_theme_options"] = ui_theme_options
 templates.env.globals["ui_theme_definition"] = ui_theme_definition

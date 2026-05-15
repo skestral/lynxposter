@@ -80,7 +80,10 @@
                                         </select>
                                     </div>
                                     <div class="col-md-6">
-                                        <label class="form-label">Scheduled For</label>
+                                        <label class="form-label d-flex align-items-center gap-2 flex-wrap">
+                                            <span>Scheduled For</span>
+                                            <span class="badge text-bg-light border rounded-pill">{{ timezone_indicator() }}</span>
+                                        </label>
                                         <input class="form-control" name="scheduled_for" id="scheduled-for-input" type="datetime-local">
                                     </div>
                                     <div class="col-md-6">
@@ -248,6 +251,7 @@ giveawayBuilder = window.LynxGiveawayBuilder.create({
   root: giveawayBuilderRoot,
   getServiceAccounts: currentGiveawayServiceAccounts,
   initialValue: null,
+  timezoneLabel: {{ timezone_indicator() | tojson }},
   onChange: () => {
     if (giveawayBuilder) {
       refreshGiveawayState();

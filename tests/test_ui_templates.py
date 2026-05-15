@@ -494,6 +494,7 @@ def test_scheduled_post_templates_render_generic_giveaway_controls():
     assert "Separate" in html
     assert "Activity Dashboard" in html
     assert '"giveaway_end_at": "2026-05-15T15:30"' in html
+    assert "Timezone: America/Los_Angeles" in html
     assert "Entrant Audit Log" in html
     assert "Selection Log" in html
     assert "Confirm Winner" in html
@@ -569,6 +570,8 @@ def test_scheduled_posts_planner_renders_generic_giveaway_data():
     assert 'displayStatus: "draft"' in html
     assert 'scheduledFor: "2026-05-14T13:00"' in html
     assert 'giveaway_end_at: "2026-05-15T13:00"' in html
+    assert 'const plannerTimezoneName = "America/Los_Angeles";' in html
+    assert "Timezone: America/Los_Angeles" in html
     assert "return Boolean(post.scheduledDate);" in html
     assert "including drafts that are still being refined on the board" in html
     assert "reply_or_quote_present" in html

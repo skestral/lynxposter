@@ -226,7 +226,10 @@
                                     <div class="form-text">This updates the running scheduler immediately after save.</div>
                                 </div>
                                 <div class="col-md-6">
-                                    <label class="form-label">Scheduler Status</label>
+                                    <label class="form-label d-flex align-items-center gap-2 flex-wrap">
+                                        <span>Scheduler Status</span>
+                                        <span class="badge text-bg-light border rounded-pill">{{ timezone_indicator() }}</span>
+                                    </label>
                                     <div class="lp-static-field">{{ "Running" if scheduler_status.scheduler_started else "Stopped" }}{% if not scheduler_status.automation_enabled %} | Paused{% endif %}</div>
                                     <div class="form-text">Next run: {{ scheduler_status.next_run_at|datetime_display if scheduler_status.next_run_at else "Not scheduled" }}</div>
                                 </div>

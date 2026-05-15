@@ -7,7 +7,10 @@
                 <h2 class="h5 mb-1">Giveaway Activity Monitor</h2>
                 <div class="small text-secondary">Watch Instagram and Bluesky engagement for open giveaways in one rollup while entrants keep coming in.</div>
             </div>
-            <a href="/scheduled-posts/page" class="btn btn-sm btn-outline-secondary">Open Planner</a>
+            <div class="d-flex gap-2 flex-wrap">
+                <span class="badge text-bg-light border rounded-pill px-3 py-2">{{ timezone_indicator() }}</span>
+                <a href="/scheduled-posts/page" class="btn btn-sm btn-outline-secondary">Open Planner</a>
+            </div>
         </div>
         <form method="get" action="/" class="row g-3 mb-4">
             <div class="col-md-4">
@@ -113,7 +116,7 @@
                     <div class="table-responsive">
                         <table class="table align-middle mb-0">
                             <thead>
-                                <tr><th>When</th><th>Activity</th><th>Entrant</th><th>Giveaway</th><th>Detail</th></tr>
+                                <tr><th>When <span class="badge text-bg-light border rounded-pill">{{ timezone_indicator() }}</span></th><th>Activity</th><th>Entrant</th><th>Giveaway</th><th>Detail</th></tr>
                             </thead>
                             <tbody>
                                 {% for event in activity_monitor.recent_events %}

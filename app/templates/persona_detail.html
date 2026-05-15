@@ -355,7 +355,10 @@
                                                     <div class="fw-semibold">Token Lifespan</div>
                                                     <div class="small text-secondary">{{ entry.instagram_token_status.summary }}</div>
                                                 </div>
-                                                <span class="badge {{ entry.instagram_token_status.badge_class }}">{{ entry.instagram_token_status.badge_label }}</span>
+                                                <div class="d-flex gap-2 flex-wrap">
+                                                    <span class="badge text-bg-light border rounded-pill">{{ timezone_indicator() }}</span>
+                                                    <span class="badge {{ entry.instagram_token_status.badge_class }}">{{ entry.instagram_token_status.badge_label }}</span>
+                                                </div>
                                             </div>
                                             <div class="row g-3 mt-1">
                                                 <div class="col-md-6">

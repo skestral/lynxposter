@@ -18,7 +18,7 @@
     data-ui-mode="{{ current_principal.ui_mode if current_principal is defined and current_principal.ui_mode else 'light' }}"
     data-ui-theme-saved="{{ current_principal.ui_theme if current_principal is defined and current_principal.ui_theme else 'skylight' }}"
     data-ui-mode-saved="{{ current_principal.ui_mode if current_principal is defined and current_principal.ui_mode else 'light' }}"
-    data-ui-timezone="{{ current_principal.timezone if current_principal is defined and current_principal.timezone else 'UTC' }}"
+    data-ui-timezone="{{ timezone_name() }}"
     data-ui-preferences-persist="{% if current_principal is defined and current_principal.is_authenticated and current_principal.user_id %}1{% else %}0{% endif %}"
     data-live-updates-enabled="{% if current_principal is defined and current_principal.is_authenticated %}1{% else %}0{% endif %}"
 >

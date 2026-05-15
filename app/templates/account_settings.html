@@ -109,7 +109,10 @@
                                 <div class="lp-static-field {% if not user.groups_json %}is-empty{% endif %}">{{ user.groups_json|join(', ') if user.groups_json else "No groups" }}</div>
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label">Last Login</label>
+                                <label class="form-label d-flex align-items-center gap-2 flex-wrap">
+                                    <span>Last Login</span>
+                                    <span class="badge text-bg-light border rounded-pill">{{ timezone_indicator() }}</span>
+                                </label>
                                 <div class="lp-static-field {% if not user.last_login_at %}is-empty{% endif %}">{{ user.last_login_at|datetime_display if user.last_login_at else "No sign-in recorded yet" }}</div>
                             </div>
                             <div class="col-md-6">

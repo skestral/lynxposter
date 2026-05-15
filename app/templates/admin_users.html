@@ -6,6 +6,7 @@
         <div class="small text-secondary">Review profiles, see persona ownership, and pause access when needed.</div>
     </div>
     <div class="d-flex gap-2 flex-wrap">
+        <span class="badge text-bg-light border">{{ timezone_indicator() }}</span>
         <span class="badge text-bg-light border">{{ users|length }} total profiles</span>
         <span class="badge text-bg-light border">{{ users|selectattr('is_enabled')|list|length }} enabled</span>
     </div>
@@ -59,7 +60,7 @@
                         </div>
                     </div>
                     <div class="text-lg-end">
-                        <div class="small text-secondary">Last Login</div>
+                        <div class="small text-secondary">Last Login <span class="badge text-bg-light border rounded-pill">{{ timezone_indicator() }}</span></div>
                         <div class="fw-semibold">{{ user.last_login_at|datetime_display }}</div>
                     </div>
                 </div>

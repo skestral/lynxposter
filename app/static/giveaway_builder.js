@@ -313,7 +313,7 @@
     }));
   }
 
-  function createBuilder({root, getServiceAccounts, initialValue, onChange}) {
+  function createBuilder({root, getServiceAccounts, initialValue, onChange, timezoneLabel}) {
     if (!root) {
       return {
         getValue() { return null; },
@@ -431,7 +431,10 @@
       root.innerHTML = `
         <div class="row g-3">
           <div class="col-md-6">
-            <label class="form-label">Giveaway Ends</label>
+            <label class="form-label d-flex align-items-center gap-2 flex-wrap">
+              <span>Giveaway Ends</span>
+              <span class="badge text-bg-light border rounded-pill">${escapeHtml(timezoneLabel || "Profile timezone")}</span>
+            </label>
             <input class="form-control" type="datetime-local" data-action="end-at" value="${escapeHtml(state.giveaway_end_at)}">
           </div>
           <div class="col-md-6">
