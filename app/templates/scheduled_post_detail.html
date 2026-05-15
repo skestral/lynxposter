@@ -568,9 +568,18 @@
 <script>
 const postId = "{{ post.id }}";
 const servicePostGuidance = {{ service_post_guidance | tojson }};
-const detailAccounts = {{ accounts | tojson }};
+const detailAccounts = [
+{% for account in accounts %}
+  {
+    id: {{ account.id | tojson }},
+    label: {{ account.label | tojson }},
+    handle_or_identifier: {{ account.handle_or_identifier | default("", true) | tojson }},
+    service: {{ account.service | tojson }},
+  }{% if not loop.last %},{% endif %}
+{% endfor %}
+];
 const initialGiveaway = {% if post.giveaway %}{
-  "giveaway_end_at": {{ post.giveaway.giveaway_end_at.isoformat() | tojson if post.giveaway.giveaway_end_at else 'null' }},
+  "giveaway_end_at": {{ post.giveaway.giveaway_end_at|datetime_local_input|tojson if post.giveaway.giveaway_end_at else 'null' }},
   "pool_mode": {{ post.giveaway.pool_mode | default('combined', true) | tojson }},
   "channels": [
     {% if post.giveaway.channels is defined %}
@@ -644,11 +653,16 @@ function detailGiveawayServiceAccounts() {
   };
 }
 
-const giveawayBuilder = window.LynxGiveawayBuilder.create({
+let giveawayBuilder = null;
+giveawayBuilder = window.LynxGiveawayBuilder.create({
   root: giveawayBuilderRoot,
   getServiceAccounts: detailGiveawayServiceAccounts,
   initialValue: initialGiveaway,
-  onChange: () => refreshGiveawayState(),
+  onChange: () => {
+    if (giveawayBuilder) {
+      refreshGiveawayState();
+    }
+  },
 });
 
 function attachmentSnapshot(items) {

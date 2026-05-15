@@ -157,6 +157,25 @@ def _desired_job_status(post_status: str) -> str:
     return "draft"
 
 
+def _giveaway_config_from_campaign(post: CanonicalPost):
+    if post.giveaway_campaign is None:
+        return None
+    return giveaway_config_input_from_json(
+        {
+            "giveaway_end_at": post.giveaway_campaign.giveaway_end_at.isoformat() if post.giveaway_campaign.giveaway_end_at else None,
+            "pool_mode": post.giveaway_campaign.pool_mode,
+            "channels": [
+                {
+                    "service": channel.service,
+                    "account_id": channel.account_id,
+                    "rules": channel.rules_json,
+                }
+                for channel in post.giveaway_campaign.channels
+            ],
+        }
+    )
+
+
 def resolve_target_accounts(session: Session, persona: Persona, target_account_ids: list[str] | None) -> list[Account]:
     if target_account_ids:
         stmt = (
@@ -324,21 +343,7 @@ def update_scheduled_post(
     if post.post_type == POST_TYPE_GIVEAWAY and giveaway_config is None:
         if post.giveaway_campaign is None and post.instagram_giveaway is not None:
             migrate_legacy_instagram_giveaway(session, post)
-        if post.giveaway_campaign is not None:
-            giveaway_config = giveaway_config_input_from_json(
-                {
-                    "giveaway_end_at": post.giveaway_campaign.giveaway_end_at.isoformat() if post.giveaway_campaign.giveaway_end_at else None,
-                    "pool_mode": post.giveaway_campaign.pool_mode,
-                    "channels": [
-                        {
-                            "service": channel.service,
-                            "account_id": channel.account_id,
-                            "rules": channel.rules_json,
-                        }
-                        for channel in post.giveaway_campaign.channels
-                    ],
-                }
-            )
+        giveaway_config = _giveaway_config_from_campaign(post)
     sync_giveaway_campaign(session, post, target_accounts, giveaway_config)
 
     validation_errors = validate_post_for_target_accounts(post, target_accounts)
@@ -374,13 +379,18 @@ def delete_scheduled_post(session: Session, post: CanonicalPost) -> None:
 def schedule_post_now(session: Session, post: CanonicalPost) -> CanonicalPost:
     target_ids = _active_target_account_ids(post)
     target_accounts = resolve_target_accounts(session, post.persona, target_ids)
+    post.scheduled_for = utcnow()
+    post.status = "queued"
+    if post.post_type == POST_TYPE_GIVEAWAY:
+        if post.giveaway_campaign is None and post.instagram_giveaway is not None:
+            migrate_legacy_instagram_giveaway(session, post)
+        sync_giveaway_campaign(session, post, target_accounts, _giveaway_config_from_campaign(post))
+
     validation_errors = validate_post_for_target_accounts(post, target_accounts)
     post.last_error = "; ".join(validation_errors) if validation_errors else None
     if validation_errors:
         raise ValueError(post.last_error)
 
-    post.scheduled_for = utcnow()
-    post.status = "queued"
     sync_delivery_jobs(session, post, target_accounts, "queued")
     refresh_post_status(post)
     session.flush()

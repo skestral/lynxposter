@@ -8,7 +8,7 @@ from typing import Any
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
-from fastapi import FastAPI, HTTPException, Request, UploadFile
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse
 from jinja2 import pass_context
 from starlette.middleware.sessions import SessionMiddleware
@@ -59,7 +59,7 @@ from app.services.auth import (
 )
 from app.services.alerts import AlertDispatcher
 from app.services.app_settings import read_app_settings, send_settings_test_webhook, update_app_settings
-from app.services.delivery import new_run_id
+from app.services.delivery import new_run_id, process_delivery_queue
 from app.services.events import log_run_event
 from app.services.bootstrap import bootstrap
 from app.services.giveaway_activity import build_dashboard_giveaway_activity_monitor
@@ -67,6 +67,7 @@ from app.services.giveaway_engine import (
     POST_TYPE_GIVEAWAY,
     advance_giveaway_winner,
     confirm_giveaway_winner,
+    process_giveaway_lifecycle,
     serialize_giveaway,
 )
 from app.services.giveaways import (
@@ -251,6 +252,50 @@ def _alert_dispatcher(request: Request) -> AlertDispatcher:
     if isinstance(dispatcher, AlertDispatcher):
         return dispatcher
     return AlertDispatcher()
+
+
+def _process_send_now_delivery(post_id: str, run_id: str, alerts: AlertDispatcher) -> None:
+    try:
+        with db_session() as session:
+            process_delivery_queue(session, alerts, run_id=run_id, post_id=post_id)
+        with db_session() as session:
+            post = get_post(session, post_id)
+            if post and post.post_type == POST_TYPE_GIVEAWAY:
+                process_giveaway_lifecycle(session, alerts, run_id=run_id, post_id=post_id)
+        publish_live_update(
+            LIVE_UPDATE_TOPIC_SCHEDULED_POSTS,
+            LIVE_UPDATE_TOPIC_DASHBOARD,
+        )
+    except Exception as exc:
+        message = str(exc) or exc.__class__.__name__
+        with db_session() as session:
+            post = get_post(session, post_id)
+            if post:
+                post.last_error = message
+                log_run_event(
+                    session,
+                    run_id=run_id,
+                    persona_id=post.persona_id,
+                    persona_name=post.persona.name if post.persona else None,
+                    operation="publish",
+                    severity="error",
+                    message=f"Publish-now processing failed: {message}",
+                    post_id=post.id,
+                )
+            alerts.emit_hard_failure(
+                session,
+                run_id=run_id,
+                persona=post.persona if post else None,
+                service="publish",
+                post=post,
+                operation="publish_now",
+                message=message,
+                error_class=exc.__class__.__name__,
+            )
+        publish_live_update(
+            LIVE_UPDATE_TOPIC_SCHEDULED_POSTS,
+            LIVE_UPDATE_TOPIC_DASHBOARD,
+        )
 
 
 def _dashboard_dismissed_alert_ids(request: Request) -> set[str]:
@@ -949,7 +994,7 @@ def scheduled_post_detail_page(post_id: str, request: Request) -> HTMLResponse:
                 request,
                 post=_serialize_post(post),
                 persona=persona,
-                accounts=[_serialize_account(account) for account in persona_destination_accounts(persona)],
+                accounts=[_serialize_account(account).model_dump(mode="json") for account in persona_destination_accounts(persona)],
                 service_post_guidance=service_composer_constraints_context(),
             ),
         )
@@ -1706,13 +1751,15 @@ def api_advance_giveaway_winner(post_id: str, request: Request):
 
 
 @app.post("/scheduled-posts/{post_id}/send-now")
-def api_send_now(post_id: str, request: Request) -> ScheduledPostRead:
+def api_send_now(post_id: str, request: Request, background_tasks: BackgroundTasks) -> ScheduledPostRead:
     principal = require_api_access(request, role="user")
     with db_session() as session:
         post = get_post(session, post_id, owner_user_id=_owner_user_id_for_principal(principal))
         if not post or post.origin_kind != "composer":
             raise HTTPException(status_code=404, detail="Scheduled post not found.")
         try:
+            run_id = new_run_id()
+            alerts = _alert_dispatcher(request)
             updated = schedule_post_now(session, post)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -1720,6 +1767,7 @@ def api_send_now(post_id: str, request: Request) -> ScheduledPostRead:
             LIVE_UPDATE_TOPIC_SCHEDULED_POSTS,
             LIVE_UPDATE_TOPIC_DASHBOARD,
         )
+        background_tasks.add_task(_process_send_now_delivery, updated.id, run_id, alerts)
         return _serialize_post(updated)
 
 

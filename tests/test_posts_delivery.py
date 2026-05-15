@@ -138,6 +138,60 @@ def test_published_post_is_deduped_when_polled_back_from_same_account(session, m
     assert session.query(CanonicalPost).count() == 1
 
 
+def test_process_delivery_queue_can_be_limited_to_one_post(session, monkeypatch):
+    persona = _create_persona(session)
+    mastodon = _create_account(session, persona, service="mastodon", label="Mastodon", source_enabled=False, destination_enabled=True)
+
+    first = create_scheduled_post(
+        session,
+        ScheduledPostCreate.model_validate(
+            {
+                "persona_id": persona.id,
+                "body": "Publish this one",
+                "status": "queued",
+                "target_account_ids": [mastodon.id],
+                "publish_overrides_json": {},
+                "metadata_json": {},
+                "scheduled_for": None,
+            }
+        ),
+        [],
+    )
+    second = create_scheduled_post(
+        session,
+        ScheduledPostCreate.model_validate(
+            {
+                "persona_id": persona.id,
+                "body": "Leave this one queued",
+                "status": "queued",
+                "target_account_ids": [mastodon.id],
+                "publish_overrides_json": {},
+                "metadata_json": {},
+                "scheduled_for": None,
+            }
+        ),
+        [],
+    )
+
+    class FakeDestinationAdapter:
+        def validate(self, post, persona, account):
+            return []
+
+        def publish(self, session, post, persona, account, *, context=None):
+            return PublishResult(
+                service=account.service,
+                external_id=f"remote-{post.id}",
+                external_url=f"https://example.social/@me/{post.id}",
+            )
+
+    monkeypatch.setattr("app.services.delivery.get_destination_adapter_for_account", lambda account: FakeDestinationAdapter())
+
+    process_delivery_queue(session, AlertDispatcher(), run_id="run-one-post", post_id=first.id)
+
+    assert first.delivery_jobs[0].status == "posted"
+    assert second.delivery_jobs[0].status == "queued"
+
+
 def test_crossposted_copy_polled_from_other_source_does_not_requeue_new_destinations(session, monkeypatch):
     persona = _create_persona(session)
     bluesky = _create_account(session, persona, service="bluesky", label="Bluesky", source_enabled=True, destination_enabled=True)

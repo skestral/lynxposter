@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.database import Base
+from app.models import AlertEvent
 from app.main import app
 from app.services.auth import Principal
 from app.services.personas import create_account, create_persona
@@ -41,6 +43,7 @@ def _create_persona(
 
 def _create_destination_account(session, persona, *, service: str = "mastodon", label: str = "Mastodon"):
     default_credentials = {
+        "bluesky": {"handle": "me.bsky.social", "password": "pw"},
         "mastodon": {"instance": "https://example.social", "token": "secret", "handle": "@me@example.social"},
         "discord": {"webhook_url": "https://discord.test"},
     }
@@ -272,6 +275,78 @@ def test_update_scheduled_post_api_accepts_json_schedule_moves(api_stack):
         assert saved.scheduled_for is None
 
 
+def test_update_scheduled_giveaway_api_moves_time(api_stack):
+    api_client, SessionLocal = api_stack
+    giveaway_end_at = datetime(2026, 5, 16, 20, 0, tzinfo=timezone.utc)
+    with SessionLocal() as session:
+        persona = _create_persona(session, slug="scheduled-post-api-giveaway-update")
+        bluesky = _create_destination_account(session, persona, service="bluesky", label="Bluesky")
+        giveaway = {
+            "giveaway_end_at": giveaway_end_at.isoformat(),
+            "pool_mode": "combined",
+            "channels": [
+                {
+                    "service": "bluesky",
+                    "account_id": bluesky.id,
+                    "rules": {
+                        "kind": "all",
+                        "children": [
+                            {"kind": "atom", "atom": "reply_or_quote_present", "params": {}},
+                        ],
+                    },
+                }
+            ],
+        }
+        post = create_scheduled_post(
+            session,
+            ScheduledPostCreate.model_validate(
+                {
+                    "persona_id": persona.id,
+                    "body": "Move this giveaway",
+                    "post_type": "giveaway",
+                    "status": "draft",
+                    "target_account_ids": [bluesky.id],
+                    "publish_overrides_json": {},
+                    "metadata_json": {},
+                    "scheduled_for": "2026-05-16T12:00:00+00:00",
+                    "giveaway": giveaway,
+                }
+            ),
+            [],
+        )
+        session.commit()
+        post_id = post.id
+        bluesky_id = bluesky.id
+
+    response = api_client.put(
+        f"/scheduled-posts/{post_id}",
+        data={
+            "body": "Move this giveaway",
+            "post_type": "giveaway",
+            "status": "draft",
+            "target_account_ids": json.dumps([bluesky_id]),
+            "publish_overrides_json": json.dumps({}),
+            "metadata_json": json.dumps({}),
+            "scheduled_for": "2026-05-16T13:30",
+            "giveaway_json": json.dumps(giveaway),
+            "alt_texts": json.dumps([]),
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["scheduled_for"] == "2026-05-16T13:30:00"
+    assert payload["giveaway"]["giveaway_end_at"] == "2026-05-16T20:00:00"
+
+    with SessionLocal() as session:
+        saved = get_post(session, post_id)
+        assert saved is not None
+        assert saved.scheduled_for is not None
+        assert saved.scheduled_for.replace(tzinfo=timezone.utc) == datetime(2026, 5, 16, 13, 30, tzinfo=timezone.utc)
+        assert saved.giveaway_campaign is not None
+        assert saved.giveaway_campaign.giveaway_end_at.replace(tzinfo=timezone.utc) == giveaway_end_at
+
+
 def test_scheduled_post_api_exposes_delivery_outcome_breakdown(api_stack):
     api_client, SessionLocal = api_stack
     with SessionLocal() as session:
@@ -311,6 +386,114 @@ def test_scheduled_post_api_exposes_delivery_outcome_breakdown(api_stack):
     assert payload["delivery_breakdown"]["failed"][0]["last_error"] == "Webhook rejected the payload."
 
 
+def test_send_now_api_processes_giveaway_delivery_in_background(api_stack, monkeypatch):
+    api_client, SessionLocal = api_stack
+    delivery_calls = []
+    lifecycle_calls = []
+
+    def fake_process_delivery_queue(session, alerts, *, run_id=None, post_id=None):
+        delivery_calls.append((run_id, post_id))
+        return run_id or "run-send-now"
+
+    def fake_process_giveaway_lifecycle(session, alerts, *, run_id, post_id=None):
+        lifecycle_calls.append((run_id, post_id))
+        return run_id
+
+    monkeypatch.setattr("app.main.process_delivery_queue", fake_process_delivery_queue)
+    monkeypatch.setattr("app.main.process_giveaway_lifecycle", fake_process_giveaway_lifecycle)
+
+    with SessionLocal() as session:
+        persona = _create_persona(session, slug="scheduled-post-api-send-now-giveaway")
+        bluesky = _create_destination_account(session, persona, service="bluesky", label="Bluesky")
+        post = create_scheduled_post(
+            session,
+            ScheduledPostCreate.model_validate(
+                {
+                    "persona_id": persona.id,
+                    "body": "Giveaway body",
+                    "post_type": "giveaway",
+                    "status": "draft",
+                    "target_account_ids": [bluesky.id],
+                    "publish_overrides_json": {},
+                    "metadata_json": {},
+                    "scheduled_for": None,
+                    "giveaway": {
+                        "giveaway_end_at": datetime.now(timezone.utc) + timedelta(days=1),
+                        "pool_mode": "combined",
+                        "channels": [
+                            {
+                                "service": "bluesky",
+                                "account_id": bluesky.id,
+                                "rules": {
+                                    "kind": "all",
+                                    "children": [
+                                        {"kind": "atom", "atom": "reply_or_quote_present", "params": {}},
+                                    ],
+                                },
+                            }
+                        ],
+                    },
+                }
+            ),
+            [],
+        )
+        session.commit()
+        post_id = post.id
+
+    response = api_client.post(f"/scheduled-posts/{post_id}/send-now")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "queued"
+    assert len(delivery_calls) == 1
+    assert len(lifecycle_calls) == 1
+    assert delivery_calls[0][0]
+    assert delivery_calls[0][1] == post_id
+    assert lifecycle_calls[0] == delivery_calls[0]
+
+
+def test_send_now_api_returns_success_when_background_delivery_fails(api_stack, monkeypatch):
+    api_client, SessionLocal = api_stack
+
+    def fail_delivery(session, alerts, *, run_id=None, post_id=None):
+        raise TimeoutError("delivery timed out")
+
+    monkeypatch.setattr("app.main.process_delivery_queue", fail_delivery)
+
+    with SessionLocal() as session:
+        persona = _create_persona(session, slug="scheduled-post-api-send-now-background-failure")
+        destination = _create_destination_account(session, persona)
+        post = create_scheduled_post(
+            session,
+            ScheduledPostCreate.model_validate(
+                {
+                    "persona_id": persona.id,
+                    "body": "Background delivery failure",
+                    "status": "draft",
+                    "target_account_ids": [destination.id],
+                    "publish_overrides_json": {},
+                    "metadata_json": {},
+                    "scheduled_for": None,
+                }
+            ),
+            [],
+        )
+        session.commit()
+        post_id = post.id
+
+    response = api_client.post(f"/scheduled-posts/{post_id}/send-now")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "queued"
+
+    with SessionLocal() as session:
+        saved = get_post(session, post_id)
+        assert saved is not None
+        assert saved.last_error == "delivery timed out"
+        alert = session.query(AlertEvent).filter(AlertEvent.operation == "publish_now").one()
+        assert alert.post_id == post_id
+        assert alert.error_class == "TimeoutError"
+
+
 def test_delete_scheduled_post_api_removes_draft(api_stack):
     api_client, SessionLocal = api_stack
     with SessionLocal() as session:
@@ -327,6 +510,55 @@ def test_delete_scheduled_post_api_removes_draft(api_stack):
                     "publish_overrides_json": {},
                     "metadata_json": {},
                     "scheduled_for": None,
+                }
+            ),
+            [],
+        )
+        session.commit()
+        post_id = post.id
+
+    response = api_client.delete(f"/scheduled-posts/{post_id}")
+
+    assert response.status_code == 200
+    assert response.json() == {"deleted_post_id": post_id}
+
+    with SessionLocal() as session:
+        assert get_post(session, post_id) is None
+
+
+def test_delete_scheduled_post_api_removes_giveaway_draft(api_stack):
+    api_client, SessionLocal = api_stack
+    with SessionLocal() as session:
+        persona = _create_persona(session, slug="scheduled-post-api-delete-giveaway")
+        bluesky = _create_destination_account(session, persona, service="bluesky", label="Bluesky")
+        post = create_scheduled_post(
+            session,
+            ScheduledPostCreate.model_validate(
+                {
+                    "persona_id": persona.id,
+                    "body": "Delete this giveaway",
+                    "post_type": "giveaway",
+                    "status": "draft",
+                    "target_account_ids": [bluesky.id],
+                    "publish_overrides_json": {},
+                    "metadata_json": {},
+                    "scheduled_for": None,
+                    "giveaway": {
+                        "giveaway_end_at": datetime(2026, 5, 16, 20, 0, tzinfo=timezone.utc),
+                        "pool_mode": "combined",
+                        "channels": [
+                            {
+                                "service": "bluesky",
+                                "account_id": bluesky.id,
+                                "rules": {
+                                    "kind": "all",
+                                    "children": [
+                                        {"kind": "atom", "atom": "reply_or_quote_present", "params": {}},
+                                    ],
+                                },
+                            }
+                        ],
+                    },
                 }
             ),
             [],

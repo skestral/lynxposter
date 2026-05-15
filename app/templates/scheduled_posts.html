@@ -75,7 +75,7 @@
                 <div class="surface-panel-soft d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
                     <div>
                         <div class="fw-semibold" id="calendar-range-label">Loading calendar...</div>
-                        <div class="small text-secondary">Only posts with a scheduled time appear here. Drafts stay on the board until they are ready for the spotlight.</div>
+                        <div class="small text-secondary">Posts with a scheduled time appear here, including drafts that are still being refined on the board.</div>
                     </div>
                     <div class="d-flex gap-2 flex-wrap">
                         <span class="badge text-bg-light border" id="calendar-summary-total">0 scheduled</span>
@@ -208,6 +208,18 @@
 {% endblock %}
 
 {% block scripts %}
+{% macro giveaway_rule_node_json(node) -%}
+{
+  "kind": {{ node.kind | tojson }},
+  "atom": {% if node.kind == "atom" %}{{ node.atom | tojson }}{% else %}null{% endif %},
+  "params": {{ node.params | default({}, true) | tojson }},
+  "children": [
+    {% for child in node.children | default([], true) %}
+    {{ giveaway_rule_node_json(child) }}{% if not loop.last %},{% endif %}
+    {% endfor %}
+  ]
+}
+{%- endmacro %}
 <script>
 const personaNameById = {{ persona_name_by_id | tojson }};
 const scheduledPostsPlannerData = [
@@ -220,7 +232,7 @@ const scheduledPostsPlannerData = [
     body: {{ post.body|default("", true)|tojson }},
     status: {{ post.status|tojson }},
     displayStatus: {{ post.display_status|tojson }},
-    scheduledFor: {{ (post.scheduled_for.isoformat() if post.scheduled_for else None)|tojson }},
+    scheduledFor: {{ (post.scheduled_for|datetime_local_input if post.scheduled_for else None)|tojson }},
     attachmentCount: {{ post.attachments|length }},
     targetCount: {{ post.target_account_ids|length }},
     postType: {{ post.post_type|tojson }},
@@ -229,13 +241,17 @@ const scheduledPostsPlannerData = [
     failureCount: {{ post.delivery_breakdown.failed|length }},
     cancelledCount: {{ post.delivery_breakdown.cancelled|length }},
     giveawayConfig: {% if post.giveaway %}{
-      giveaway_end_at: {{ (post.giveaway.giveaway_end_at.isoformat() if post.giveaway.giveaway_end_at else None)|tojson }},
-      min_friend_mentions: {{ post.giveaway.rules.min_friend_mentions|tojson }},
-      required_keywords: {{ post.giveaway.rules.required_keywords|tojson }},
-      required_hashtags: {{ post.giveaway.rules.required_hashtags|tojson }},
-      require_story_mention: {{ post.giveaway.rules.require_story_mention|tojson }},
-      require_like: {{ post.giveaway.rules.require_like|tojson }},
-      require_follow: {{ post.giveaway.rules.require_follow|tojson }}
+      giveaway_end_at: {{ (post.giveaway.giveaway_end_at|datetime_local_input if post.giveaway.giveaway_end_at else None)|tojson }},
+      pool_mode: {{ post.giveaway.pool_mode | default("combined", true) | tojson }},
+      channels: [
+        {% for channel in post.giveaway.channels | default([], true) %}
+        {
+          service: {{ channel.service | tojson }},
+          account_id: {{ channel.account_id | tojson }},
+          rules: {{ giveaway_rule_node_json(channel.rules) }}
+        }{% if not loop.last %},{% endif %}
+        {% endfor %}
+      ]
     }{% else %}null{% endif %}
   }{% if not loop.last %},{% endif %}
 {% endfor %}
@@ -321,6 +337,21 @@ function normalizePlannerPost(post) {
   return normalized;
 }
 
+function normalizeGiveawayConfig(giveaway) {
+  if (!giveaway) return null;
+  return {
+    giveaway_end_at: toDatetimeLocalValue(giveaway.giveaway_end_at) || null,
+    pool_mode: giveaway.pool_mode || "combined",
+    channels: Array.isArray(giveaway.channels)
+      ? giveaway.channels.map((channel) => ({
+          service: channel.service,
+          account_id: channel.account_id,
+          rules: channel.rules,
+        }))
+      : [],
+  };
+}
+
 function normalizeApiPost(post) {
   return normalizePlannerPost({
     id: post.id,
@@ -330,7 +361,7 @@ function normalizeApiPost(post) {
     body: post.body || "",
     status: post.status,
     displayStatus: post.display_status,
-    scheduledFor: post.scheduled_for,
+    scheduledFor: toDatetimeLocalValue(post.scheduled_for),
     attachmentCount: (post.attachments || []).length,
     targetCount: (post.target_account_ids || []).length,
     postType: post.post_type,
@@ -338,15 +369,7 @@ function normalizeApiPost(post) {
     successCount: (post.delivery_breakdown?.succeeded || []).length,
     failureCount: (post.delivery_breakdown?.failed || []).length,
     cancelledCount: (post.delivery_breakdown?.cancelled || []).length,
-    giveawayConfig: post.giveaway ? {
-      giveaway_end_at: post.giveaway.giveaway_end_at,
-      min_friend_mentions: post.giveaway.rules.min_friend_mentions,
-      required_keywords: post.giveaway.rules.required_keywords,
-      required_hashtags: post.giveaway.rules.required_hashtags,
-      require_story_mention: post.giveaway.rules.require_story_mention,
-      require_like: post.giveaway.rules.require_like,
-      require_follow: post.giveaway.rules.require_follow,
-    } : null,
+    giveawayConfig: normalizeGiveawayConfig(post.giveaway),
   });
 }
 
@@ -441,7 +464,7 @@ function sortPlannerPosts() {
 }
 
 function isCalendarPost(post) {
-  return Boolean(post.scheduledDate) && statusBucket(post.displayStatus) !== "drafts";
+  return Boolean(post.scheduledDate);
 }
 
 function postsForDay(day) {
@@ -460,8 +483,17 @@ function parseDateKey(dateKey) {
   return new Date(year, month - 1, day);
 }
 
-function toDatetimeLocalValue(date) {
-  if (!date || Number.isNaN(date.getTime())) return "";
+function toDatetimeLocalValue(value) {
+  if (!value) return "";
+  let date = value instanceof Date ? value : null;
+  if (!date) {
+    const raw = String(value).trim().replace(" ", "T");
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(raw)) return raw;
+    const normalized = raw.replace(/(\.\d{3})\d+/, "$1");
+    const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/.test(normalized);
+    date = new Date(hasZone ? normalized : `${normalized}Z`);
+  }
+  if (Number.isNaN(date.getTime())) return "";
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
@@ -702,7 +734,7 @@ function buildMoveContext(post, target) {
       return {
         title: "Move to Drafts",
         targetLabel: "Pull this plan back into draft mode",
-        description: "Drafts disappear from the calendar until they are scheduled again.",
+        description: "Use the checkbox below to decide whether this draft keeps its calendar time.",
         submitLabel: "Move to Drafts",
         nextStatus: "draft",
         requireSchedule: false,

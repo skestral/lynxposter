@@ -39,7 +39,11 @@
 
   function toDatetimeLocalValue(value) {
     if (!value) return "";
-    const date = new Date(value);
+    const raw = String(value).trim().replace(" ", "T");
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(raw)) return raw;
+    const normalized = raw.replace(/(\.\d{3})\d+/, "$1");
+    const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/.test(normalized);
+    const date = new Date(hasZone ? normalized : `${normalized}Z`);
     if (Number.isNaN(date.getTime())) return "";
     const offset = date.getTimezoneOffset();
     const shifted = new Date(date.getTime() - (offset * 60 * 1000));

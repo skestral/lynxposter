@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 from starlette.requests import Request
 
 from app.adapters import get_service_definition, iter_service_definitions, service_composer_constraints_context
 from app.main import templates
+from app.schemas import AccountRead
 
 
-def _request_with_principal() -> Request:
+def _request_with_principal(timezone_name: str = "UTC") -> Request:
     request = Request({"type": "http", "headers": [], "path": "/", "scheme": "http", "server": ("testserver", 80)})
     request.state.principal = SimpleNamespace(
         is_authenticated=True,
@@ -18,11 +20,35 @@ def _request_with_principal() -> Request:
         user_id="user-1",
         display_name="Lynx",
         role="user",
-        timezone="UTC",
+        timezone=timezone_name,
         ui_theme="skylight",
         ui_mode="light",
     )
     return request
+
+
+def _account_read(account_id: str, service: str, label: str) -> AccountRead:
+    timestamp = datetime(2026, 5, 14, 12, 0, tzinfo=timezone.utc)
+    return AccountRead(
+        id=account_id,
+        persona_id="persona-1",
+        service=service,
+        label=label,
+        handle_or_identifier="",
+        is_enabled=True,
+        source_enabled=False,
+        destination_enabled=True,
+        credentials_json={},
+        source_settings_json={},
+        publish_settings_json={},
+        last_health_status=None,
+        last_error=None,
+        source_supported=True,
+        destination_supported=True,
+        configured=True,
+        created_at=timestamp,
+        updated_at=timestamp,
+    )
 
 
 def test_telegram_service_definition_exposes_destination_credentials():
@@ -316,6 +342,10 @@ def test_scheduled_post_templates_render_attachment_previews():
     assert 'id="scheduled-detail-tabs"' in detail_html
     assert 'servicePostGuidance' in detail_html
     assert 'servicePostGuidance' in create_html
+    assert "let giveawayBuilder = null;" in detail_html
+    assert "let giveawayBuilder = null;" in create_html
+    assert "if (giveawayBuilder) {" in detail_html
+    assert "if (giveawayBuilder) {" in create_html
     assert 'Delete Draft' in detail_html
     assert 'Post Type' in detail_html
     assert 'Post Type' in create_html
@@ -335,7 +365,7 @@ def test_scheduled_post_templates_render_attachment_previews():
 def test_scheduled_post_templates_render_generic_giveaway_controls():
     giveaway = {
         "status": "review_required",
-        "giveaway_end_at": None,
+        "giveaway_end_at": datetime(2026, 5, 15, 22, 30, tzinfo=timezone.utc),
         "pool_mode": "separate",
         "audit_summary": {"entrants": 2, "eligible": 0, "provisional": 2, "disqualified": 0},
         "channels": [
@@ -423,7 +453,7 @@ def test_scheduled_post_templates_render_generic_giveaway_controls():
         "last_error": None,
     }
     html = templates.env.get_template("scheduled_post_detail.html").render(
-        request=_request_with_principal(),
+        request=_request_with_principal("America/Los_Angeles"),
         current_principal=SimpleNamespace(
             is_authenticated=True,
             is_user=True,
@@ -436,8 +466,8 @@ def test_scheduled_post_templates_render_generic_giveaway_controls():
         auth_enabled=False,
         persona=SimpleNamespace(id="persona-1", name="Savannah"),
         accounts=[
-            {"id": "account-ig", "label": "Instagram", "service": "instagram"},
-            {"id": "account-bsky", "label": "Bluesky", "service": "bluesky"},
+            _account_read("account-ig", "instagram", "Instagram"),
+            _account_read("account-bsky", "bluesky", "Bluesky"),
         ],
         post=SimpleNamespace(
             id="post-1",
@@ -463,12 +493,87 @@ def test_scheduled_post_templates_render_generic_giveaway_controls():
     assert "Bluesky Channel" in html
     assert "Separate" in html
     assert "Activity Dashboard" in html
+    assert '"giveaway_end_at": "2026-05-15T15:30"' in html
     assert "Entrant Audit Log" in html
     assert "Selection Log" in html
     assert "Confirm Winner" in html
     assert "Advance To Next Candidate" in html
     assert "Open published Instagram post" in html
     assert "Open published Bluesky post" in html
+
+
+def test_scheduled_posts_planner_renders_generic_giveaway_data():
+    giveaway = {
+        "status": "scheduled",
+        "giveaway_end_at": datetime(2026, 5, 15, 20, 0, tzinfo=timezone.utc),
+        "pool_mode": "combined",
+        "channels": [
+            {
+                "service": "instagram",
+                "account_id": "account-ig",
+                "rules": {
+                    "kind": "all",
+                    "children": [
+                        {"kind": "atom", "atom": "comment_present", "params": {}, "children": []},
+                        {"kind": "atom", "atom": "story_mention_present", "params": {}, "children": []},
+                    ],
+                },
+            },
+            {
+                "service": "bluesky",
+                "account_id": "account-bsky",
+                "rules": {
+                    "kind": "all",
+                    "children": [
+                        {"kind": "atom", "atom": "reply_or_quote_present", "params": {}, "children": []},
+                    ],
+                },
+            },
+        ],
+    }
+    html = templates.env.get_template("scheduled_posts.html").render(
+        request=_request_with_principal("America/Los_Angeles"),
+        current_principal=SimpleNamespace(
+            is_authenticated=True,
+            is_user=True,
+            is_admin=False,
+            user_id="user-1",
+            display_name="Lynx",
+            role="user",
+            timezone="UTC",
+        ),
+        auth_enabled=False,
+        personas=[],
+        posts=[
+            SimpleNamespace(
+                id="post-1",
+                status="draft",
+                post_type="giveaway",
+                giveaway=giveaway,
+                display_status="draft",
+                persona_id="persona-1",
+                target_account_ids=["account-ig", "account-bsky"],
+                attachments=[],
+                body="Giveaway body",
+                scheduled_for=datetime(2026, 5, 14, 20, 0, tzinfo=timezone.utc),
+                last_error=None,
+                delivery_breakdown=SimpleNamespace(succeeded=[], failed=[], cancelled=[], pending=[]),
+            )
+        ],
+        persona_targets={},
+        persona_name_by_id={"persona-1": "Savannah"},
+        service_post_guidance=service_composer_constraints_context(),
+    )
+
+    assert "scheduledPostsPlannerData" in html
+    assert 'displayStatus: "draft"' in html
+    assert 'scheduledFor: "2026-05-14T13:00"' in html
+    assert 'giveaway_end_at: "2026-05-15T13:00"' in html
+    assert "return Boolean(post.scheduledDate);" in html
+    assert "including drafts that are still being refined on the board" in html
+    assert "reply_or_quote_present" in html
+    assert "pool_mode" in html
+    assert "normalizeGiveawayConfig" in html
 
 
 def test_dashboard_template_shows_recent_scheduled_post_errors():

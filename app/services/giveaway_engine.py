@@ -1043,11 +1043,14 @@ def process_giveaway_lifecycle(
     alerts: AlertDispatcher,
     *,
     run_id: str,
+    post_id: str | None = None,
 ) -> str:
     now = utcnow()
     stmt = list_giveaway_campaigns_stmt().where(
         GiveawayCampaign.status.in_([GIVEAWAY_STATUS_SCHEDULED, GIVEAWAY_STATUS_COLLECTING])
     )
+    if post_id is not None:
+        stmt = stmt.where(GiveawayCampaign.post_id == post_id)
     for campaign in session.scalars(stmt):
         hydrate_channel_targets(campaign)
         all_targets_ready = all(str(channel.target_post_external_id or channel.target_post_uri or "").strip() for channel in campaign.channels)
@@ -1058,7 +1061,37 @@ def process_giveaway_lifecycle(
         if campaign.status == GIVEAWAY_STATUS_COLLECTING:
             for channel in campaign.channels:
                 if channel.service == "bluesky":
-                    collect_bluesky_channel_state(session, channel, run_id=run_id)
+                    try:
+                        collect_bluesky_channel_state(session, channel, run_id=run_id)
+                    except Exception as exc:
+                        message = f"Bluesky giveaway collection failed: {str(exc) or exc.__class__.__name__}"
+                        channel.last_error = message
+                        campaign.last_error = message
+                        log_run_event(
+                            session,
+                            run_id=run_id,
+                            persona_id=campaign.post.persona_id,
+                            persona_name=campaign.post.persona.name if campaign.post.persona else None,
+                            account_id=channel.account_id,
+                            service=channel.service,
+                            operation="giveaway",
+                            severity="error",
+                            message=message,
+                            post_id=campaign.post_id,
+                            metadata={"channel_id": channel.id},
+                        )
+                        alerts.emit_hard_failure(
+                            session,
+                            run_id=run_id,
+                            persona=campaign.post.persona,
+                            account=channel.account,
+                            service=channel.service,
+                            post=campaign.post,
+                            operation="giveaway_collection",
+                            message=message,
+                            error_class=exc.__class__.__name__,
+                            event_type="giveaway_collection_failed",
+                        )
         if normalize_datetime(campaign.giveaway_end_at) and normalize_datetime(campaign.giveaway_end_at) <= now and campaign.status in {GIVEAWAY_STATUS_COLLECTING, GIVEAWAY_STATUS_SCHEDULED}:
             try:
                 finalize_giveaway_campaign(session, campaign, alerts, run_id=run_id)

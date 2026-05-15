@@ -23,6 +23,7 @@ from app.services.alerts import AlertDispatcher
 from app.services.auth import Principal
 from app.services.giveaway_engine import (
     ENTRY_STATUS_ELIGIBLE,
+    GIVEAWAY_STATUS_COLLECTING,
     GIVEAWAY_STATUS_REVIEW_REQUIRED,
     GIVEAWAY_STATUS_WINNER_SELECTED,
     collect_bluesky_channel_state,
@@ -35,7 +36,7 @@ from app.services.giveaways import (
     process_instagram_giveaway_lifecycle,
 )
 from app.services.personas import create_account, create_persona
-from app.services.posts import create_scheduled_post, get_post
+from app.services.posts import create_scheduled_post, get_post, schedule_post_now
 
 
 class _DumpableResponse:
@@ -194,6 +195,35 @@ def test_legacy_instagram_giveaway_rejects_end_before_publish_time(session):
             ),
             [],
         )
+
+
+def test_publish_now_rejects_giveaway_that_already_ended(session):
+    persona = _create_persona(session, slug="giveaway-send-now-expired")
+    bluesky = _create_account(session, persona, service="bluesky", label="Bluesky")
+    post = create_scheduled_post(
+        session,
+        _generic_giveaway_payload(
+            persona.id,
+            [bluesky.id],
+            giveaway_end_at=datetime.now(timezone.utc) - timedelta(minutes=5),
+            channels=[
+                {
+                    "service": "bluesky",
+                    "account_id": bluesky.id,
+                    "rules": {
+                        "kind": "all",
+                        "children": [
+                            {"kind": "atom", "atom": "reply_or_quote_present", "params": {}},
+                        ],
+                    },
+                }
+            ],
+        ),
+        [],
+    )
+
+    with pytest.raises(ValueError, match="Giveaway end time must be after the scheduled publish time"):
+        schedule_post_now(session, post)
 
 
 def test_legacy_instagram_payload_migrates_to_generic_campaign(session):
@@ -618,6 +648,53 @@ def test_collect_bluesky_channel_state_captures_reply_quote_like_repost_and_foll
     assert entrant.signal_state_json["repost_present"] is True
     assert entrant.signal_state_json["follow_present"] is True
     assert entrant.signal_state_json["reply_or_quote_mention_count"] >= 1
+
+
+def test_giveaway_lifecycle_records_bluesky_collection_failures(session, monkeypatch):
+    persona = _create_persona(session, slug="giveaway-bluesky-collection-failure")
+    bluesky = _create_account(session, persona, service="bluesky", label="Bluesky")
+    post = create_scheduled_post(
+        session,
+        _generic_giveaway_payload(
+            persona.id,
+            [bluesky.id],
+            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            channels=[
+                {
+                    "service": "bluesky",
+                    "account_id": bluesky.id,
+                    "rules": {
+                        "kind": "all",
+                        "children": [
+                            {"kind": "atom", "atom": "reply_or_quote_present", "params": {}},
+                        ],
+                    },
+                }
+            ],
+        ),
+        [],
+    )
+    _mark_posted(
+        post,
+        bluesky.id,
+        external_id="post-1",
+        external_url="https://bsky.app/profile/savannah.test/post/post-1",
+    )
+    session.flush()
+
+    def fail_collection(session, channel, run_id):
+        raise TimeoutError("collector timed out")
+
+    monkeypatch.setattr("app.services.giveaway_engine.collect_bluesky_channel_state", fail_collection)
+
+    process_giveaway_lifecycle(session, AlertDispatcher(), run_id="run-bsky-failure")
+
+    channel = post.giveaway_campaign.channels[0]
+    assert post.giveaway_campaign.status == GIVEAWAY_STATUS_COLLECTING
+    assert channel.last_error == "Bluesky giveaway collection failed: collector timed out"
+    alert = session.query(AlertEvent).filter(AlertEvent.event_type == "giveaway_collection_failed").one()
+    assert alert.post_id == post.id
+    assert alert.service == "bluesky"
 
 
 @pytest.fixture()

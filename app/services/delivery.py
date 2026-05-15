@@ -251,7 +251,13 @@ def _delivery_queue_priority(job: DeliveryJob) -> tuple[int, object]:
     return (0, job.queued_at or now_utc())
 
 
-def process_delivery_queue(session: Session, alerts: AlertDispatcher, *, run_id: str | None = None) -> str:
+def process_delivery_queue(
+    session: Session,
+    alerts: AlertDispatcher,
+    *,
+    run_id: str | None = None,
+    post_id: str | None = None,
+) -> str:
     run_id = run_id or new_run_id()
     stmt = (
         select(DeliveryJob)
@@ -265,6 +271,8 @@ def process_delivery_queue(session: Session, alerts: AlertDispatcher, *, run_id:
         .where(DeliveryJob.status == "queued")
         .order_by(DeliveryJob.queued_at)
     )
+    if post_id is not None:
+        stmt = stmt.where(DeliveryJob.post_id == post_id)
 
     queued_jobs = list(session.scalars(stmt))
     queued_jobs.sort(key=_delivery_queue_priority)

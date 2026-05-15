@@ -243,11 +243,16 @@ function currentGiveawayServiceAccounts() {
   };
 }
 
-const giveawayBuilder = window.LynxGiveawayBuilder.create({
+let giveawayBuilder = null;
+giveawayBuilder = window.LynxGiveawayBuilder.create({
   root: giveawayBuilderRoot,
   getServiceAccounts: currentGiveawayServiceAccounts,
   initialValue: null,
-  onChange: () => refreshGiveawayState(),
+  onChange: () => {
+    if (giveawayBuilder) {
+      refreshGiveawayState();
+    }
+  },
 });
 
 function escapeHtml(value) {
