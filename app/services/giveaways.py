@@ -8,6 +8,7 @@ import secrets
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from urllib.parse import urlsplit
 
 import requests
 from sqlalchemy import Select, select
@@ -412,7 +413,7 @@ def _webhook_event_type(field: str, value: dict[str, Any]) -> str:
 
 
 def _provider_object_id(value: dict[str, Any]) -> str | None:
-    for key in ("media_id", "post_id", "object_id", "creation_id", "story_id", "id"):
+    for key in ("comment_id", "story_id", "id", "media_id", "post_id", "object_id", "creation_id"):
         candidate = str(value.get(key) or "").strip()
         if candidate:
             return candidate
@@ -476,12 +477,95 @@ def _giveaway_window_accepts_event(giveaway: GiveawayCampaign, *, occurred_at: d
     return giveaway_end_at is None or occurred_at <= giveaway_end_at
 
 
+def _instagram_permalink_key(value: str | None) -> str | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    parsed = urlsplit(raw)
+    if parsed.netloc:
+        return f"{parsed.netloc.lower()}{parsed.path.rstrip('/')}"
+    return raw.rstrip("/").lower()
+
+
+def _instagram_account_provider_id_candidates(account: Account) -> set[str]:
+    credentials = dict(account.credentials_json or {})
+    candidates = {
+        str(account.id or "").strip(),
+        str(credentials.get("instagram_user_id") or "").strip(),
+        str(credentials.get("provider_account_id") or "").strip(),
+        str(credentials.get("professional_account_id") or "").strip(),
+        str(credentials.get("ig_user_id") or "").strip(),
+    }
+    return {candidate for candidate in candidates if candidate}
+
+
+def _instagram_accounts_for_webhook_account(session: Session, account_id: str | None) -> list[Account]:
+    normalized = str(account_id or "").strip()
+    if not normalized:
+        return []
+    accounts = list(session.scalars(select(Account).where(Account.service == "instagram")))
+    return [
+        account
+        for account in accounts
+        if normalized in _instagram_account_provider_id_candidates(account)
+    ]
+
+
+def _active_instagram_giveaway_channels(
+    session: Session,
+    *,
+    account_ids: list[str] | None = None,
+) -> list[GiveawayChannel]:
+    stmt = (
+        select(GiveawayChannel)
+        .join(GiveawayChannel.campaign)
+        .where(
+            GiveawayChannel.service == "instagram",
+            GiveawayCampaign.status.in_([GIVEAWAY_STATUS_SCHEDULED, GIVEAWAY_STATUS_COLLECTING, GIVEAWAY_STATUS_REVIEW_REQUIRED]),
+        )
+        .order_by(GiveawayCampaign.giveaway_end_at.asc())
+    )
+    if account_ids:
+        stmt = stmt.where(GiveawayChannel.account_id.in_(account_ids))
+    return list(session.scalars(stmt))
+
+
+def _instagram_channel_post_url_candidates(channel: GiveawayChannel) -> list[str]:
+    urls = [str(channel.target_post_url or "").strip()]
+    post = channel.campaign.post if channel.campaign else None
+    if post:
+        for job in post.delivery_jobs:
+            if job.target_account_id == channel.account_id and job.status == "posted":
+                urls.append(str(job.external_url or "").strip())
+    return [url for url in urls if url]
+
+
+def _find_instagram_channel_by_permalink(
+    session: Session,
+    permalink: str | None,
+    *,
+    account_ids: list[str] | None = None,
+) -> GiveawayChannel | None:
+    target_key = _instagram_permalink_key(permalink)
+    if not target_key:
+        return None
+    for channel in _active_instagram_giveaway_channels(session, account_ids=account_ids):
+        for candidate in _instagram_channel_post_url_candidates(channel):
+            if _instagram_permalink_key(candidate) == target_key:
+                return channel
+    return None
+
+
 def _find_instagram_channel_for_event(
     session: Session,
     account_id: str | None,
     provider_object_id: str | None,
 ) -> GiveawayChannel | None:
-    if provider_object_id:
+    account_candidates = _instagram_accounts_for_webhook_account(session, account_id)
+    account_ids = [account.id for account in account_candidates]
+    normalized_provider_object_id = str(provider_object_id or "").strip()
+
+    if normalized_provider_object_id:
         stmt = (
             select(GiveawayChannel)
             .join(GiveawayChannel.campaign)
@@ -489,26 +573,51 @@ def _find_instagram_channel_for_event(
             .join(CanonicalPost.delivery_jobs)
             .where(
                 GiveawayChannel.service == "instagram",
-                DeliveryJob.external_id == provider_object_id,
+                GiveawayCampaign.status.in_([GIVEAWAY_STATUS_SCHEDULED, GIVEAWAY_STATUS_COLLECTING, GIVEAWAY_STATUS_REVIEW_REQUIRED]),
+                DeliveryJob.external_id == normalized_provider_object_id,
                 DeliveryJob.status == "posted",
                 DeliveryJob.target_account_id == GiveawayChannel.account_id,
             )
         )
+        if account_ids:
+            stmt = stmt.where(GiveawayChannel.account_id.in_(account_ids))
         channel = session.scalar(stmt)
         if channel:
             return channel
-    if account_id:
+
         stmt = (
             select(GiveawayChannel)
             .join(GiveawayChannel.campaign)
             .where(
                 GiveawayChannel.service == "instagram",
-                GiveawayChannel.account_id == account_id,
                 GiveawayCampaign.status.in_([GIVEAWAY_STATUS_SCHEDULED, GIVEAWAY_STATUS_COLLECTING, GIVEAWAY_STATUS_REVIEW_REQUIRED]),
+                GiveawayChannel.target_post_external_id == normalized_provider_object_id,
             )
-            .order_by(GiveawayCampaign.giveaway_end_at.asc())
         )
-        channels = list(session.scalars(stmt))
+        if account_ids:
+            stmt = stmt.where(GiveawayChannel.account_id.in_(account_ids))
+        channel = session.scalar(stmt)
+        if channel:
+            return channel
+
+        for account in account_candidates:
+            media_match = _instagram_graph_media_match(account, media_id=normalized_provider_object_id)
+            if not media_match:
+                continue
+            channel = _find_instagram_channel_by_permalink(
+                session,
+                str(media_match.get("href") or "").strip() or None,
+                account_ids=[account.id],
+            )
+            if channel:
+                return channel
+
+    if account_ids:
+        channels = _active_instagram_giveaway_channels(session, account_ids=account_ids)
+        if len(channels) == 1:
+            return channels[0]
+    elif account_id:
+        channels = _active_instagram_giveaway_channels(session, account_ids=[account_id])
         if len(channels) == 1:
             return channels[0]
     return None
@@ -876,6 +985,7 @@ def ingest_instagram_webhook_payload(
                 state["story_mentions"] = mentions
             entry.signal_state_json = state
             entry.signal_state_json = _instagram_signal_state(entry)
+            session.flush()
             _record_evidence_event(
                 session,
                 campaign,

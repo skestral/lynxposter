@@ -75,6 +75,7 @@ BLUESKY_ACTIVITY_EVENT_TYPES = (
     "bluesky_repost",
     "bluesky_follow",
 )
+COMMENT_EVIDENCE_SOURCE_LIVE = "close_time_live"
 
 
 def utcnow() -> datetime:
@@ -477,6 +478,10 @@ def hydrate_channel_targets(campaign: GiveawayCampaign) -> None:
             channel.target_post_uri = uri
         if channel.service == "instagram" and not channel.target_post_url:
             channel.target_post_url = job.external_url
+
+
+def _channel_target_ready(channel: GiveawayChannel) -> bool:
+    return bool(str(channel.target_post_external_id or channel.target_post_uri or "").strip())
 
 
 def _entry_display_label(entrant: GiveawayEntrant) -> str:
@@ -884,6 +889,75 @@ def _evaluate_bluesky_atom(channel: GiveawayChannel, entrant: GiveawayEntrant, a
     return False, f"Unsupported Bluesky atom: {atom}"
 
 
+def _sync_instagram_live_comment_events(
+    session: Session,
+    channel: GiveawayChannel,
+    observed_comments: list[tuple[GiveawayEntrant, dict[str, Any], dict[str, Any]]],
+) -> None:
+    existing_events = list(
+        session.scalars(
+            select(GiveawayEvidenceEvent).where(
+                GiveawayEvidenceEvent.channel_id == channel.id,
+                GiveawayEvidenceEvent.event_type == "instagram_comment",
+                GiveawayEvidenceEvent.source == COMMENT_EVIDENCE_SOURCE_LIVE,
+            )
+        )
+    )
+    existing_by_key = {str(event.provider_event_id or ""): event for event in existing_events}
+    observed_keys: set[str] = set()
+    seen_at = utcnow().isoformat()
+
+    for entrant, summary, raw_comment in observed_comments:
+        provider_event_id = str(summary.get("comment_id") or "").strip()
+        if not provider_event_id:
+            continue
+        observed_keys.add(provider_event_id)
+        payload = {
+            "change": {
+                "field": "comments",
+                "value": {
+                    "media_id": channel.target_post_external_id,
+                    "id": provider_event_id,
+                    "text": summary.get("text") or "",
+                    "created_time": raw_comment.get("created_time"),
+                    "from": {
+                        "id": entrant.provider_user_id,
+                        "username": entrant.provider_username,
+                    },
+                },
+            },
+            "source": COMMENT_EVIDENCE_SOURCE_LIVE,
+            "last_seen_at": seen_at,
+        }
+        existing = existing_by_key.get(provider_event_id)
+        if existing is None:
+            payload["first_seen_at"] = seen_at
+            _record_evidence_event(
+                session,
+                channel.campaign,
+                channel,
+                entrant=entrant,
+                provider_event_id=provider_event_id,
+                event_type="instagram_comment",
+                source=COMMENT_EVIDENCE_SOURCE_LIVE,
+                payload=payload,
+            )
+            continue
+        existing.entrant_id = entrant.id
+        existing_payload = dict(existing.payload_json or {})
+        payload["first_seen_at"] = existing_payload.get("first_seen_at") or existing.created_at.isoformat()
+        existing.payload_json = payload
+        existing.active = True
+
+    for key, existing in existing_by_key.items():
+        if key in observed_keys:
+            continue
+        payload = dict(existing.payload_json or {})
+        payload["last_seen_at"] = seen_at
+        existing.payload_json = payload
+        existing.active = False
+
+
 def _evaluate_rule_node(
     rule: dict[str, Any],
     resolve_atom: Callable[[str, dict[str, Any]], tuple[bool | None, str | None]],
@@ -1053,13 +1127,14 @@ def process_giveaway_lifecycle(
         stmt = stmt.where(GiveawayCampaign.post_id == post_id)
     for campaign in session.scalars(stmt):
         hydrate_channel_targets(campaign)
-        all_targets_ready = all(str(channel.target_post_external_id or channel.target_post_uri or "").strip() for channel in campaign.channels)
-        if all_targets_ready and campaign.status == GIVEAWAY_STATUS_SCHEDULED:
+        ready_channels = [channel for channel in campaign.channels if _channel_target_ready(channel)]
+        if ready_channels and campaign.status == GIVEAWAY_STATUS_SCHEDULED:
             campaign.status = GIVEAWAY_STATUS_COLLECTING
-            for channel in campaign.channels:
+        for channel in ready_channels:
+            if channel.status == GIVEAWAY_STATUS_SCHEDULED:
                 channel.status = GIVEAWAY_STATUS_COLLECTING
         if campaign.status == GIVEAWAY_STATUS_COLLECTING:
-            for channel in campaign.channels:
+            for channel in ready_channels:
                 if channel.service == "bluesky":
                     try:
                         collect_bluesky_channel_state(session, channel, run_id=run_id)
@@ -1092,6 +1167,8 @@ def process_giveaway_lifecycle(
                             error_class=exc.__class__.__name__,
                             event_type="giveaway_collection_failed",
                         )
+                elif channel.service == "instagram":
+                    refresh_instagram_channel_state(session, channel)
         if normalize_datetime(campaign.giveaway_end_at) and normalize_datetime(campaign.giveaway_end_at) <= now and campaign.status in {GIVEAWAY_STATUS_COLLECTING, GIVEAWAY_STATUS_SCHEDULED}:
             try:
                 finalize_giveaway_campaign(session, campaign, alerts, run_id=run_id)
@@ -1174,6 +1251,7 @@ def refresh_instagram_channel_state(session: Session, channel: GiveawayChannel) 
         try:
             client = _authenticated_publish_client(_account_credentials(channel.account))
             live_comments = client.media_comments(channel.target_post_external_id, amount=0)
+            observed_comments: list[tuple[GiveawayEntrant, dict[str, Any], dict[str, Any]]] = []
             for comment in live_comments or []:
                 user = getattr(comment, "user", None)
                 provider_user_id = str(getattr(user, "pk", "") or "").strip()
@@ -1195,6 +1273,21 @@ def refresh_instagram_channel_state(session: Session, channel: GiveawayChannel) 
                     display_label=provider_username or provider_user_id,
                 )
                 entrant.signal_state_json = dict(entrant.signal_state_json or {})
+                observed_comments.append(
+                    (
+                        entrant,
+                        existing["comments"][-1],
+                        {
+                            "created_time": (
+                                normalize_datetime(getattr(comment, "created_at_utc", None)).isoformat()
+                                if getattr(comment, "created_at_utc", None)
+                                else None
+                            ),
+                        },
+                    )
+                )
+            session.flush()
+            _sync_instagram_live_comment_events(session, channel, observed_comments)
         except Exception as exc:
             channel.last_error = f"Instagram live comment revalidation failed: {exc}"
 
@@ -1212,6 +1305,7 @@ def refresh_instagram_channel_state(session: Session, channel: GiveawayChannel) 
         }
     channel.last_collected_at = utcnow()
     session.flush()
+    publish_live_update(LIVE_UPDATE_TOPIC_DASHBOARD, LIVE_UPDATE_TOPIC_LOGS)
 
 
 def _collect_all_pages(fetch_page: Callable[..., Any], *, key: str, uri: str, cid: str | None = None) -> list[dict[str, Any]]:

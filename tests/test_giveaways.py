@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.config import reload_settings
 from app.database import Base
 from app.main import app
-from app.models import AlertEvent, GiveawayEntrant, InstagramGiveawayWebhookEvent
+from app.models import AlertEvent, GiveawayEntrant, GiveawayEvidenceEvent, InstagramGiveawayWebhookEvent
 from app.schemas import ScheduledPostCreate
 from app.services.alerts import AlertDispatcher
 from app.services.auth import Principal
@@ -308,6 +308,88 @@ def test_instagram_webhook_ingest_updates_generic_entrant_state(session):
     assert entrant.signal_state_json["comment_count"] == 1
     assert entrant.signal_state_json["friend_mention_count"] == 1
     assert entrant.signal_state_json["story_mention_count"] == 1
+    comment_event = (
+        session.query(GiveawayEvidenceEvent)
+        .filter(
+            GiveawayEvidenceEvent.event_type == "instagram_comment",
+            GiveawayEvidenceEvent.source == "webhook_capture",
+            GiveawayEvidenceEvent.provider_event_id == "comment-1",
+        )
+        .one()
+    )
+    assert comment_event.entrant_id == entrant.id
+
+
+def test_instagram_webhook_ingest_matches_graph_media_permalink_to_giveaway(session, monkeypatch):
+    persona = _create_persona(session, slug="giveaway-webhook-graph-match")
+    instagram = _create_account(session, persona, service="instagram", label="Instagram")
+    post = create_scheduled_post(
+        session,
+        _legacy_instagram_giveaway_payload(
+            persona.id,
+            [instagram.id],
+            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        ),
+        [],
+    )
+    _mark_posted(
+        post,
+        instagram.id,
+        external_id="3897155917695617120_63393059983",
+        external_url="https://www.instagram.com/p/DYVeqi8jwhg/",
+    )
+    session.flush()
+
+    def graph_media_match(account, *, media_id):
+        if account.id == instagram.id and media_id == "17890000000000000":
+            return {
+                "id": "17890000000000000",
+                "href": "https://www.instagram.com/p/DYVeqi8jwhg/",
+                "label": "Test giveaway post",
+            }
+        return None
+
+    monkeypatch.setattr("app.services.giveaways._instagram_graph_media_match", graph_media_match)
+
+    payload = {
+        "entry": [
+            {
+                "id": "17841463479494132",
+                "changes": [
+                    {
+                        "field": "comments",
+                        "value": {
+                            "media": {"id": "17890000000000000", "media_product_type": "FEED"},
+                            "id": "comment-graph-1",
+                            "text": "Graph id comment @friend",
+                            "from": {"id": "user-graph", "username": "graph.entrant"},
+                        },
+                    },
+                ],
+            }
+        ]
+    }
+
+    events = ingest_instagram_webhook_payload(session, payload, signature_valid=True, run_id="run-graph")
+    session.flush()
+
+    assert len(events) == 1
+    assert events[0].matched_giveaway_id == post.giveaway_campaign.id
+    assert events[0].matched_post_id == post.id
+    assert events[0].matched_account_id == instagram.id
+    channel = post.giveaway_campaign.channels[0]
+    entrant = session.query(GiveawayEntrant).filter_by(channel_id=channel.id, provider_user_id="user-graph").one()
+    assert entrant.provider_username == "graph.entrant"
+    comment_event = (
+        session.query(GiveawayEvidenceEvent)
+        .filter(
+            GiveawayEvidenceEvent.event_type == "instagram_comment",
+            GiveawayEvidenceEvent.source == "webhook_capture",
+            GiveawayEvidenceEvent.provider_event_id == "comment-graph-1",
+        )
+        .one()
+    )
+    assert comment_event.entrant_id == entrant.id
 
 
 def test_instagram_webhook_observability_summarizes_recent_events(session):
@@ -434,6 +516,74 @@ def test_process_giveaway_lifecycle_selects_verified_instagram_winner(session, m
     assert pool.final_winner_entry is not None
     assert pool.final_winner_entry.provider_username == "entrant.one"
     assert pool.final_winner_entry.eligibility_status == ENTRY_STATUS_ELIGIBLE
+    live_comment_event = (
+        session.query(GiveawayEvidenceEvent)
+        .filter(
+            GiveawayEvidenceEvent.event_type == "instagram_comment",
+            GiveawayEvidenceEvent.source == "close_time_live",
+            GiveawayEvidenceEvent.provider_event_id == "comment-1",
+        )
+        .one()
+    )
+    assert live_comment_event.entrant_id == pool.final_winner_entry.id
+
+
+def test_giveaway_lifecycle_collects_ready_channels_before_all_platforms_publish(session, monkeypatch):
+    persona = _create_persona(session, slug="giveaway-partial-channel-collection")
+    instagram = _create_account(session, persona, service="instagram", label="Instagram")
+    bluesky = _create_account(session, persona, service="bluesky", label="Bluesky")
+    post = create_scheduled_post(
+        session,
+        _generic_giveaway_payload(
+            persona.id,
+            [instagram.id, bluesky.id],
+            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            channels=[
+                {
+                    "service": "instagram",
+                    "account_id": instagram.id,
+                    "rules": {
+                        "kind": "all",
+                        "children": [{"kind": "atom", "atom": "comment_present", "params": {}}],
+                    },
+                },
+                {
+                    "service": "bluesky",
+                    "account_id": bluesky.id,
+                    "rules": {
+                        "kind": "all",
+                        "children": [{"kind": "atom", "atom": "reply_or_quote_present", "params": {}}],
+                    },
+                },
+            ],
+        ),
+        [],
+    )
+    _mark_posted(
+        post,
+        instagram.id,
+        external_id="ig-media-live",
+        external_url="https://instagram.test/p/live/",
+    )
+    session.flush()
+    calls: list[str] = []
+
+    def collect_instagram(session, channel):
+        calls.append(channel.service)
+
+    def collect_bluesky(session, channel, run_id):
+        raise AssertionError("Bluesky should not collect before its target post is available.")
+
+    monkeypatch.setattr("app.services.giveaway_engine.refresh_instagram_channel_state", collect_instagram)
+    monkeypatch.setattr("app.services.giveaway_engine.collect_bluesky_channel_state", collect_bluesky)
+
+    process_giveaway_lifecycle(session, AlertDispatcher(), run_id="run-partial-collect")
+
+    channels = {channel.service: channel for channel in post.giveaway_campaign.channels}
+    assert post.giveaway_campaign.status == GIVEAWAY_STATUS_COLLECTING
+    assert channels["instagram"].status == GIVEAWAY_STATUS_COLLECTING
+    assert channels["bluesky"].status == "scheduled"
+    assert calls == ["instagram"]
 
 
 def test_process_giveaway_lifecycle_creates_separate_winners_for_mixed_channels(session, monkeypatch):
