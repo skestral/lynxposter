@@ -175,6 +175,9 @@
                         {% if post.status == "draft" %}
                         <button class="btn btn-outline-danger" type="button" id="delete-draft-button">Delete Draft</button>
                         {% endif %}
+                        {% if post.giveaway and post.giveaway.status in ["scheduled", "collecting"] %}
+                        <button class="btn btn-outline-warning" type="button" id="end-giveaway-button">End Giveaway</button>
+                        {% endif %}
                         <button class="btn btn-outline-primary" type="button" id="send-now-button">Publish Now</button>
                         <a class="btn btn-outline-secondary" href="/sandbox/page?post_id={{ post.id }}">Open In Preview Studio</a>
                     </div>
@@ -647,6 +650,7 @@ const uploadsInput = document.querySelector("input[name='uploads']");
 const uploadPreviewList = document.getElementById("upload-preview-list");
 const uploadSummary = document.getElementById("upload-summary");
 const deleteDraftButton = document.getElementById("delete-draft-button");
+const endGiveawayButton = document.getElementById("end-giveaway-button");
 const postTypeSelect = document.getElementById("post-type-select");
 const giveawayConfigPanel = document.getElementById("giveaway-config-panel");
 const giveawayTargetHint = document.getElementById("giveaway-target-hint");
@@ -1006,6 +1010,26 @@ document.querySelectorAll(".giveaway-review-action").forEach((button) => {
     window.location.reload();
   });
 });
+
+if (endGiveawayButton) {
+  endGiveawayButton.addEventListener("click", async () => {
+    const confirmed = window.confirm("End this giveaway now? LynxPoster will collect the latest activity and choose winners from the current entries.");
+    if (!confirmed) return;
+    endGiveawayButton.disabled = true;
+    endGiveawayButton.textContent = "Ending Giveaway...";
+    try {
+      const response = await fetch(`/scheduled-posts/${postId}/giveaway/end-now`, {method: "POST"});
+      if (!response.ok) {
+        alert(await window.readApiMessage(response));
+        return;
+      }
+      window.location.reload();
+    } finally {
+      endGiveawayButton.disabled = false;
+      endGiveawayButton.textContent = "End Giveaway";
+    }
+  });
+}
 
 if (deleteDraftButton) {
   deleteDraftButton.addEventListener("click", async () => {

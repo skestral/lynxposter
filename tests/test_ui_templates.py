@@ -364,7 +364,7 @@ def test_scheduled_post_templates_render_attachment_previews():
 
 def test_scheduled_post_templates_render_generic_giveaway_controls():
     giveaway = {
-        "status": "review_required",
+        "status": "collecting",
         "giveaway_end_at": datetime(2026, 5, 15, 22, 30, tzinfo=timezone.utc),
         "pool_mode": "separate",
         "audit_summary": {"entrants": 2, "eligible": 0, "provisional": 2, "disqualified": 0},
@@ -499,6 +499,8 @@ def test_scheduled_post_templates_render_generic_giveaway_controls():
     assert "Selection Log" in html
     assert "Confirm Winner" in html
     assert "Advance To Next Candidate" in html
+    assert "End Giveaway" in html
+    assert "/giveaway/end-now" in html
     assert "Open published Instagram post" in html
     assert "Open published Bluesky post" in html
 

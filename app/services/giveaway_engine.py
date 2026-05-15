@@ -1112,6 +1112,60 @@ def finalize_giveaway_campaign(
     return campaign
 
 
+def end_giveaway_campaign(
+    session: Session,
+    campaign: GiveawayCampaign,
+    alerts: AlertDispatcher,
+    *,
+    run_id: str,
+) -> GiveawayCampaign:
+    if campaign.status not in {GIVEAWAY_STATUS_SCHEDULED, GIVEAWAY_STATUS_COLLECTING}:
+        raise ValueError("This giveaway has already been ended.")
+
+    hydrate_channel_targets(campaign)
+    ready_channels = [channel for channel in campaign.channels if _channel_target_ready(channel)]
+    if not ready_channels:
+        raise ValueError("This giveaway cannot be ended until at least one published target post is available.")
+
+    ended_at = utcnow()
+    campaign.giveaway_end_at = ended_at
+    campaign.status = GIVEAWAY_STATUS_COLLECTING
+    for channel in ready_channels:
+        if channel.status == GIVEAWAY_STATUS_SCHEDULED:
+            channel.status = GIVEAWAY_STATUS_COLLECTING
+
+    log_run_event(
+        session,
+        run_id=run_id,
+        persona_id=campaign.post.persona_id,
+        persona_name=campaign.post.persona.name if campaign.post.persona else None,
+        service="giveaway",
+        operation="giveaway",
+        message=f"Ended giveaway post {campaign.post_id} and started final collection.",
+        post_id=campaign.post_id,
+        metadata={"campaign_id": campaign.id, "ended_at": ended_at.isoformat()},
+    )
+
+    try:
+        return finalize_giveaway_campaign(session, campaign, alerts, run_id=run_id)
+    except Exception as exc:
+        campaign.status = GIVEAWAY_STATUS_FAILED
+        campaign.last_error = str(exc)
+        alerts.emit_hard_failure(
+            session,
+            run_id=run_id,
+            persona=campaign.post.persona,
+            service="giveaway",
+            post=campaign.post,
+            operation="giveaway",
+            message=str(exc),
+            error_class=exc.__class__.__name__,
+            event_type="giveaway_failed",
+        )
+        session.flush()
+        return campaign
+
+
 def process_giveaway_lifecycle(
     session: Session,
     alerts: AlertDispatcher,

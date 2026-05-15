@@ -67,6 +67,7 @@ from app.services.giveaway_engine import (
     POST_TYPE_GIVEAWAY,
     advance_giveaway_winner,
     confirm_giveaway_winner,
+    end_giveaway_campaign,
     process_giveaway_lifecycle,
     serialize_giveaway,
 )
@@ -1753,6 +1754,30 @@ def api_advance_giveaway_winner(post_id: str, request: Request):
             raise HTTPException(status_code=404, detail="Giveaway not found.")
         try:
             updated = advance_giveaway_winner(session, post.giveaway_campaign, run_id=new_run_id(), pool_key=pool_key)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        publish_live_update(
+            LIVE_UPDATE_TOPIC_SCHEDULED_POSTS,
+            LIVE_UPDATE_TOPIC_DASHBOARD,
+            LIVE_UPDATE_TOPIC_LOGS,
+        )
+        return serialize_giveaway(updated)
+
+
+@app.post("/scheduled-posts/{post_id}/giveaway/end-now")
+def api_end_giveaway(post_id: str, request: Request):
+    principal = require_api_access(request, role="user")
+    with db_session() as session:
+        post = get_post(session, post_id, owner_user_id=_owner_user_id_for_principal(principal))
+        if not post or post.origin_kind != "composer" or post.giveaway_campaign is None:
+            raise HTTPException(status_code=404, detail="Giveaway not found.")
+        try:
+            updated = end_giveaway_campaign(
+                session,
+                post.giveaway_campaign,
+                _alert_dispatcher(request),
+                run_id=new_run_id(),
+            )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         publish_live_update(

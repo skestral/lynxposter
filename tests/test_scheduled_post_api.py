@@ -11,7 +11,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.database import Base
-from app.models import AlertEvent
+from app.models import AlertEvent, GiveawayEntrant
 from app.main import app
 from app.services.auth import Principal
 from app.services.personas import create_account, create_persona
@@ -345,6 +345,89 @@ def test_update_scheduled_giveaway_api_moves_time(api_stack):
         assert saved.scheduled_for.replace(tzinfo=timezone.utc) == datetime(2026, 5, 16, 13, 30, tzinfo=timezone.utc)
         assert saved.giveaway_campaign is not None
         assert saved.giveaway_campaign.giveaway_end_at.replace(tzinfo=timezone.utc) == giveaway_end_at
+
+
+def test_end_giveaway_api_collects_and_selects_winner(api_stack, monkeypatch):
+    api_client, SessionLocal = api_stack
+    collection_calls = []
+
+    def fake_collect_bluesky(session, channel, *, run_id):
+        collection_calls.append((run_id, channel.id))
+        entrant = GiveawayEntrant(
+            channel=channel,
+            provider_user_id="did:plc:entrant",
+            provider_username="entrant.test",
+            display_label="entrant.test",
+            signal_state_json={
+                "reply_present": True,
+                "quote_present": False,
+                "like_present": False,
+                "repost_present": False,
+                "follow_present": None,
+                "reply_posts": [{"uri": "at://did:plc:entrant/app.bsky.feed.post/reply", "text": "I am in"}],
+                "quote_posts": [],
+                "reply_or_quote_mention_count": 0,
+            },
+        )
+        channel.entrants.append(entrant)
+
+    monkeypatch.setattr("app.services.giveaway_engine.collect_bluesky_channel_state", fake_collect_bluesky)
+
+    with SessionLocal() as session:
+        persona = _create_persona(session, slug="scheduled-post-api-end-giveaway")
+        bluesky = _create_destination_account(session, persona, service="bluesky", label="Bluesky")
+        post = create_scheduled_post(
+            session,
+            ScheduledPostCreate.model_validate(
+                {
+                    "persona_id": persona.id,
+                    "body": "End this giveaway",
+                    "post_type": "giveaway",
+                    "status": "posted",
+                    "target_account_ids": [bluesky.id],
+                    "publish_overrides_json": {},
+                    "metadata_json": {},
+                    "scheduled_for": None,
+                    "giveaway": {
+                        "giveaway_end_at": datetime.now(timezone.utc) + timedelta(days=1),
+                        "pool_mode": "combined",
+                        "channels": [
+                            {
+                                "service": "bluesky",
+                                "account_id": bluesky.id,
+                                "rules": {
+                                    "kind": "all",
+                                    "children": [
+                                        {"kind": "atom", "atom": "reply_or_quote_present", "params": {}},
+                                    ],
+                                },
+                            }
+                        ],
+                    },
+                }
+            ),
+            [],
+        )
+        job = next(job for job in post.delivery_jobs if job.target_account_id == bluesky.id)
+        job.status = "posted"
+        job.external_id = "3k-test"
+        channel = post.giveaway_campaign.channels[0]
+        channel.target_post_uri = "at://did:plc:owner/app.bsky.feed.post/3k-test"
+        session.commit()
+        post_id = post.id
+
+    response = api_client.post(f"/scheduled-posts/{post_id}/giveaway/end-now")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "winner_selected"
+    assert payload["pools"][0]["status"] == "winner_selected"
+    assert payload["pools"][0]["final_winner"]["provider_username"] == "entrant.test"
+    assert collection_calls and collection_calls[0][0]
+    with SessionLocal() as session:
+        saved = get_post(session, post_id)
+        assert saved.giveaway_campaign.giveaway_end_at.replace(tzinfo=timezone.utc) <= datetime.now(timezone.utc)
+        assert saved.giveaway_campaign.frozen_at is not None
 
 
 def test_scheduled_post_api_exposes_delivery_outcome_breakdown(api_stack):
