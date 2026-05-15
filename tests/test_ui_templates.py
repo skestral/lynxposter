@@ -492,6 +492,8 @@ def test_scheduled_post_templates_render_generic_giveaway_controls():
     assert "Instagram Channel" in html
     assert "Bluesky Channel" in html
     assert "Separate" in html
+    assert 'id="detail-giveaway-details-tab"' in html
+    assert 'id="detail-giveaway-details-pane"' in html
     assert "Activity Dashboard" in html
     assert '"giveaway_end_at": "2026-05-15T15:30"' in html
     assert "Timezone: America/Los_Angeles" in html

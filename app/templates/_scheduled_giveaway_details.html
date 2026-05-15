@@ -1,0 +1,262 @@
+<div class="surface-panel">
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
+        <div>
+            <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
+                <h2 class="h5 mb-0">Giveaway Details</h2>
+                <span class="badge text-bg-light border rounded-pill">{{ timezone_indicator() }}</span>
+            </div>
+            <div class="fw-semibold">{{ post.giveaway.status|replace('_', ' ')|title }}</div>
+            <div class="small text-secondary">Ends {{ post.giveaway.giveaway_end_at|datetime_display }}</div>
+            <div class="small text-secondary">Pool mode: {{ post.giveaway.pool_mode|replace('_', ' ')|title }}</div>
+        </div>
+        <div class="d-flex gap-2 flex-wrap justify-content-lg-end">
+            <span class="badge text-bg-light border rounded-pill">{{ post.giveaway.audit_summary.entrants }} entrants</span>
+            <span class="badge text-bg-success-subtle border text-success-emphasis rounded-pill">{{ post.giveaway.audit_summary.eligible }} eligible</span>
+            <span class="badge text-bg-warning-subtle border text-warning-emphasis rounded-pill">{{ post.giveaway.audit_summary.provisional }} review</span>
+            <span class="badge text-bg-danger-subtle border text-danger-emphasis rounded-pill">{{ post.giveaway.audit_summary.disqualified }} disqualified</span>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-6 col-lg-3">
+        <div class="surface-panel-soft h-100">
+            <div class="small text-secondary">Engagement Activities</div>
+            <div class="h4 mb-0">{{ post.giveaway.audit_summary.engagement_activities | default(0, true) }}</div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="surface-panel-soft h-100">
+            <div class="small text-secondary">Qualified Entrants</div>
+            <div class="h4 mb-0">{{ post.giveaway.audit_summary.eligible | default(0, true) }}</div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="surface-panel-soft h-100">
+            <div class="small text-secondary">Review Required</div>
+            <div class="h4 mb-0">{{ post.giveaway.audit_summary.provisional | default(0, true) }}</div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="surface-panel-soft h-100">
+            <div class="small text-secondary">Disqualified</div>
+            <div class="h4 mb-0">{{ post.giveaway.audit_summary.disqualified | default(0, true) }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="surface-panel">
+    <div class="fw-semibold mb-2">Activity Dashboard</div>
+    <div class="table-responsive">
+        <table class="table align-middle mb-0">
+            <thead>
+                <tr><th>Channel</th><th>Activities</th><th>Qualified</th><th>Review Required</th><th>Disqualified</th><th>Breakdown</th></tr>
+            </thead>
+            <tbody>
+                {% for channel in post.giveaway.channels %}
+                <tr>
+                    <td>
+                        <div class="fw-semibold">{{ channel.service|title }}</div>
+                        {% if channel.last_collected_at %}
+                        <div class="small text-secondary">Last collected {{ channel.last_collected_at|datetime_display }}</div>
+                        {% endif %}
+                    </td>
+                    <td>{{ channel.summary.engagement_activities | default(0, true) }}</td>
+                    <td>{{ channel.summary.eligible | default(0, true) }}</td>
+                    <td>{{ channel.summary.provisional | default(0, true) }}</td>
+                    <td>{{ channel.summary.disqualified | default(0, true) }}</td>
+                    <td class="small">
+                        {% for key, value in (channel.summary.activity_breakdown | default({}, true)).items() %}
+                        <div>{{ key|replace('_', ' ')|title }}: {{ value }}</div>
+                        {% else %}
+                        <div class="text-secondary">No captured activity yet.</div>
+                        {% endfor %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="surface-panel">
+    <div class="fw-semibold mb-3">Channel Posts</div>
+    <div class="row g-3">
+        {% for channel in post.giveaway.channels %}
+        <div class="col-12 col-lg-6">
+            <div class="border rounded p-3 h-100 bg-white">
+                <div class="fw-semibold">{{ channel.service|title }} Channel</div>
+                <div class="small text-secondary mt-1">
+                    {{ channel.summary.entrants }} entrants •
+                    {{ channel.summary.eligible }} eligible •
+                    {{ channel.summary.provisional }} provisional •
+                    {{ channel.summary.disqualified }} disqualified
+                </div>
+                {% if channel.target_post_url %}
+                <div class="small mt-2"><a href="{{ channel.target_post_url }}" target="_blank" rel="noreferrer">Open published {{ channel.service|title }} post</a></div>
+                {% elif channel.target_post_external_id %}
+                <div class="small text-secondary mt-2">{{ channel.service|title }} post ID: {{ channel.target_post_external_id }}</div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+{% for pool in post.giveaway.pools %}
+<div class="surface-panel {% if pool.status == 'review_required' %}bg-warning-subtle{% elif pool.final_winner %}bg-success-subtle{% endif %}">
+    <div class="fw-semibold">{{ pool.label }} Pool</div>
+    <div class="small text-secondary mt-1">{{ pool.status|replace('_', ' ')|title }} • {{ pool.candidate_count }} candidates</div>
+    {% if pool.provisional_winner %}
+    <div class="mt-2">
+        <div class="small text-secondary">Provisional winner</div>
+        <div>{{ pool.provisional_winner.display_label or pool.provisional_winner.provider_username or pool.provisional_winner.provider_user_id }}</div>
+        {% if pool.provisional_winner.inconclusive_reasons %}
+        <div class="small text-secondary mt-2">{{ pool.provisional_winner.inconclusive_reasons|join("; ") }}</div>
+        {% endif %}
+    </div>
+    {% endif %}
+    {% if pool.final_winner %}
+    <div class="mt-2">
+        <div class="small text-secondary">Final winner</div>
+        <div>{{ pool.final_winner.display_label or pool.final_winner.provider_username or pool.final_winner.provider_user_id }}</div>
+    </div>
+    {% endif %}
+    {% if pool.status == "review_required" and pool.provisional_winner %}
+    <div class="d-flex gap-2 flex-wrap mt-3">
+        <button class="btn btn-sm btn-outline-success giveaway-review-action" type="button" data-action="confirm" data-pool-key="{{ pool.pool_key }}">Confirm Winner</button>
+        <button class="btn btn-sm btn-outline-warning giveaway-review-action" type="button" data-action="advance" data-pool-key="{{ pool.pool_key }}">Advance To Next Candidate</button>
+    </div>
+    {% endif %}
+    {% if pool.selection_log %}
+    <div class="border rounded p-3 bg-white mt-3">
+        <div class="fw-semibold mb-2">Selection Log</div>
+        <div class="small text-secondary mb-2">
+            Method: {{ pool.selection_log.selection_method|replace('_', ' ')|title }} •
+            Candidate Source: {{ pool.selection_log.candidate_source|replace('_', ' ')|title }} •
+            Qualified Members: {{ pool.selection_log.qualified_member_count }} •
+            Candidate Count: {{ pool.selection_log.candidate_count }}
+        </div>
+        {% if pool.selection_log.note %}
+        <div class="small text-secondary mb-3">{{ pool.selection_log.note }}</div>
+        {% endif %}
+        {% if pool.selection_log.qualified_members %}
+        <div class="mb-3">
+            <div class="small text-secondary mb-1">Qualified Members</div>
+            <div class="d-flex gap-2 flex-wrap">
+                {% for member in pool.selection_log.qualified_members %}
+                <span class="badge text-bg-light border">{{ member.display_label or member.provider_username or member.provider_user_id }}</span>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+        {% if pool.selection_log.candidates %}
+        <div class="table-responsive">
+            <table class="table align-middle mb-0">
+                <thead>
+                    <tr><th>Rank</th><th>Entrant</th><th>Status</th><th>Selection Detail</th></tr>
+                </thead>
+                <tbody>
+                    {% for candidate in pool.selection_log.candidates %}
+                    <tr>
+                        <td>{{ candidate.rank }}</td>
+                        <td>{{ candidate.entrant.display_label or candidate.entrant.provider_username or candidate.entrant.provider_user_id }}</td>
+                        <td>{{ candidate.entrant.eligibility_status|replace('_', ' ')|title }}</td>
+                        <td>
+                            {% if candidate.selected %}
+                            <span class="badge text-bg-success">Selected</span>
+                            {% endif %}
+                            {% if candidate.note %}
+                            <div class="small text-secondary mt-1">{{ candidate.note }}</div>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endfor %}
+
+{% if post.giveaway.last_error %}
+<div class="small text-danger">{{ post.giveaway.last_error }}</div>
+{% endif %}
+
+{% set entrant_count = namespace(value=0) %}
+{% for channel in post.giveaway.channels %}
+{% set entrant_count.value = entrant_count.value + (channel.entrants|length) %}
+{% endfor %}
+{% if entrant_count.value %}
+<div class="surface-panel">
+    <div class="fw-semibold mb-3">Entrant Audit Log</div>
+    {% for channel in post.giveaway.channels %}
+    <div class="{% if not loop.first %}mt-4{% endif %}">
+        <div class="fw-semibold mb-2">{{ channel.service|title }} Entrants</div>
+        {% if channel.entrants %}
+        <div class="table-responsive">
+            <table class="table align-middle mb-0">
+                <thead>
+                    <tr><th>Entrant</th><th>Activity</th><th>Qualification Checks</th><th>Outcome</th></tr>
+                </thead>
+                <tbody>
+                    {% for entry in channel.entrants %}
+                    <tr>
+                        <td>
+                            <div class="fw-semibold">{{ entry.display_label or entry.provider_username or entry.provider_user_id }}</div>
+                            <div class="small text-secondary">{{ entry.provider_user_id }}</div>
+                        </td>
+                        <td class="small">
+                            <div class="fw-semibold">{{ entry.activity_total | default(0, true) }} activities</div>
+                            {% for key, value in (entry.activity_breakdown | default({}, true)).items() %}
+                            <div>{{ key|replace('_', ' ')|title }}: {{ value }}</div>
+                            {% endfor %}
+                        </td>
+                        <td class="small">
+                            {% for check in entry.checks | default([], true) %}
+                            <div class="mb-2">
+                                <div class="fw-semibold">
+                                    {{ check.label }}
+                                    {% if check.status == "passed" %}
+                                    <span class="badge text-bg-success">Passed</span>
+                                    {% elif check.status == "failed" %}
+                                    <span class="badge text-bg-danger">Failed</span>
+                                    {% else %}
+                                    <span class="badge text-bg-warning">Inconclusive</span>
+                                    {% endif %}
+                                </div>
+                                {% if check.detail %}
+                                <div class="text-secondary">{{ check.detail }}</div>
+                                {% endif %}
+                            </div>
+                            {% else %}
+                            <div class="text-secondary">No recorded checks yet.</div>
+                            {% endfor %}
+                        </td>
+                        <td class="small">
+                            <div class="fw-semibold">{{ entry.eligibility_status|replace('_', ' ')|title }}</div>
+                            {% if entry.inconclusive_reasons %}
+                            <div class="text-secondary mt-1">{{ entry.inconclusive_reasons|join("; ") }}</div>
+                            {% endif %}
+                            {% if entry.disqualification_reasons %}
+                            <div class="text-danger mt-1">{{ entry.disqualification_reasons|join("; ") }}</div>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-secondary">No {{ channel.service }} evidence has been captured yet.</div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="surface-panel">
+    <div class="text-secondary">No giveaway evidence has been captured yet.</div>
+</div>
+{% endif %}
