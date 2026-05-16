@@ -221,6 +221,72 @@ def test_update_scheduled_post_api_appends_multipart_attachments(api_stack, tmp_
         assert saved.attachments[1].alt_text == "New image"
 
 
+def test_update_scheduled_post_api_reorders_and_deletes_attachments(api_stack, tmp_path):
+    api_client, SessionLocal = api_stack
+    with SessionLocal() as session:
+        persona = _create_persona(session, slug="scheduled-post-api-reorder-media")
+        destination = _create_destination_account(session, persona)
+
+        paths = [tmp_path / "one.jpg", tmp_path / "two.jpg", tmp_path / "three.jpg"]
+        for index, path in enumerate(paths):
+            path.write_bytes(f"image-{index}".encode())
+        post = create_scheduled_post(
+            session,
+            ScheduledPostCreate.model_validate(
+                {
+                    "persona_id": persona.id,
+                    "body": "Draft body",
+                    "status": "draft",
+                    "target_account_ids": [destination.id],
+                    "publish_overrides_json": {},
+                    "metadata_json": {},
+                    "scheduled_for": None,
+                }
+            ),
+            [
+                MediaItem(
+                    storage_path=Path(path),
+                    mime_type="image/jpeg",
+                    alt_text=path.stem,
+                    size_bytes=path.stat().st_size,
+                    checksum=f"checksum-{index}",
+                    sort_order=index,
+                )
+                for index, path in enumerate(paths)
+            ],
+        )
+        session.commit()
+        post_id = post.id
+        destination_id = destination.id
+        attachment_ids = {attachment.alt_text: attachment.id for attachment in post.attachments}
+
+    response = api_client.put(
+        f"/scheduled-posts/{post_id}",
+        data={
+            "body": "Draft body",
+            "status": "draft",
+            "target_account_ids": json.dumps([destination_id]),
+            "publish_overrides_json": json.dumps({}),
+            "metadata_json": json.dumps({}),
+            "scheduled_for": "",
+            "attachment_order": json.dumps([attachment_ids["three"], attachment_ids["one"]]),
+            "deleted_attachment_ids": json.dumps([attachment_ids["two"]]),
+            "alt_texts": json.dumps([]),
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert [attachment["id"] for attachment in payload["attachments"]] == [attachment_ids["three"], attachment_ids["one"]]
+    assert [attachment["sort_order"] for attachment in payload["attachments"]] == [0, 1]
+
+    with SessionLocal() as session:
+        saved = get_post(session, post_id)
+        assert saved is not None
+        saved_attachments = sorted(saved.attachments, key=lambda attachment: attachment.sort_order)
+        assert [attachment.id for attachment in saved_attachments] == [attachment_ids["three"], attachment_ids["one"]]
+
+
 def test_update_scheduled_post_api_accepts_json_schedule_moves(api_stack):
     api_client, SessionLocal = api_stack
     with SessionLocal() as session:

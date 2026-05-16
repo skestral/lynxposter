@@ -226,6 +226,67 @@ def test_update_scheduled_post_appends_media_attachments(session, tmp_path):
     assert updated.attachments[1].storage_path.endswith("dog.jpg")
 
 
+def test_update_scheduled_post_reorders_and_deletes_media_attachments(session, tmp_path, monkeypatch):
+    persona = _create_persona(session, slug="attachments-reorder-delete")
+    mastodon = _create_account(session, persona, service="mastodon", label="Mastodon", source_enabled=False, destination_enabled=True)
+
+    uploads_dir = tmp_path / "uploads"
+    uploads_dir.mkdir()
+    paths = [uploads_dir / "one.jpg", uploads_dir / "two.jpg", uploads_dir / "three.jpg"]
+    for index, path in enumerate(paths):
+        path.write_bytes(f"image-{index}".encode())
+
+    post = create_scheduled_post(
+        session,
+        ScheduledPostCreate.model_validate(
+            {
+                "persona_id": persona.id,
+                "body": "With ordered images",
+                "status": "draft",
+                "target_account_ids": [mastodon.id],
+                "publish_overrides_json": {},
+                "metadata_json": {},
+                "scheduled_for": None,
+            }
+        ),
+        [
+            MediaItem(
+                storage_path=Path(path),
+                mime_type="image/jpeg",
+                alt_text=path.stem,
+                size_bytes=path.stat().st_size,
+                checksum=f"checksum-{index}",
+                sort_order=index,
+            )
+            for index, path in enumerate(paths)
+        ],
+    )
+    attachment_ids = {attachment.alt_text: attachment.id for attachment in post.attachments}
+
+    monkeypatch.setattr(
+        "app.services.storage.settings",
+        replace(storage_settings, uploads_dir=uploads_dir, imported_media_dir=tmp_path / "imported"),
+    )
+
+    updated = update_scheduled_post(
+        session,
+        post,
+        ScheduledPostUpdate.model_validate(
+            {
+                "attachment_order": [attachment_ids["three"], attachment_ids["one"]],
+                "deleted_attachment_ids": [attachment_ids["two"]],
+            }
+        ),
+    )
+
+    attachments = sorted(updated.attachments, key=lambda item: item.sort_order)
+    assert [attachment.id for attachment in attachments] == [attachment_ids["three"], attachment_ids["one"]]
+    assert [attachment.sort_order for attachment in attachments] == [0, 1]
+    assert paths[0].exists()
+    assert not paths[1].exists()
+    assert paths[2].exists()
+
+
 def test_delete_scheduled_post_removes_draft_and_children(session, tmp_path, monkeypatch):
     persona = _create_persona(session, slug="attachments-delete")
     mastodon = _create_account(session, persona, service="mastodon", label="Mastodon", source_enabled=False, destination_enabled=True)

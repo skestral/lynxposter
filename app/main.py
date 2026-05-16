@@ -396,7 +396,7 @@ def _serialize_post(post: CanonicalPost) -> ScheduledPostRead:
         updated_at=post.updated_at,
         deliveries=build_delivery_states(post),
         delivery_breakdown=DeliveryBreakdownRead(**delivery_breakdown),
-        attachments=list(post.attachments),
+        attachments=sorted(post.attachments, key=lambda item: (item.sort_order, item.id)),
     )
 
 
@@ -572,6 +572,8 @@ async def _read_scheduled_post_payload(request: Request) -> tuple[dict[str, Any]
         "metadata_json": _parse_json_value(form.get("metadata_json"), {}),
         "scheduled_for": _local_timezone_to_utc(form.get("scheduled_for"), _principal_timezone(principal)),
         "giveaway": _parse_json_value(form.get("giveaway_json"), None),
+        "attachment_order": _parse_json_value(form.get("attachment_order"), None),
+        "deleted_attachment_ids": _parse_json_value(form.get("deleted_attachment_ids"), None),
     }
     if isinstance(payload.get("giveaway"), dict):
         payload["giveaway"]["giveaway_end_at"] = _local_timezone_to_utc(

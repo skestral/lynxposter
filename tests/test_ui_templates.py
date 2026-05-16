@@ -255,6 +255,7 @@ def test_scheduled_post_templates_render_attachment_previews():
                     alt_text="Sample image",
                     size_bytes=1234,
                     storage_path="/tmp/sample.jpg",
+                    sort_order=0,
                 )
             ],
         ),
@@ -319,6 +320,11 @@ def test_scheduled_post_templates_render_attachment_previews():
     assert '/media/attachments/attachment-1' in detail_html
     assert 'upload-preview-list' in create_html
     assert 'name="uploads"' in detail_html
+    assert 'id="saved-attachment-list"' in detail_html
+    assert 'Saved Media' in detail_html
+    assert 'data-action="up"' in detail_html
+    assert 'attachment_order' in detail_html
+    assert 'deleted_attachment_ids' in detail_html
     assert 'Selected images and videos will travel with this post plan.' in create_html
     assert 'Post Snapshot' in detail_html
     assert 'Post Snapshot' in create_html

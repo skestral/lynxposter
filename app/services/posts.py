@@ -88,6 +88,62 @@ def _create_attachment(post: CanonicalPost, item: MediaItem) -> MediaAttachment:
     )
 
 
+def _sorted_attachments(post: CanonicalPost) -> list[MediaAttachment]:
+    return sorted(post.attachments, key=lambda item: (item.sort_order, item.id))
+
+
+def _delete_attachment_file_if_unshared(session: Session, attachment: MediaAttachment) -> None:
+    other_attachment = session.scalar(
+        select(MediaAttachment.id)
+        .where(
+            MediaAttachment.storage_path == attachment.storage_path,
+            MediaAttachment.id != attachment.id,
+        )
+        .limit(1)
+    )
+    if other_attachment is None:
+        delete_managed_media_file(attachment.storage_path)
+
+
+def _sync_post_attachments(
+    session: Session,
+    post: CanonicalPost,
+    *,
+    attachment_order: list[str] | None,
+    deleted_attachment_ids: list[str] | None,
+) -> None:
+    attachments_by_id = {attachment.id: attachment for attachment in post.attachments}
+    deleted_ids = [str(item or "").strip() for item in deleted_attachment_ids or [] if str(item or "").strip()]
+    unknown_deleted = [attachment_id for attachment_id in deleted_ids if attachment_id not in attachments_by_id]
+    if unknown_deleted:
+        raise ValueError("One or more selected media items no longer exist on this post.")
+
+    for attachment_id in dict.fromkeys(deleted_ids):
+        attachment = attachments_by_id.pop(attachment_id)
+        _delete_attachment_file_if_unshared(session, attachment)
+        post.attachments.remove(attachment)
+        session.delete(attachment)
+
+    remaining = _sorted_attachments(post)
+    if attachment_order is not None:
+        requested_order = [str(item or "").strip() for item in attachment_order if str(item or "").strip()]
+        if len(requested_order) != len(set(requested_order)):
+            raise ValueError("Media order contains a duplicate attachment.")
+        unknown_ordered = [
+            attachment_id
+            for attachment_id in requested_order
+            if attachment_id not in attachments_by_id and attachment_id not in deleted_ids
+        ]
+        if unknown_ordered:
+            raise ValueError("One or more ordered media items no longer exist on this post.")
+        requested_remaining = [attachment_id for attachment_id in requested_order if attachment_id in attachments_by_id]
+        ordered_ids = requested_remaining + [attachment.id for attachment in remaining if attachment.id not in requested_remaining]
+        remaining = [attachments_by_id[attachment_id] for attachment_id in ordered_ids]
+
+    for index, attachment in enumerate(remaining):
+        attachment.sort_order = index
+
+
 def _active_target_account_ids(post: CanonicalPost) -> list[str]:
     return [
         job.target_account_id
@@ -327,6 +383,13 @@ def update_scheduled_post(
         post.metadata_json = payload.metadata_json
     if "scheduled_for" in payload.model_fields_set:
         post.scheduled_for = normalize_datetime(payload.scheduled_for)
+
+    _sync_post_attachments(
+        session,
+        post,
+        attachment_order=payload.attachment_order,
+        deleted_attachment_ids=payload.deleted_attachment_ids,
+    )
 
     next_sort_order = len(post.attachments)
     for offset, item in enumerate(media_items or []):
