@@ -51,7 +51,7 @@ from app.services.giveaway_engine import (
     get_or_create_channel_entrant,
     hydrate_channel_targets,
     process_giveaway_lifecycle,
-    _record_evidence_event,
+    sync_instagram_webhook_event_to_channel,
 )
 from app.services.live_updates import (
     LIVE_UPDATE_TOPIC_DASHBOARD,
@@ -395,6 +395,10 @@ def _webhook_event_type(field: str, value: dict[str, Any]) -> str:
         return "comment"
     if "mention" in lowered or str(value.get("mention_type") or "").lower() == "story":
         return "story_mention"
+    if "like" in lowered or str(value.get("item") or "").lower() == "like":
+        return "like"
+    if "share" in lowered or "repost" in lowered or str(value.get("item") or "").lower() in {"share", "repost"}:
+        return "share"
     known_field_types = {
         "messages": "message",
         "message_edit": "message_edit",
@@ -937,76 +941,17 @@ def ingest_instagram_webhook_payload(
             session.flush()
             stored_events.append(webhook_event)
 
-            if channel is None or campaign is None or (event_type not in {"comment", "story_mention"} and not counts_as_story_share):
+            captured_activities: list[str] = []
+            if channel is not None and campaign is not None:
+                captured_activities = sync_instagram_webhook_event_to_channel(session, channel, webhook_event)
+            if not captured_activities:
                 webhook_event.processed = True
                 webhook_event.processed_at = utcnow()
                 continue
 
-            occurred_at = None
-            timestamp = value.get("created_time") or value.get("timestamp")
-            if isinstance(timestamp, str) and timestamp.strip():
-                try:
-                    occurred_at = normalize_datetime(datetime.fromisoformat(timestamp.replace("Z", "+00:00")))
-                except ValueError:
-                    occurred_at = None
-            if not _giveaway_window_accepts_event(campaign, occurred_at=occurred_at):
-                webhook_event.processed = True
-                webhook_event.processed_at = utcnow()
-                continue
-
-            instagram_user_id, instagram_username = _extract_actor(value)
-            if not instagram_user_id:
-                webhook_event.processed = True
-                webhook_event.processed_at = utcnow()
-                continue
-
-            entry = _entry_for_user(channel, instagram_user_id, instagram_username)
-            state = _instagram_signal_state(entry)
-            if event_type == "comment":
-                summary = _comment_payload_summary(value)
-                comments = list(state.get("comments") or [])
-                comment_id = summary.get("comment_id")
-                if not (comment_id and any(existing.get("comment_id") == comment_id for existing in comments if isinstance(existing, dict))):
-                    comments.append(summary)
-                state["comments"] = comments
-            elif event_type == "story_mention" or counts_as_story_share:
-                mentions = list(state.get("story_mentions") or [])
-                summary = _story_mention_payload_summary(
-                    value,
-                    source=(
-                        STORY_EVIDENCE_SOURCE_MESSAGE_SHARE
-                        if counts_as_story_share and event_type != "story_mention"
-                        else STORY_EVIDENCE_SOURCE_WEBHOOK
-                    ),
-                )
-                story_id = summary.get("story_id")
-                if not (story_id and any(existing.get("story_id") == story_id for existing in mentions if isinstance(existing, dict))):
-                    mentions.append(summary)
-                state["story_mentions"] = mentions
-            entry.signal_state_json = state
-            entry.signal_state_json = _instagram_signal_state(entry)
-            session.flush()
-            _record_evidence_event(
-                session,
-                campaign,
-                channel,
-                entrant=entry,
-                provider_event_id=provider_object_id,
-                event_type="instagram_story_mention" if (event_type == "story_mention" or counts_as_story_share) else "instagram_comment",
-                source=(
-                    STORY_EVIDENCE_SOURCE_MESSAGE_SHARE
-                    if counts_as_story_share and event_type != "story_mention"
-                    else COMMENT_EVIDENCE_SOURCE_WEBHOOK if event_type == "comment"
-                    else STORY_EVIDENCE_SOURCE_WEBHOOK
-                ),
-                payload=event_payload["payload_json"],
-            )
-            channel.last_collected_at = utcnow()
-            channel.last_error = None
-            webhook_event.processed = True
-            webhook_event.processed_at = utcnow()
             if run_id:
-                captured_event_type = "story share" if counts_as_story_share and event_type != "story_mention" else event_type.replace("_", " ")
+                captured_event_type = ", ".join(activity.replace("_", " ") for activity in captured_activities)
+                instagram_user_id, _ = _extract_actor(value)
                 log_run_event(
                     session,
                     run_id=run_id,
@@ -1020,6 +965,7 @@ def ingest_instagram_webhook_payload(
                     metadata={
                         "event_type": event_type,
                         "instagram_user_id": instagram_user_id,
+                        "captured_activities": captured_activities,
                         "story_share_inferred_from_message": counts_as_story_share and event_type != "story_mention",
                     },
                 )

@@ -81,7 +81,7 @@ ngrok http 8000
 5. In the Meta developer panel, paste:
    - callback URL: `https://<your-public-url>/webhooks/instagram`
    - verify token: the same `INSTAGRAM_WEBHOOK_VERIFY_TOKEN` value saved in LynxPoster
-6. Subscribe to the giveaway fields shown in Settings, currently `comments` and `mentions`.
+6. Subscribe to the giveaway fields shown in Settings, currently `comments`, `mentions`, `likes`, and `shares`.
 
 Once the tunnel is live, a quick verification probe looks like:
 

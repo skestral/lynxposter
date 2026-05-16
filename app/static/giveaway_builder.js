@@ -4,6 +4,7 @@
       comment_present: {label: "Comment present"},
       story_mention_present: {label: "Story mention present"},
       like_present: {label: "Like present"},
+      repost_present: {label: "Repost present"},
       follow_present: {label: "Follow present"},
       friend_mention_count_gte: {label: "Friend mention count at least", params: [{key: "count", type: "number", label: "Count", min: 0}]},
       comment_keywords_all: {label: "Comment contains all keywords", params: [{key: "keywords", type: "list", label: "Keywords"}]},

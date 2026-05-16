@@ -27,7 +27,9 @@ from app.services.giveaway_engine import (
     GIVEAWAY_STATUS_REVIEW_REQUIRED,
     GIVEAWAY_STATUS_WINNER_SELECTED,
     collect_bluesky_channel_state,
+    evaluate_channel_entrants,
     process_giveaway_lifecycle,
+    refresh_instagram_channel_state,
     serialize_giveaway,
 )
 from app.services.giveaways import (
@@ -318,6 +320,171 @@ def test_instagram_webhook_ingest_updates_generic_entrant_state(session):
         .one()
     )
     assert comment_event.entrant_id == entrant.id
+
+
+def test_instagram_webhook_ingest_updates_generic_like_and_repost_state(session):
+    persona = _create_persona(session, slug="giveaway-webhook-like-share")
+    instagram = _create_account(session, persona, service="instagram", label="Instagram")
+    post = create_scheduled_post(
+        session,
+        _legacy_instagram_giveaway_payload(
+            persona.id,
+            [instagram.id],
+            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        ),
+        [],
+    )
+    _mark_posted(post, instagram.id, external_id="ig-media-like-share", external_url="https://instagram.test/p/ig-media-like-share/")
+    session.flush()
+
+    payload = {
+        "entry": [
+            {
+                "id": "17841463479494132",
+                "changes": [
+                    {
+                        "field": "likes",
+                        "value": {
+                            "media_id": "ig-media-like-share",
+                            "id": "like-1",
+                            "from": {"id": "user-1", "username": "entrant.one"},
+                        },
+                    },
+                    {
+                        "field": "shares",
+                        "value": {
+                            "media_id": "ig-media-like-share",
+                            "id": "share-1",
+                            "from": {"id": "user-1", "username": "entrant.one"},
+                        },
+                    },
+                ],
+            }
+        ]
+    }
+
+    events = ingest_instagram_webhook_payload(session, payload, signature_valid=True, run_id="run-like-share")
+    session.flush()
+
+    assert [event.event_type for event in events] == ["like", "share"]
+    channel = post.giveaway_campaign.channels[0]
+    entrant = session.query(GiveawayEntrant).filter_by(channel_id=channel.id, provider_user_id="user-1").one()
+    assert entrant.signal_state_json["like_present"] is True
+    assert entrant.signal_state_json["repost_present"] is True
+    assert len(entrant.signal_state_json["likes"]) == 1
+    assert len(entrant.signal_state_json["reposts"]) == 1
+    like_event = (
+        session.query(GiveawayEvidenceEvent)
+        .filter(
+            GiveawayEvidenceEvent.event_type == "instagram_like",
+            GiveawayEvidenceEvent.source == "webhook_capture",
+            GiveawayEvidenceEvent.provider_event_id == "like-1",
+        )
+        .one()
+    )
+    repost_event = (
+        session.query(GiveawayEvidenceEvent)
+        .filter(
+            GiveawayEvidenceEvent.event_type == "instagram_repost",
+            GiveawayEvidenceEvent.source == "webhook_capture",
+            GiveawayEvidenceEvent.provider_event_id == "share-1",
+        )
+        .one()
+    )
+    assert like_event.entrant_id == entrant.id
+    assert repost_event.entrant_id == entrant.id
+
+
+def test_instagram_refresh_backfills_existing_like_and_repost_webhooks(session, monkeypatch):
+    persona = _create_persona(session, slug="giveaway-webhook-backfill")
+    instagram = _create_account(session, persona, service="instagram", label="Instagram")
+    post = create_scheduled_post(
+        session,
+        _generic_giveaway_payload(
+            persona.id,
+            [instagram.id],
+            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            channels=[
+                {
+                    "service": "instagram",
+                    "account_id": instagram.id,
+                    "rules": {
+                        "kind": "all",
+                        "children": [
+                            {"kind": "atom", "atom": "like_present", "params": {}},
+                            {"kind": "atom", "atom": "repost_present", "params": {}},
+                        ],
+                    },
+                }
+            ],
+        ),
+        [],
+    )
+    _mark_posted(post, instagram.id, external_id="ig-media-backfill", external_url="https://instagram.test/p/ig-media-backfill/")
+    session.add_all(
+        [
+            InstagramGiveawayWebhookEvent(
+                provider_event_field="likes",
+                event_type="like",
+                provider_object_id="like-backfill",
+                payload_json={
+                    "entry": {"id": "17841463479494132"},
+                    "change": {
+                        "field": "likes",
+                        "value": {
+                            "media_id": "ig-media-backfill",
+                            "id": "like-backfill",
+                            "from": {"id": "user-backfill", "username": "backfill.one"},
+                        },
+                    },
+                },
+                signature_valid=True,
+                processed=True,
+            ),
+            InstagramGiveawayWebhookEvent(
+                provider_event_field="shares",
+                event_type="share",
+                provider_object_id="share-backfill",
+                payload_json={
+                    "entry": {"id": "17841463479494132"},
+                    "change": {
+                        "field": "shares",
+                        "value": {
+                            "media_id": "ig-media-backfill",
+                            "id": "share-backfill",
+                            "from": {"id": "user-backfill", "username": "backfill.one"},
+                        },
+                    },
+                },
+                signature_valid=True,
+                processed=True,
+            ),
+        ]
+    )
+    session.flush()
+    channel = post.giveaway_campaign.channels[0]
+    monkeypatch.setattr("app.services.giveaway_engine._instagram_destination_dependency_issue", lambda: "Private API unavailable")
+
+    refresh_instagram_channel_state(session, channel)
+    evaluate_channel_entrants(channel)
+    session.flush()
+
+    entrant = session.query(GiveawayEntrant).filter_by(channel_id=channel.id, provider_user_id="user-backfill").one()
+    assert entrant.signal_state_json["like_present"] is True
+    assert entrant.signal_state_json["repost_present"] is True
+    assert entrant.eligibility_status == ENTRY_STATUS_ELIGIBLE
+    assert (
+        session.query(GiveawayEvidenceEvent)
+        .filter(GiveawayEvidenceEvent.event_type == "instagram_like", GiveawayEvidenceEvent.provider_event_id == "like-backfill")
+        .count()
+        == 1
+    )
+    assert (
+        session.query(GiveawayEvidenceEvent)
+        .filter(GiveawayEvidenceEvent.event_type == "instagram_repost", GiveawayEvidenceEvent.provider_event_id == "share-backfill")
+        .count()
+        == 1
+    )
 
 
 def test_instagram_webhook_ingest_matches_graph_media_permalink_to_giveaway(session, monkeypatch):

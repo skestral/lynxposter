@@ -25,6 +25,7 @@ from app.models import (
     GiveawayPoolResult,
     InstagramGiveaway,
     InstagramGiveawayEntry,
+    InstagramGiveawayWebhookEvent,
     Persona,
 )
 from app.schemas import (
@@ -76,6 +77,14 @@ BLUESKY_ACTIVITY_EVENT_TYPES = (
     "bluesky_follow",
 )
 COMMENT_EVIDENCE_SOURCE_LIVE = "close_time_live"
+INSTAGRAM_WEBHOOK_CAPTURE_SOURCE = "webhook_capture"
+INSTAGRAM_MESSAGE_SHARE_CAPTURE_SOURCE = "message_share_capture"
+INSTAGRAM_ACTIVITY_EVENT_TYPES = (
+    "instagram_comment",
+    "instagram_story_mention",
+    "instagram_like",
+    "instagram_repost",
+)
 
 
 def utcnow() -> datetime:
@@ -488,6 +497,62 @@ def _entry_display_label(entrant: GiveawayEntrant) -> str:
     return entrant.display_label or entrant.provider_username or entrant.provider_user_id
 
 
+def _normalize_evidence_items(items: list[dict[str, Any]] | None, *, default_source: str) -> list[dict[str, Any]]:
+    normalized: list[dict[str, Any]] = []
+    for item in items or []:
+        if not isinstance(item, dict):
+            continue
+        payload = dict(item)
+        payload["source"] = str(payload.get("source") or "").strip() or default_source
+        normalized.append(payload)
+    return normalized
+
+
+def _normalized_instagram_signal_state(state: dict[str, Any] | None) -> dict[str, Any]:
+    raw_state = dict(state or {})
+    comments = _normalize_evidence_items(
+        raw_state.get("comments"),
+        default_source=INSTAGRAM_WEBHOOK_CAPTURE_SOURCE,
+    )
+    story_mentions = _normalize_evidence_items(
+        raw_state.get("story_mentions"),
+        default_source=INSTAGRAM_WEBHOOK_CAPTURE_SOURCE,
+    )
+    likes = _normalize_evidence_items(
+        raw_state.get("likes"),
+        default_source=INSTAGRAM_WEBHOOK_CAPTURE_SOURCE,
+    )
+    reposts = _normalize_evidence_items(
+        raw_state.get("reposts"),
+        default_source=INSTAGRAM_WEBHOOK_CAPTURE_SOURCE,
+    )
+    combined_text = " ".join(str(item.get("text") or "") for item in comments if isinstance(item, dict))
+    normalized: dict[str, Any] = {
+        "comments": comments,
+        "comment_count": len(comments),
+        "friend_mention_count": len({match.lower() for match in INSTAGRAM_MENTION_PATTERN.findall(combined_text)}),
+        "story_mentions": story_mentions,
+        "story_mention_count": len(story_mentions),
+        "likes": likes,
+        "like_present": bool(raw_state.get("like_present") or likes),
+        "reposts": reposts,
+        "repost_present": bool(raw_state.get("repost_present") or reposts),
+    }
+    if "follow_present" in raw_state:
+        normalized["follow_present"] = raw_state.get("follow_present")
+    return normalized
+
+
+def _append_unique_evidence_item(items: list[dict[str, Any]], item: dict[str, Any], *, key_fields: tuple[str, ...]) -> list[dict[str, Any]]:
+    candidate = dict(item)
+    for existing in items:
+        if not isinstance(existing, dict):
+            continue
+        if all(str(existing.get(key) or "").strip() == str(candidate.get(key) or "").strip() for key in key_fields):
+            return items
+    return [*items, candidate]
+
+
 def _rule_check_label(atom: str, params: dict[str, Any]) -> str:
     if atom == "comment_present":
         return "Comment present"
@@ -572,8 +637,12 @@ def _entrant_activity_breakdown(channel: GiveawayChannel, entrant: GiveawayEntra
     if channel.service == "instagram":
         breakdown["comments"] = int(state.get("comment_count") or len(state.get("comments") or []))
         breakdown["story_mentions"] = int(state.get("story_mention_count") or len(state.get("story_mentions") or []))
+        likes = list(state.get("likes") or [])
+        reposts = list(state.get("reposts") or [])
         if state.get("like_present"):
-            breakdown["likes"] = 1
+            breakdown["likes"] = len(likes) if likes else 1
+        if state.get("repost_present"):
+            breakdown["reposts"] = len(reposts) if reposts else 1
         if state.get("follow_present"):
             breakdown["follows"] = 1
     else:
@@ -861,7 +930,13 @@ def _evaluate_instagram_atom(channel: GiveawayChannel, entrant: GiveawayEntrant,
         hashtags = _normalized_terms(params.get("hashtags"), prefix="#")
         return all(hashtag in comment_text for hashtag in hashtags), None
     if atom == "like_present":
+        if state.get("like_present") is True:
+            return True, None
         return _instagram_verify_like(channel, entrant)
+    if atom == "repost_present":
+        if state.get("repost_present") is True:
+            return True, None
+        return False, "No Instagram repost or share evidence was captured."
     if atom == "follow_present":
         return _instagram_verify_follow(channel, entrant)
     return False, f"Unsupported Instagram atom: {atom}"
@@ -956,6 +1031,432 @@ def _sync_instagram_live_comment_events(
         payload["last_seen_at"] = seen_at
         existing.payload_json = payload
         existing.active = False
+
+
+def _instagram_webhook_value_payload(event: InstagramGiveawayWebhookEvent) -> dict[str, Any]:
+    payload = dict(event.payload_json or {})
+    change = payload.get("change")
+    if not isinstance(change, dict):
+        return {}
+    value = change.get("value")
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _instagram_webhook_change_field(event: InstagramGiveawayWebhookEvent) -> str:
+    payload = dict(event.payload_json or {})
+    change = payload.get("change")
+    if isinstance(change, dict):
+        return str(change.get("field") or event.provider_event_field or "").strip().lower()
+    return str(event.provider_event_field or "").strip().lower()
+
+
+def _instagram_webhook_actor(value: dict[str, Any]) -> tuple[str | None, str | None]:
+    for candidate in (value.get("from"), value.get("user"), value.get("sender"), value.get("author")):
+        if isinstance(candidate, dict):
+            user_id = str(candidate.get("id") or candidate.get("user_id") or "").strip() or None
+            username = str(candidate.get("username") or candidate.get("name") or "").strip() or None
+            if user_id or username:
+                return user_id, username
+    user_id = str(value.get("from_id") or value.get("user_id") or "").strip() or None
+    username = str(value.get("username") or value.get("user_name") or "").strip() or None
+    return user_id, username
+
+
+def _instagram_webhook_message_attachments(value: dict[str, Any]) -> list[dict[str, Any]]:
+    message = value.get("message")
+    if not isinstance(message, dict):
+        return []
+    attachments = message.get("attachments")
+    if not isinstance(attachments, list):
+        return []
+    return [dict(item) for item in attachments if isinstance(item, dict)]
+
+
+def _instagram_webhook_shared_media_id(value: dict[str, Any]) -> str | None:
+    for attachment in _instagram_webhook_message_attachments(value):
+        payload = attachment.get("payload")
+        if not isinstance(payload, dict):
+            continue
+        for key in ("ig_post_media_id", "media_id", "post_id"):
+            candidate = str(payload.get(key) or "").strip()
+            if candidate:
+                return candidate
+    return None
+
+
+def _instagram_webhook_is_shared_post_message(value: dict[str, Any]) -> bool:
+    for attachment in _instagram_webhook_message_attachments(value):
+        attachment_type = str(attachment.get("type") or "").strip().lower()
+        if attachment_type in {"share", "ig_post"} and _instagram_webhook_shared_media_id(value):
+            return True
+    return False
+
+
+def _instagram_webhook_media_ids(value: dict[str, Any]) -> set[str]:
+    media_ids: set[str] = set()
+    for key in ("media_id", "post_id", "parent_id"):
+        candidate = str(value.get(key) or "").strip()
+        if candidate:
+            media_ids.add(candidate)
+    media = value.get("media")
+    if isinstance(media, dict):
+        candidate = str(media.get("id") or "").strip()
+        if candidate:
+            media_ids.add(candidate)
+    shared_media_id = _instagram_webhook_shared_media_id(value)
+    if shared_media_id:
+        media_ids.add(shared_media_id)
+    return media_ids
+
+
+def _instagram_channel_target_ids(channel: GiveawayChannel) -> set[str]:
+    target_ids = {
+        str(channel.target_post_external_id or "").strip(),
+    }
+    job = _channel_delivery_job(channel)
+    if job:
+        target_ids.add(str(job.external_id or "").strip())
+    return {target_id for target_id in target_ids if target_id}
+
+
+def _instagram_account_provider_id_candidates(account: Account | None) -> set[str]:
+    if account is None:
+        return set()
+    credentials = _account_credentials(account)
+    candidates = {
+        str(account.id or "").strip(),
+        str(credentials.get("instagram_user_id") or "").strip(),
+        str(credentials.get("provider_account_id") or "").strip(),
+        str(credentials.get("professional_account_id") or "").strip(),
+        str(credentials.get("ig_user_id") or "").strip(),
+    }
+    return {candidate for candidate in candidates if candidate}
+
+
+def _instagram_webhook_matches_channel(event: InstagramGiveawayWebhookEvent, channel: GiveawayChannel, value: dict[str, Any]) -> bool:
+    if event.matched_giveaway_id and event.matched_giveaway_id == channel.campaign_id:
+        return True
+    if event.matched_post_id and event.matched_post_id == channel.campaign.post_id:
+        return True
+    if event.matched_account_id and event.matched_account_id != channel.account_id:
+        return False
+
+    payload = dict(event.payload_json or {})
+    entry = payload.get("entry")
+    entry_account_id = str(entry.get("id") or "").strip() if isinstance(entry, dict) else ""
+    if entry_account_id and entry_account_id not in _instagram_account_provider_id_candidates(channel.account):
+        return False
+
+    media_ids = _instagram_webhook_media_ids(value)
+    if not media_ids:
+        provider_object_id = str(event.provider_object_id or "").strip()
+        if provider_object_id:
+            media_ids.add(provider_object_id)
+    target_ids = _instagram_channel_target_ids(channel)
+    return bool(media_ids and target_ids and media_ids.intersection(target_ids))
+
+
+def _instagram_webhook_occurred_at(value: dict[str, Any]) -> datetime | None:
+    timestamp = value.get("created_time") or value.get("timestamp")
+    if isinstance(timestamp, str) and timestamp.strip():
+        try:
+            return normalize_datetime(datetime.fromisoformat(timestamp.replace("Z", "+00:00")))
+        except ValueError:
+            return None
+    return None
+
+
+def _instagram_campaign_window_accepts_event(campaign: GiveawayCampaign, *, occurred_at: datetime | None) -> bool:
+    if occurred_at is None:
+        return True
+    published_at = normalize_datetime(campaign.post.published_at)
+    giveaway_end_at = normalize_datetime(campaign.giveaway_end_at)
+    if published_at and occurred_at < published_at:
+        return False
+    return giveaway_end_at is None or occurred_at <= giveaway_end_at
+
+
+def _instagram_webhook_activity_types(event: InstagramGiveawayWebhookEvent, value: dict[str, Any]) -> list[str]:
+    event_type = str(event.event_type or "").strip().lower()
+    field = _instagram_webhook_change_field(event)
+    item = str(value.get("item") or value.get("type") or "").strip().lower()
+    activities: list[str] = []
+
+    if event_type in {"comment", "live_comment"} or "comment" in field or item == "comment":
+        activities.append("comment")
+    if event_type == "story_mention" or "mention" in field or str(value.get("mention_type") or "").strip().lower() == "story":
+        activities.append("story_mention")
+    if event_type in {"like", "likes"} or "like" in field or item == "like":
+        activities.append("like")
+    if (
+        event_type in {"share", "shares", "repost", "reposts", "shared_post"}
+        or "share" in field
+        or "repost" in field
+        or item in {"share", "repost"}
+    ):
+        activities.append("repost")
+    if _instagram_webhook_is_shared_post_message(value):
+        activities.extend(["story_mention", "repost"])
+
+    deduped: list[str] = []
+    for activity in activities:
+        if activity not in deduped:
+            deduped.append(activity)
+    return deduped
+
+
+def _instagram_webhook_text_value(value: dict[str, Any]) -> str | None:
+    for key in ("text", "caption", "title"):
+        candidate = str(value.get(key) or "").strip()
+        if candidate:
+            return candidate
+    message = value.get("message")
+    if isinstance(message, dict):
+        candidate = str(message.get("text") or "").strip()
+        if candidate:
+            return candidate
+        for attachment in _instagram_webhook_message_attachments(value):
+            payload = attachment.get("payload")
+            if not isinstance(payload, dict):
+                continue
+            for key in ("title", "caption"):
+                candidate = str(payload.get(key) or "").strip()
+                if candidate:
+                    return candidate
+    if isinstance(message, str) and message.strip():
+        return message.strip()
+    return None
+
+
+def _instagram_provider_event_id(
+    event: InstagramGiveawayWebhookEvent,
+    value: dict[str, Any],
+    *,
+    activity: str,
+    actor_id: str,
+    channel: GiveawayChannel,
+) -> str:
+    activity_keys = {
+        "comment": ("comment_id", "id"),
+        "story_mention": ("story_id", "id"),
+        "like": ("like_id", "id", "creation_id"),
+        "repost": ("share_id", "repost_id", "id", "creation_id"),
+    }
+    for key in activity_keys.get(activity, ("id",)):
+        candidate = str(value.get(key) or "").strip()
+        if candidate:
+            return candidate
+    for nested_key in ("message", "reaction", "postback", "agentic_message"):
+        nested_value = value.get(nested_key)
+        if isinstance(nested_value, dict):
+            for key in ("mid", "id"):
+                candidate = str(nested_value.get(key) or "").strip()
+                if candidate:
+                    return candidate
+    provider_object_id = str(event.provider_object_id or "").strip()
+    media_ids = sorted(_instagram_webhook_media_ids(value) or _instagram_channel_target_ids(channel))
+    if provider_object_id and provider_object_id not in media_ids:
+        return provider_object_id
+    return f"{activity}:{actor_id}:{':'.join(media_ids) if media_ids else channel.id}"
+
+
+def _record_or_update_instagram_evidence_event(
+    session: Session,
+    channel: GiveawayChannel,
+    entrant: GiveawayEntrant,
+    *,
+    provider_event_id: str,
+    event_type: str,
+    source: str,
+    payload: dict[str, Any],
+) -> None:
+    existing = session.scalar(
+        select(GiveawayEvidenceEvent).where(
+            GiveawayEvidenceEvent.channel_id == channel.id,
+            GiveawayEvidenceEvent.event_type == event_type,
+            GiveawayEvidenceEvent.source == source,
+            GiveawayEvidenceEvent.provider_event_id == provider_event_id,
+        )
+    )
+    if existing is None:
+        _record_evidence_event(
+            session,
+            channel.campaign,
+            channel,
+            entrant=entrant,
+            provider_event_id=provider_event_id,
+            event_type=event_type,
+            source=source,
+            payload=payload,
+        )
+        return
+    existing.entrant_id = entrant.id
+    existing.payload_json = payload
+    existing.active = True
+
+
+def _instagram_activity_summary(
+    value: dict[str, Any],
+    *,
+    activity: str,
+    provider_event_id: str,
+    actor_id: str,
+    actor_username: str | None,
+    source: str,
+) -> dict[str, Any]:
+    summary: dict[str, Any] = {
+        "source": source,
+        "created_time": str(value.get("created_time") or value.get("timestamp") or "").strip() or None,
+        "actor_id": actor_id,
+        "actor_username": actor_username,
+    }
+    if activity == "comment":
+        summary.update(
+            {
+                "comment_id": provider_event_id,
+                "text": _instagram_webhook_text_value(value) or "",
+            }
+        )
+    elif activity == "story_mention":
+        summary.update(
+            {
+                "story_id": provider_event_id,
+                "media_id": next(iter(_instagram_webhook_media_ids(value)), None),
+                "text": _instagram_webhook_text_value(value),
+            }
+        )
+    elif activity == "like":
+        summary["like_id"] = provider_event_id
+    elif activity == "repost":
+        summary.update(
+            {
+                "repost_id": provider_event_id,
+                "media_id": next(iter(_instagram_webhook_media_ids(value)), None),
+                "text": _instagram_webhook_text_value(value),
+            }
+        )
+    return summary
+
+
+def sync_instagram_webhook_event_to_channel(
+    session: Session,
+    channel: GiveawayChannel,
+    event: InstagramGiveawayWebhookEvent,
+) -> list[str]:
+    value = _instagram_webhook_value_payload(event)
+    if not value or not _instagram_webhook_matches_channel(event, channel, value):
+        return []
+    occurred_at = _instagram_webhook_occurred_at(value)
+    if not _instagram_campaign_window_accepts_event(channel.campaign, occurred_at=occurred_at):
+        return []
+    activities = _instagram_webhook_activity_types(event, value)
+    if not activities:
+        return []
+    actor_id, actor_username = _instagram_webhook_actor(value)
+    if not actor_id:
+        return []
+
+    entrant = get_or_create_channel_entrant(
+        channel,
+        provider_user_id=actor_id,
+        provider_username=actor_username,
+        display_label=actor_username or actor_id,
+    )
+    state = _normalized_instagram_signal_state(dict(entrant.signal_state_json or {}))
+    session.flush()
+
+    captured: list[str] = []
+    for activity in activities:
+        provider_event_id = _instagram_provider_event_id(
+            event,
+            value,
+            activity=activity,
+            actor_id=actor_id,
+            channel=channel,
+        )
+        source = (
+            INSTAGRAM_MESSAGE_SHARE_CAPTURE_SOURCE
+            if _instagram_webhook_is_shared_post_message(value) and activity in {"story_mention", "repost"}
+            else INSTAGRAM_WEBHOOK_CAPTURE_SOURCE
+        )
+        summary = _instagram_activity_summary(
+            value,
+            activity=activity,
+            provider_event_id=provider_event_id,
+            actor_id=actor_id,
+            actor_username=actor_username,
+            source=source,
+        )
+        if activity == "comment":
+            state["comments"] = _append_unique_evidence_item(
+                list(state.get("comments") or []),
+                summary,
+                key_fields=("comment_id",),
+            )
+            evidence_type = "instagram_comment"
+        elif activity == "story_mention":
+            state["story_mentions"] = _append_unique_evidence_item(
+                list(state.get("story_mentions") or []),
+                summary,
+                key_fields=("story_id",),
+            )
+            evidence_type = "instagram_story_mention"
+        elif activity == "like":
+            state["likes"] = _append_unique_evidence_item(
+                list(state.get("likes") or []),
+                summary,
+                key_fields=("actor_id", "like_id"),
+            )
+            state["like_present"] = True
+            evidence_type = "instagram_like"
+        elif activity == "repost":
+            state["reposts"] = _append_unique_evidence_item(
+                list(state.get("reposts") or []),
+                summary,
+                key_fields=("actor_id", "repost_id"),
+            )
+            state["repost_present"] = True
+            evidence_type = "instagram_repost"
+        else:
+            continue
+
+        _record_or_update_instagram_evidence_event(
+            session,
+            channel,
+            entrant,
+            provider_event_id=provider_event_id,
+            event_type=evidence_type,
+            source=source,
+            payload=dict(event.payload_json or {}),
+        )
+        captured.append(activity)
+
+    if not captured:
+        return []
+    entrant.signal_state_json = _normalized_instagram_signal_state(state)
+    channel.last_collected_at = utcnow()
+    channel.last_error = None
+    event.matched_giveaway_id = channel.campaign_id
+    event.matched_post_id = channel.campaign.post_id
+    event.matched_account_id = channel.account_id
+    event.processed = True
+    event.processed_at = utcnow()
+    session.flush()
+    return captured
+
+
+def sync_instagram_webhook_events_for_channel(session: Session, channel: GiveawayChannel) -> int:
+    events = list(
+        session.scalars(
+            select(InstagramGiveawayWebhookEvent)
+            .where(InstagramGiveawayWebhookEvent.signature_valid.is_(True))
+            .order_by(InstagramGiveawayWebhookEvent.created_at.asc())
+        )
+    )
+    captured = 0
+    for event in events:
+        captured += len(sync_instagram_webhook_event_to_channel(session, channel, event))
+    return captured
 
 
 def _evaluate_rule_node(
@@ -1290,13 +1791,10 @@ def advance_giveaway_winner(session: Session, campaign: GiveawayCampaign, *, run
 
 
 def refresh_instagram_channel_state(session: Session, channel: GiveawayChannel) -> None:
+    sync_instagram_webhook_events_for_channel(session, channel)
     state_by_user: dict[str, dict[str, Any]] = {}
     for entrant in channel.entrants:
-        existing_state = dict(entrant.signal_state_json or {})
-        state_by_user[entrant.provider_user_id] = {
-            "comments": [],
-            "story_mentions": list(existing_state.get("story_mentions") or []),
-        }
+        state_by_user[entrant.provider_user_id] = _normalized_instagram_signal_state(dict(entrant.signal_state_json or {}))
 
     dependency_issue = _instagram_destination_dependency_issue()
     if dependency_issue or not str(channel.target_post_external_id or "").strip():
@@ -1306,13 +1804,15 @@ def refresh_instagram_channel_state(session: Session, channel: GiveawayChannel) 
             client = _authenticated_publish_client(_account_credentials(channel.account))
             live_comments = client.media_comments(channel.target_post_external_id, amount=0)
             observed_comments: list[tuple[GiveawayEntrant, dict[str, Any], dict[str, Any]]] = []
+            for state in state_by_user.values():
+                state["comments"] = []
             for comment in live_comments or []:
                 user = getattr(comment, "user", None)
                 provider_user_id = str(getattr(user, "pk", "") or "").strip()
                 provider_username = str(getattr(user, "username", "") or "").strip() or None
                 if not provider_user_id:
                     continue
-                existing = state_by_user.setdefault(provider_user_id, {"comments": [], "story_mentions": []})
+                existing = state_by_user.setdefault(provider_user_id, _normalized_instagram_signal_state({}))
                 existing["comments"].append(
                     {
                         "comment_id": str(getattr(comment, "pk", "") or "").strip() or None,
@@ -1346,17 +1846,8 @@ def refresh_instagram_channel_state(session: Session, channel: GiveawayChannel) 
             channel.last_error = f"Instagram live comment revalidation failed: {exc}"
 
     for entrant in channel.entrants:
-        state = state_by_user.setdefault(entrant.provider_user_id, {"comments": [], "story_mentions": []})
-        comments = list(state.get("comments") or [])
-        story_mentions = list(state.get("story_mentions") or [])
-        combined_text = " ".join(str(item.get("text") or "") for item in comments if isinstance(item, dict))
-        entrant.signal_state_json = {
-            "comments": comments,
-            "comment_count": len(comments),
-            "friend_mention_count": len({match.lower() for match in INSTAGRAM_MENTION_PATTERN.findall(combined_text)}),
-            "story_mentions": story_mentions,
-            "story_mention_count": len(story_mentions),
-        }
+        state = state_by_user.setdefault(entrant.provider_user_id, _normalized_instagram_signal_state(dict(entrant.signal_state_json or {})))
+        entrant.signal_state_json = _normalized_instagram_signal_state(state)
     channel.last_collected_at = utcnow()
     session.flush()
     publish_live_update(LIVE_UPDATE_TOPIC_DASHBOARD, LIVE_UPDATE_TOPIC_LOGS)

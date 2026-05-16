@@ -852,7 +852,7 @@ def test_settings_template_renders_instagram_webhook_setup_guidance():
         instagram_webhook_callback_url="https://lynxposter.example.com/webhooks/instagram",
         instagram_webhook_latest_received_at=None,
         instagram_webhook_latest_event_type=None,
-        instagram_webhook_required_fields=["comments", "mentions"],
+        instagram_webhook_required_fields=["comments", "mentions", "likes", "shares"],
         instagram_tunnel_local_target="http://127.0.0.1:8000",
         instagram_tunnel_cloudflared_command="cloudflared tunnel --url http://127.0.0.1:8000",
         instagram_tunnel_ngrok_command="ngrok http 8000",
@@ -866,6 +866,7 @@ def test_settings_template_renders_instagram_webhook_setup_guidance():
     assert "/webhooks/instagram" in html
     assert "Verify Token" in html
     assert "Recommended Subscriptions" in html
+    assert "comments, mentions, likes, shares" in html
     assert "Tunnel Helper" in html
     assert "cloudflared tunnel --url http://127.0.0.1:8000" in html
     assert "ngrok http 8000" in html
