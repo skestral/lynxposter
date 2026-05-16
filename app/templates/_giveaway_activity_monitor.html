@@ -112,7 +112,32 @@
             </div>
             <div class="col-12 col-xl-7">
                 <div class="border rounded p-3 h-100">
-                    <div class="fw-semibold mb-2">Recent Activity</div>
+                    {% set recent_activity_initial_limit = 6 %}
+                    {% set recent_activity_total = activity_monitor.recent_events|length %}
+                    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-2 mb-2">
+                        <div class="fw-semibold">Recent Activity</div>
+                        <div class="d-flex gap-2 flex-wrap align-items-center">
+                            {% if recent_activity_total %}
+                            <span class="badge text-bg-light border" id="giveaway-activity-count">
+                                Showing {{ [recent_activity_total, recent_activity_initial_limit]|min }} of {{ recent_activity_total }}
+                            </span>
+                            {% endif %}
+                            {% if recent_activity_total > recent_activity_initial_limit %}
+                            <button
+                                class="btn btn-sm btn-outline-secondary"
+                                type="button"
+                                id="giveaway-activity-toggle"
+                                data-expanded="false"
+                                data-collapsed-label="Show All"
+                                data-expanded-label="Show Less"
+                                data-collapsed-count="Showing {{ recent_activity_initial_limit }} of {{ recent_activity_total }}"
+                                data-expanded-count="Showing all {{ recent_activity_total }}"
+                            >
+                                Show All
+                            </button>
+                            {% endif %}
+                        </div>
+                    </div>
                     <div class="table-responsive">
                         <table class="table align-middle mb-0">
                             <thead>
@@ -120,7 +145,7 @@
                             </thead>
                             <tbody>
                                 {% for event in activity_monitor.recent_events %}
-                                <tr>
+                                <tr class="giveaway-activity-row {% if loop.index > recent_activity_initial_limit %}giveaway-activity-extra d-none{% endif %}">
                                     <td class="small">
                                         <div>{{ event.created_at|datetime_display }}</div>
                                         <div class="text-secondary">{{ event.service_label }}</div>

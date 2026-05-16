@@ -755,6 +755,53 @@ def test_dashboard_template_shows_recent_scheduled_post_errors():
     assert "Imported 4 posts from Instagram" in html
 
 
+def test_dashboard_giveaway_activity_can_expand_long_recent_activity():
+    recent_events = [
+        {
+            "created_at": None,
+            "service_label": "Instagram",
+            "event_label": "Comment",
+            "account_label": "Instagram",
+            "campaign_status": "collecting",
+            "actor_label": f"entrant.{index}",
+            "entrant_status": "pending",
+            "campaign_href": "/scheduled-posts/post-1/page",
+            "campaign_label": "Spring giveaway",
+            "persona_name": "Savannah",
+            "detail": f"entry {index}",
+            "activity_href": "https://instagram.example/p/1",
+            "activity_href_label": "Open Instagram post",
+        }
+        for index in range(8)
+    ]
+    html = templates.env.get_template("_giveaway_activity_monitor.html").render(
+        request=_request_with_principal(),
+        current_principal=SimpleNamespace(
+            is_authenticated=True,
+            is_user=True,
+            is_admin=False,
+            user_id="user-1",
+            display_name="Lynx",
+            role="user",
+            timezone="UTC",
+        ),
+        personas=[],
+        giveaway_activity_monitor={
+            "filters": {"persona_id": "", "service": "", "event_type": ""},
+            "available_services": [],
+            "available_event_types": [],
+            "metrics": {"campaigns": 1, "channels": 1, "entrants": 8, "activities": 8},
+            "rollups": [],
+            "recent_events": recent_events,
+        },
+    )
+
+    assert 'id="giveaway-activity-toggle"' in html
+    assert "Showing 6 of 8" in html
+    assert 'data-expanded-count="Showing all 8"' in html
+    assert html.count("giveaway-activity-extra d-none") == 2
+
+
 def test_dashboard_template_truncates_long_navbar_identity_text():
     html = templates.env.get_template("dashboard.html").render(
         request=_request_with_principal(),
@@ -801,6 +848,7 @@ def test_dashboard_template_truncates_long_navbar_identity_text():
     assert 'aria-label="Dark mode"' in html
     assert "topbar-theme-label" not in html
     assert "dashboard-live-update-status" in html
+    assert "giveawayActivityToggle" in html
     assert "registerLiveUpdates" in html
 
 

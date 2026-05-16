@@ -386,5 +386,24 @@ async function postSchedulerAction(url) {
 document.getElementById("manual-run-button")?.addEventListener("click", () => postSchedulerAction("/scheduler/run"));
 document.getElementById("pause-automation-button")?.addEventListener("click", () => postSchedulerAction("/scheduler/pause"));
 document.getElementById("start-automation-button")?.addEventListener("click", () => postSchedulerAction("/scheduler/start"));
+
+const giveawayActivityToggle = document.getElementById("giveaway-activity-toggle");
+const giveawayActivityCount = document.getElementById("giveaway-activity-count");
+giveawayActivityToggle?.addEventListener("click", () => {
+  const expanded = giveawayActivityToggle.dataset.expanded === "true";
+  const nextExpanded = !expanded;
+  document.querySelectorAll(".giveaway-activity-extra").forEach((row) => {
+    row.classList.toggle("d-none", !nextExpanded);
+  });
+  giveawayActivityToggle.dataset.expanded = String(nextExpanded);
+  giveawayActivityToggle.textContent = nextExpanded
+    ? giveawayActivityToggle.dataset.expandedLabel
+    : giveawayActivityToggle.dataset.collapsedLabel;
+  if (giveawayActivityCount) {
+    giveawayActivityCount.textContent = nextExpanded
+      ? giveawayActivityToggle.dataset.expandedCount
+      : giveawayActivityToggle.dataset.collapsedCount;
+  }
+});
 </script>
 {% endblock %}
