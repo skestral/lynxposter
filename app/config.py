@@ -65,7 +65,9 @@ def _load_dotenv() -> None:
             continue
         if value and value[0] == value[-1] and value[0] in {'"', "'"}:
             value = value[1:-1]
-        os.environ.setdefault(key, value)
+        current_value = os.environ.get(key)
+        if current_value is None or (key in {"APP_GIT_SHA", "APP_VERSION"} and current_value.strip().lower() in {"", "unknown"}):
+            os.environ[key] = value
 
 
 def _env_bool(name: str, default: bool) -> bool:

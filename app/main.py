@@ -144,6 +144,7 @@ from app.services.users import (
     update_user_settings,
     user_to_read,
 )
+from app.version import app_version_payload, get_app_version
 
 
 settings = get_settings()
@@ -214,6 +215,7 @@ templates.env.globals["ui_theme_definition"] = ui_theme_definition
 templates.env.globals["ui_theme_catalog_for_client"] = ui_theme_catalog_for_client
 templates.env.globals["ui_theme_runtime_style"] = ui_theme_runtime_style
 templates.env.globals["ui_mode_label"] = ui_mode_label
+templates.env.globals["app_version"] = get_app_version
 templates.env.globals["live_update_poll_interval_ms"] = LIVE_UPDATE_POLL_INTERVAL_MS
 templates.env.globals["auth_enabled"] = auth_enabled
 
@@ -1217,6 +1219,7 @@ def health() -> dict[str, Any]:
         return {
             "status": "ok",
             "instance": current_settings.instance_name,
+            "version": app_version_payload(),
             "database": str(current_settings.database_path),
             "app_data_dir": str(current_settings.app_data_dir),
             "persona_count": len(list_personas(session)),
@@ -1224,6 +1227,11 @@ def health() -> dict[str, Any]:
                 "autorun_interval_seconds": current_settings.scheduler_automation_interval_seconds,
             },
         }
+
+
+@app.get("/version")
+def version() -> dict[str, str | None]:
+    return app_version_payload()
 
 
 @app.get("/scheduler/status")

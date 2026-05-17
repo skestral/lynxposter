@@ -1,8 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
+{% set current_app_version = app_version() %}
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="lynxposter-version" content="{{ current_app_version.label }}">
     <title>lynxposter</title>
     <link rel="stylesheet" href="/static/vendor/bootstrap/bootstrap.min.css">
     <link rel="stylesheet" href="/static/style.css">
@@ -19,6 +21,8 @@
     data-ui-theme-saved="{{ current_principal.ui_theme if current_principal is defined and current_principal.ui_theme else 'skylight' }}"
     data-ui-mode-saved="{{ current_principal.ui_mode if current_principal is defined and current_principal.ui_mode else 'light' }}"
     data-ui-timezone="{{ timezone_name() }}"
+    data-app-version="{{ current_app_version.version }}"
+    data-app-git-sha="{{ current_app_version.git_sha_short or 'unknown' }}"
     data-ui-preferences-persist="{% if current_principal is defined and current_principal.is_authenticated and current_principal.user_id %}1{% else %}0{% endif %}"
     data-live-updates-enabled="{% if current_principal is defined and current_principal.is_authenticated %}1{% else %}0{% endif %}"
 >
@@ -134,6 +138,14 @@
     <main class="container py-4 app-page">
         {% block content %}{% endblock %}
     </main>
+    <footer class="container app-version-footer">
+        <span
+            class="app-version-pill"
+            title="Version {{ current_app_version.version }}{% if current_app_version.git_sha %} | Commit {{ current_app_version.git_sha }}{% else %} | Commit unknown{% endif %}"
+        >
+            lynxposter v{{ current_app_version.version }} · {{ current_app_version.git_sha_short or "unknown" }}
+        </span>
+    </footer>
 </div>
 <script src="/static/vendor/bootstrap/bootstrap.bundle.min.js"></script>
 <script>

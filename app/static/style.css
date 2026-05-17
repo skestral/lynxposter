@@ -110,6 +110,26 @@ a:hover {
     z-index: 1;
 }
 
+.app-version-footer {
+    position: relative;
+    z-index: 1;
+    padding-bottom: 1.5rem;
+}
+
+.app-version-pill {
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    padding: 0.35rem 0.65rem;
+    border: 1px solid var(--lp-border-soft);
+    border-radius: 999px;
+    background: var(--lp-elevated-soft);
+    color: var(--lp-ink-soft);
+    font-size: 0.78rem;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+}
+
 .container {
     max-width: 1280px;
 }

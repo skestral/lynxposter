@@ -931,6 +931,11 @@ def test_dashboard_template_truncates_long_navbar_identity_text():
     assert 'aria-label="Light mode"' in html
     assert 'aria-label="Dark mode"' in html
     assert "topbar-theme-label" not in html
+    assert 'name="lynxposter-version"' in html
+    assert "data-app-version=" in html
+    assert "data-app-git-sha=" in html
+    assert "app-version-footer" in html
+    assert "lynxposter v" in html
     assert "dashboard-live-update-status" in html
     assert "giveawayActivityToggle" in html
     assert "registerLiveUpdates" in html

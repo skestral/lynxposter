@@ -140,6 +140,8 @@ For the full Linux and Docker deployment guide, including ports, environment var
   Default: `3.12-slim`
 - `LYNXPOSTER_PYTHON_VERSION`
   Compose-only override for the Docker build arg. Default: `3.12-slim`
+- `APP_GIT_SHA`
+  Commit SHA shown in the app. Pass this at build time because `.git` is not copied into the image.
 
 ### Runtime environment
 
@@ -151,6 +153,8 @@ For the full Linux and Docker deployment guide, including ports, environment var
   Container default: `/data/config`
 - `APP_ENV_FILE`
   Container default: `/data/config/.env`
+- `APP_VERSION`
+  Optional override for the release version shown in the app. Default: the value in `VERSION`.
 
 ### Docker Compose
 
@@ -168,6 +172,12 @@ docker compose up --build -d
 ```
 
 If you need to override the Python base image when using Compose, set `LYNXPOSTER_PYTHON_VERSION`, not the generic host `PYTHON_VERSION`.
+
+The app footer and `/version` endpoint show the deployed version and short commit hash. For Docker Compose builds, pass the current commit explicitly:
+
+```bash
+APP_GIT_SHA="$(git rev-parse HEAD)" docker compose up --build -d
+```
 
 The app will be available on `http://127.0.0.1:${APP_PORT:-8000}`.
 
