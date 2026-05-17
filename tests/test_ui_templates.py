@@ -802,6 +802,80 @@ def test_dashboard_giveaway_activity_can_expand_long_recent_activity():
     assert html.count("giveaway-activity-extra d-none") == 5
 
 
+def test_dashboard_giveaway_activity_links_to_open_giveaway_details():
+    base_context = {
+        "request": _request_with_principal(),
+        "current_principal": SimpleNamespace(
+            is_authenticated=True,
+            is_user=True,
+            is_admin=False,
+            user_id="user-1",
+            display_name="Lynx",
+            role="user",
+            timezone="UTC",
+        ),
+        "personas": [],
+    }
+    base_monitor = {
+        "filters": {"persona_id": "", "service": "", "event_type": ""},
+        "available_services": [],
+        "available_event_types": [],
+        "metrics": {"campaigns": 1, "channels": 1, "entrants": 0, "activities": 0},
+        "rollups": [],
+        "recent_events": [],
+    }
+
+    single_html = templates.env.get_template("_giveaway_activity_monitor.html").render(
+        **base_context,
+        giveaway_activity_monitor={
+            **base_monitor,
+            "open_giveaways": [
+                {
+                    "href": "/scheduled-posts/post-1/page",
+                    "label": "Spring giveaway",
+                    "persona_name": "Savannah",
+                    "status": "collecting",
+                    "channel_labels": ["Instagram"],
+                    "giveaway_end_at": None,
+                }
+            ],
+        },
+    )
+    multiple_html = templates.env.get_template("_giveaway_activity_monitor.html").render(
+        **base_context,
+        giveaway_activity_monitor={
+            **base_monitor,
+            "metrics": {"campaigns": 2, "channels": 2, "entrants": 0, "activities": 0},
+            "open_giveaways": [
+                {
+                    "href": "/scheduled-posts/post-1/page",
+                    "label": "Spring giveaway",
+                    "persona_name": "Savannah",
+                    "status": "collecting",
+                    "channel_labels": ["Instagram"],
+                    "giveaway_end_at": None,
+                },
+                {
+                    "href": "/scheduled-posts/post-2/page",
+                    "label": "Summer giveaway",
+                    "persona_name": "Larkyn",
+                    "status": "review_required",
+                    "channel_labels": ["Bluesky"],
+                    "giveaway_end_at": None,
+                },
+            ],
+        },
+    )
+
+    assert "Open Giveaway Details" in single_html
+    assert 'href="/scheduled-posts/post-1/page"' in single_html
+    assert "dropdown-toggle" not in single_html
+    assert "dropdown-toggle" in multiple_html
+    assert "Spring giveaway" in multiple_html
+    assert "Summer giveaway" in multiple_html
+    assert 'href="/scheduled-posts/post-2/page"' in multiple_html
+
+
 def test_dashboard_template_truncates_long_navbar_identity_text():
     html = templates.env.get_template("dashboard.html").render(
         request=_request_with_principal(),

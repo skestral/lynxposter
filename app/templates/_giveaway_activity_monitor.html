@@ -1,5 +1,6 @@
 {% set activity_monitor = giveaway_activity_monitor %}
 {% if activity_monitor %}
+{% set open_giveaway_links = activity_monitor.open_giveaways | default([], true) %}
 <div class="card section-card">
     <div class="card-body">
         <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
@@ -9,6 +10,27 @@
             </div>
             <div class="d-flex gap-2 flex-wrap">
                 <span class="badge text-bg-light border rounded-pill px-3 py-2">{{ timezone_indicator() }}</span>
+                {% if open_giveaway_links|length == 1 %}
+                <a href="{{ open_giveaway_links[0].href }}" class="btn btn-sm btn-outline-primary">Open Giveaway Details</a>
+                {% elif open_giveaway_links|length > 1 %}
+                <div class="dropdown">
+                    <button class="btn btn-sm btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        Open Giveaway Details
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        {% for giveaway in open_giveaway_links %}
+                        <li>
+                            <a class="dropdown-item" href="{{ giveaway.href }}">
+                                <span class="fw-semibold">{{ giveaway.label }}</span>
+                                <span class="d-block small text-secondary">
+                                    {{ giveaway.persona_name }}{% if giveaway.channel_labels %} • {{ giveaway.channel_labels|join(", ") }}{% endif %}
+                                </span>
+                            </a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
                 <a href="/scheduled-posts/page" class="btn btn-sm btn-outline-secondary">Open Planner</a>
             </div>
         </div>

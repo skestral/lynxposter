@@ -319,6 +319,20 @@ def build_dashboard_giveaway_activity_monitor(
         for event_type in sorted(available_event_types, key=_event_label)
         if event_type not in EXCLUDED_RECENT_EVENT_TYPES
     ]
+    open_giveaways = [
+        {
+            "href": f"/scheduled-posts/{campaign.post_id}/page",
+            "label": _campaign_label(campaign),
+            "persona_name": campaign.post.persona.name if campaign.post.persona else "No persona",
+            "status": campaign.status,
+            "channel_labels": [
+                _service_label(service)
+                for service in sorted({channel.service for channel in channels}, key=_service_label)
+            ],
+            "giveaway_end_at": campaign.giveaway_end_at,
+        }
+        for campaign, channels in matched_campaigns
+    ]
 
     return {
         "filters": selected_filters,
@@ -335,4 +349,5 @@ def build_dashboard_giveaway_activity_monitor(
         },
         "rollups": rollups,
         "recent_events": recent_events,
+        "open_giveaways": open_giveaways,
     }
