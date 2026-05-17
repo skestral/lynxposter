@@ -395,6 +395,81 @@ def test_instagram_webhook_ingest_updates_generic_like_and_repost_state(session)
     assert repost_event.entrant_id == entrant.id
 
 
+def test_instagram_story_mention_message_counts_as_repost_state(session):
+    persona = _create_persona(session, slug="giveaway-webhook-story-share")
+    instagram = _create_account(session, persona, service="instagram", label="Instagram")
+    post = create_scheduled_post(
+        session,
+        _generic_giveaway_payload(
+            persona.id,
+            [instagram.id],
+            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            channels=[
+                {
+                    "service": "instagram",
+                    "account_id": instagram.id,
+                    "rules": {
+                        "kind": "all",
+                        "children": [
+                            {"kind": "atom", "atom": "repost_present", "params": {}},
+                        ],
+                    },
+                }
+            ],
+        ),
+        [],
+    )
+    _mark_posted(post, instagram.id, external_id="ig-media-story-share")
+    session.flush()
+
+    payload = {
+        "entry": [
+            {
+                "id": "17841463479494132",
+                "changes": [
+                    {
+                        "field": "messages",
+                        "value": {
+                            "sender": {"id": "17841463479494132"},
+                            "recipient": {"id": "user-story-share", "username": "story.user"},
+                            "message": {
+                                "mid": "story-share-mid-1",
+                                "is_echo": True,
+                                "attachments": [
+                                    {
+                                        "type": "story_mention",
+                                        "payload": {"url": "https://lookaside.fbsbx.com/ig_messaging_cdn/?asset_id=story-share-asset"},
+                                    }
+                                ],
+                            },
+                        },
+                    }
+                ],
+            }
+        ]
+    }
+
+    events = ingest_instagram_webhook_payload(session, payload, signature_valid=True, run_id="run-story-share")
+    session.flush()
+    channel = post.giveaway_campaign.channels[0]
+    entrant = session.query(GiveawayEntrant).filter_by(channel_id=channel.id, provider_user_id="user-story-share").one()
+
+    assert [event.event_type for event in events] == ["story_mention"]
+    assert entrant.signal_state_json["story_mention_count"] == 1
+    assert entrant.signal_state_json["repost_present"] is True
+    assert len(entrant.signal_state_json["reposts"]) == 1
+    assert (
+        session.query(GiveawayEvidenceEvent)
+        .filter(
+            GiveawayEvidenceEvent.event_type == "instagram_repost",
+            GiveawayEvidenceEvent.source == "message_share_capture",
+            GiveawayEvidenceEvent.provider_event_id == "story-share-mid-1",
+        )
+        .count()
+        == 1
+    )
+
+
 def test_instagram_webhook_ingest_accepts_array_like_payload(session):
     persona = _create_persona(session, slug="giveaway-webhook-like-array")
     instagram = _create_account(session, persona, service="instagram", label="Instagram")
@@ -643,6 +718,80 @@ def test_instagram_refresh_backfills_existing_like_and_repost_webhooks(session, 
     assert (
         session.query(GiveawayEvidenceEvent)
         .filter(GiveawayEvidenceEvent.event_type == "instagram_repost", GiveawayEvidenceEvent.provider_event_id == "share-backfill")
+        .count()
+        == 1
+    )
+
+
+def test_instagram_refresh_backfills_story_mention_message_as_repost(session, monkeypatch):
+    persona = _create_persona(session, slug="giveaway-webhook-story-share-backfill")
+    instagram = _create_account(session, persona, service="instagram", label="Instagram")
+    post = create_scheduled_post(
+        session,
+        _generic_giveaway_payload(
+            persona.id,
+            [instagram.id],
+            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            channels=[
+                {
+                    "service": "instagram",
+                    "account_id": instagram.id,
+                    "rules": {
+                        "kind": "all",
+                        "children": [
+                            {"kind": "atom", "atom": "repost_present", "params": {}},
+                        ],
+                    },
+                }
+            ],
+        ),
+        [],
+    )
+    _mark_posted(post, instagram.id, external_id="ig-media-story-backfill")
+    session.add(
+        InstagramGiveawayWebhookEvent(
+            provider_event_field="messages",
+            event_type="story_mention",
+            provider_object_id="story-share-backfill-mid",
+            payload_json={
+                "entry": {"id": "17841463479494132"},
+                "change": {
+                    "field": "messages",
+                    "value": {
+                        "sender": {"id": "17841463479494132"},
+                        "recipient": {"id": "user-story-backfill", "username": "story.backfill"},
+                        "message": {
+                            "mid": "story-share-backfill-mid",
+                            "is_echo": True,
+                            "attachments": [
+                                {
+                                    "type": "story_mention",
+                                    "payload": {"url": "https://lookaside.fbsbx.com/ig_messaging_cdn/?asset_id=story-backfill-asset"},
+                                }
+                            ],
+                        },
+                    },
+                },
+            },
+            signature_valid=True,
+            processed=True,
+        )
+    )
+    session.flush()
+    channel = post.giveaway_campaign.channels[0]
+    monkeypatch.setattr("app.services.giveaway_engine._instagram_destination_dependency_issue", lambda: "Private API unavailable")
+
+    refresh_instagram_channel_state(session, channel)
+    evaluate_channel_entrants(channel)
+    session.flush()
+
+    entrant = session.query(GiveawayEntrant).filter_by(channel_id=channel.id, provider_user_id="user-story-backfill").one()
+    assert entrant.signal_state_json["story_mention_count"] == 1
+    assert entrant.signal_state_json["repost_present"] is True
+    assert entrant.eligibility_status == ENTRY_STATUS_ELIGIBLE
+    assert (
+        session.query(GiveawayEvidenceEvent)
+        .filter(GiveawayEvidenceEvent.event_type == "instagram_repost", GiveawayEvidenceEvent.provider_event_id == "story-share-backfill-mid")
         .count()
         == 1
     )

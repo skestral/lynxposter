@@ -364,6 +364,9 @@ def verify_instagram_webhook_signature(raw_body: bytes, provided_signature: str 
 
 
 def _extract_actor(value: dict[str, Any]) -> tuple[str | None, str | None]:
+    message = value.get("message")
+    if isinstance(message, dict) and message.get("is_echo") and _is_story_mention_message(value):
+        return _extract_recipient(value)
     for candidate in (value.get("from"), value.get("user"), value.get("sender"), value.get("author")):
         if isinstance(candidate, dict):
             user_id = str(candidate.get("id") or candidate.get("user_id") or "").strip() or None
@@ -393,7 +396,7 @@ def _webhook_event_type(field: str, value: dict[str, Any]) -> str:
         if lowered == "live_comments":
             return "live_comment"
         return "comment"
-    if "mention" in lowered or str(value.get("mention_type") or "").lower() == "story":
+    if "mention" in lowered or str(value.get("mention_type") or "").lower() == "story" or _is_story_mention_message(value):
         return "story_mention"
     if "like" in lowered or str(value.get("item") or "").lower() == "like":
         return "like"
@@ -467,8 +470,16 @@ def _is_shared_post_message(value: dict[str, Any]) -> bool:
     return bool(_shared_instagram_media_id(value)) and bool(attachment_types.intersection({"share", "ig_post"}))
 
 
+def _is_story_mention_message(value: dict[str, Any]) -> bool:
+    return "story_mention" in set(_message_attachment_types(value))
+
+
+def _is_indirect_share_message(value: dict[str, Any]) -> bool:
+    return _is_shared_post_message(value) or _is_story_mention_message(value)
+
+
 def _is_shared_post_event(event_type: str, value: dict[str, Any]) -> bool:
-    return event_type == "message" and _is_shared_post_message(value)
+    return event_type in {"message", "story_mention"} and _is_indirect_share_message(value)
 
 
 def _giveaway_window_accepts_event(giveaway: GiveawayCampaign, *, occurred_at: datetime | None) -> bool:
@@ -926,11 +937,12 @@ def ingest_instagram_webhook_payload(
             event_type = _webhook_event_type(field, value)
             provider_object_id = _provider_object_id(value)
             related_media_id = _webhook_media_id(value)
-            channel = _find_instagram_channel_for_event(session, account_id, related_media_id or provider_object_id)
+            match_object_id = related_media_id or (None if _is_indirect_share_message(value) else provider_object_id)
+            channel = _find_instagram_channel_for_event(session, account_id, match_object_id)
             campaign = channel.campaign if channel else None
             if campaign:
                 hydrate_channel_targets(campaign)
-            counts_as_story_share = event_type == "message" and _is_shared_post_message(value)
+            counts_as_story_share = event_type in {"message", "story_mention"} and _is_indirect_share_message(value)
             webhook_event = InstagramGiveawayWebhookEvent(
                 matched_giveaway_id=campaign.id if campaign else None,
                 matched_post_id=campaign.post_id if campaign else None,

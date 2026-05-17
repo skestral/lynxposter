@@ -1056,6 +1056,13 @@ def _instagram_webhook_change_field(event: InstagramGiveawayWebhookEvent) -> str
 
 
 def _instagram_webhook_actor(value: dict[str, Any]) -> tuple[str | None, str | None]:
+    if _instagram_webhook_is_echo_message(value) and _instagram_webhook_is_story_mention_message(value):
+        recipient = value.get("recipient")
+        if isinstance(recipient, dict):
+            user_id = str(recipient.get("id") or recipient.get("user_id") or "").strip() or None
+            username = str(recipient.get("username") or recipient.get("name") or "").strip() or None
+            if user_id or username:
+                return user_id, username
     for candidate in (value.get("from"), value.get("user"), value.get("sender"), value.get("author")):
         if isinstance(candidate, dict):
             user_id = str(candidate.get("id") or candidate.get("user_id") or "").strip() or None
@@ -1077,6 +1084,19 @@ def _instagram_webhook_message_attachments(value: dict[str, Any]) -> list[dict[s
     return [dict(item) for item in attachments if isinstance(item, dict)]
 
 
+def _instagram_webhook_message_attachment_types(value: dict[str, Any]) -> set[str]:
+    return {
+        str(attachment.get("type") or "").strip().lower()
+        for attachment in _instagram_webhook_message_attachments(value)
+        if str(attachment.get("type") or "").strip()
+    }
+
+
+def _instagram_webhook_is_echo_message(value: dict[str, Any]) -> bool:
+    message = value.get("message")
+    return isinstance(message, dict) and bool(message.get("is_echo"))
+
+
 def _instagram_webhook_shared_media_id(value: dict[str, Any]) -> str | None:
     for attachment in _instagram_webhook_message_attachments(value):
         payload = attachment.get("payload")
@@ -1090,11 +1110,17 @@ def _instagram_webhook_shared_media_id(value: dict[str, Any]) -> str | None:
 
 
 def _instagram_webhook_is_shared_post_message(value: dict[str, Any]) -> bool:
-    for attachment in _instagram_webhook_message_attachments(value):
-        attachment_type = str(attachment.get("type") or "").strip().lower()
-        if attachment_type in {"share", "ig_post"} and _instagram_webhook_shared_media_id(value):
-            return True
-    return False
+    return bool(_instagram_webhook_shared_media_id(value)) and bool(
+        _instagram_webhook_message_attachment_types(value).intersection({"share", "ig_post"})
+    )
+
+
+def _instagram_webhook_is_story_mention_message(value: dict[str, Any]) -> bool:
+    return "story_mention" in _instagram_webhook_message_attachment_types(value)
+
+
+def _instagram_webhook_is_indirect_share_message(value: dict[str, Any]) -> bool:
+    return _instagram_webhook_is_shared_post_message(value) or _instagram_webhook_is_story_mention_message(value)
 
 
 def _instagram_webhook_media_ids(value: dict[str, Any]) -> set[str]:
@@ -1161,6 +1187,57 @@ def _instagram_webhook_matches_channel(event: InstagramGiveawayWebhookEvent, cha
     return bool(media_ids and target_ids and media_ids.intersection(target_ids))
 
 
+def _instagram_webhook_entry_account_id(event: InstagramGiveawayWebhookEvent) -> str | None:
+    payload = dict(event.payload_json or {})
+    entry = payload.get("entry")
+    if not isinstance(entry, dict):
+        return None
+    return str(entry.get("id") or "").strip() or None
+
+
+def _instagram_webhook_entry_matches_channel_account(event: InstagramGiveawayWebhookEvent, channel: GiveawayChannel) -> bool:
+    if event.matched_account_id:
+        return event.matched_account_id == channel.account_id
+    entry_account_id = _instagram_webhook_entry_account_id(event)
+    if not entry_account_id:
+        return True
+    return entry_account_id in _instagram_account_provider_id_candidates(channel.account)
+
+
+def _match_indirect_instagram_share_event_to_single_channel(
+    session: Session,
+    channel: GiveawayChannel,
+    event: InstagramGiveawayWebhookEvent,
+) -> None:
+    if event.matched_giveaway_id or event.matched_post_id:
+        return
+    value = _instagram_webhook_value_payload(event)
+    if not value or not _instagram_webhook_is_indirect_share_message(value):
+        return
+    if _instagram_webhook_media_ids(value):
+        return
+    if not _instagram_webhook_entry_matches_channel_account(event, channel):
+        return
+
+    channels = list(
+        session.scalars(
+            select(GiveawayChannel)
+            .join(GiveawayChannel.campaign)
+            .where(
+                GiveawayChannel.service == "instagram",
+                GiveawayChannel.account_id == channel.account_id,
+                GiveawayCampaign.status.in_([GIVEAWAY_STATUS_SCHEDULED, GIVEAWAY_STATUS_COLLECTING, GIVEAWAY_STATUS_REVIEW_REQUIRED]),
+            )
+        )
+    )
+    if len(channels) != 1 or channels[0].id != channel.id:
+        return
+
+    event.matched_giveaway_id = channel.campaign_id
+    event.matched_post_id = channel.campaign.post_id
+    event.matched_account_id = channel.account_id
+
+
 def _instagram_webhook_occurred_at(value: dict[str, Any]) -> datetime | None:
     timestamp = value.get("created_time") or value.get("timestamp")
     if isinstance(timestamp, str) and timestamp.strip():
@@ -1201,6 +1278,8 @@ def _instagram_webhook_activity_types(event: InstagramGiveawayWebhookEvent, valu
     ):
         activities.append("repost")
     if _instagram_webhook_is_shared_post_message(value):
+        activities.extend(["story_mention", "repost"])
+    if _instagram_webhook_is_story_mention_message(value):
         activities.extend(["story_mention", "repost"])
 
     deduped: list[str] = []
@@ -1381,7 +1460,7 @@ def sync_instagram_webhook_event_to_channel(
         )
         source = (
             INSTAGRAM_MESSAGE_SHARE_CAPTURE_SOURCE
-            if _instagram_webhook_is_shared_post_message(value) and activity in {"story_mention", "repost"}
+            if _instagram_webhook_is_indirect_share_message(value) and activity in {"story_mention", "repost"}
             else INSTAGRAM_WEBHOOK_CAPTURE_SOURCE
         )
         summary = _instagram_activity_summary(
@@ -1460,6 +1539,7 @@ def sync_instagram_webhook_events_for_channel(session: Session, channel: Giveawa
     )
     captured = 0
     for event in events:
+        _match_indirect_instagram_share_event_to_single_channel(session, channel, event)
         captured += len(sync_instagram_webhook_event_to_channel(session, channel, event))
     return captured
 
