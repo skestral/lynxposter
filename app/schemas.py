@@ -494,6 +494,7 @@ class ScheduledPostRead(ScheduledPostBase):
     published_at: datetime | None = None
     last_error: str | None = None
     display_status: str = "draft"
+    can_delete: bool = False
     created_at: datetime
     updated_at: datetime
     deliveries: dict[str, DeliveryStateRead] = Field(default_factory=dict)

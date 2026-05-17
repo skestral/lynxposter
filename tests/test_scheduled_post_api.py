@@ -724,7 +724,47 @@ def test_delete_scheduled_post_api_removes_giveaway_draft(api_stack):
         assert get_post(session, post_id) is None
 
 
-def test_delete_scheduled_post_api_rejects_non_draft(api_stack):
+def test_delete_scheduled_post_api_removes_needs_attention_post(api_stack):
+    api_client, SessionLocal = api_stack
+    with SessionLocal() as session:
+        persona = _create_persona(session, slug="scheduled-post-api-delete-attention")
+        destination = _create_destination_account(session, persona)
+        post = create_scheduled_post(
+            session,
+            ScheduledPostCreate.model_validate(
+                {
+                    "persona_id": persona.id,
+                    "body": "Failed post",
+                    "status": "scheduled",
+                    "target_account_ids": [destination.id],
+                    "publish_overrides_json": {},
+                    "metadata_json": {},
+                    "scheduled_for": "2026-04-15T12:00:00+00:00",
+                }
+            ),
+            [],
+        )
+        for job in post.delivery_jobs:
+            job.status = "failed"
+            job.last_error = "Delivery failed."
+        post.status = "failed"
+        session.commit()
+        post_id = post.id
+
+    detail_response = api_client.get(f"/scheduled-posts/{post_id}")
+    response = api_client.delete(f"/scheduled-posts/{post_id}")
+
+    assert detail_response.status_code == 200
+    assert detail_response.json()["display_status"] == "failure"
+    assert detail_response.json()["can_delete"] is True
+    assert response.status_code == 200
+    assert response.json() == {"deleted_post_id": post_id}
+
+    with SessionLocal() as session:
+        assert get_post(session, post_id) is None
+
+
+def test_delete_scheduled_post_api_rejects_active_post(api_stack):
     api_client, SessionLocal = api_stack
     with SessionLocal() as session:
         persona = _create_persona(session, slug="scheduled-post-api-delete-reject")
@@ -750,7 +790,7 @@ def test_delete_scheduled_post_api_rejects_non_draft(api_stack):
     response = api_client.delete(f"/scheduled-posts/{post_id}")
 
     assert response.status_code == 400
-    assert response.json()["detail"] == "Only draft scheduled posts can be deleted."
+    assert response.json()["detail"] == "Only draft or needs-attention scheduled posts can be deleted."
 
     with SessionLocal() as session:
         assert get_post(session, post_id) is not None

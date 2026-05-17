@@ -20,6 +20,7 @@ from app.schemas import ScheduledPostCreate, ScheduledPostUpdate
 from app.services.personas import create_account, create_persona, get_persona, replace_routes
 from app.services.storage import settings as storage_settings
 from app.services.posts import (
+    can_delete_scheduled_post,
     create_scheduled_post,
     delete_scheduled_post,
     reconcile_pending_relationships,
@@ -334,7 +335,40 @@ def test_delete_scheduled_post_removes_draft_and_children(session, tmp_path, mon
     assert not file_path.exists()
 
 
-def test_delete_scheduled_post_rejects_non_draft(session):
+def test_delete_scheduled_post_removes_needs_attention_post(session):
+    persona = _create_persona(session, slug="attachments-delete-attention")
+    mastodon = _create_account(session, persona, service="mastodon", label="Mastodon", source_enabled=False, destination_enabled=True)
+
+    post = create_scheduled_post(
+        session,
+        ScheduledPostCreate.model_validate(
+            {
+                "persona_id": persona.id,
+                "body": "Failed post",
+                "status": "scheduled",
+                "target_account_ids": [mastodon.id],
+                "publish_overrides_json": {},
+                "metadata_json": {},
+                "scheduled_for": datetime.now(timezone.utc),
+            }
+        ),
+        [],
+    )
+    for job in post.delivery_jobs:
+        job.status = "failed"
+        job.last_error = "Delivery failed."
+    post.status = "failed"
+    session.flush()
+
+    assert can_delete_scheduled_post(post) is True
+
+    delete_scheduled_post(session, post)
+
+    assert session.get(CanonicalPost, post.id) is None
+    assert session.query(DeliveryJob).count() == 0
+
+
+def test_delete_scheduled_post_rejects_active_post(session):
     persona = _create_persona(session, slug="attachments-delete-queued")
     mastodon = _create_account(session, persona, service="mastodon", label="Mastodon", source_enabled=False, destination_enabled=True)
 
@@ -354,7 +388,9 @@ def test_delete_scheduled_post_rejects_non_draft(session):
         [],
     )
 
-    with pytest.raises(ValueError, match="Only draft scheduled posts can be deleted."):
+    assert can_delete_scheduled_post(post) is False
+
+    with pytest.raises(ValueError, match="Only draft or needs-attention scheduled posts can be deleted."):
         delete_scheduled_post(session, post)
 
     assert session.get(CanonicalPost, post.id) is not None

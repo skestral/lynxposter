@@ -194,8 +194,8 @@
 
                     <div class="d-flex gap-2 flex-wrap">
                         <button class="btn btn-primary" type="submit">Save Post Plan</button>
-                        {% if post.status == "draft" %}
-                        <button class="btn btn-outline-danger" type="button" id="delete-draft-button">Delete Draft</button>
+                        {% if post.can_delete|default(false, true) %}
+                        <button class="btn btn-outline-danger" type="button" id="delete-post-button">Delete Post</button>
                         {% endif %}
                         {% if post.giveaway and post.giveaway.status in ["scheduled", "collecting"] %}
                         <button class="btn btn-outline-warning" type="button" id="end-giveaway-button">End Giveaway</button>
@@ -436,7 +436,7 @@ const uploadSummary = document.getElementById("upload-summary");
 const savedAttachmentList = document.getElementById("saved-attachment-list");
 const savedAttachmentEmpty = document.getElementById("saved-attachment-empty");
 const savedMediaCount = document.getElementById("saved-media-count");
-const deleteDraftButton = document.getElementById("delete-draft-button");
+const deletePostButton = document.getElementById("delete-post-button");
 const endGiveawayButton = document.getElementById("end-giveaway-button");
 const postTypeSelect = document.getElementById("post-type-select");
 const giveawayConfigPanel = document.getElementById("giveaway-config-panel");
@@ -909,9 +909,9 @@ if (endGiveawayButton) {
   });
 }
 
-if (deleteDraftButton) {
-  deleteDraftButton.addEventListener("click", async () => {
-    const confirmed = window.confirm("Delete this draft? It will disappear from the planner.");
+if (deletePostButton) {
+  deletePostButton.addEventListener("click", async () => {
+    const confirmed = window.confirm("Delete this post plan? It will disappear from the planner.");
     if (!confirmed) return;
 
     const response = await fetch(`/scheduled-posts/${postId}`, {method: "DELETE"});

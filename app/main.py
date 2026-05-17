@@ -111,6 +111,7 @@ from app.services.personas import (
 )
 from app.services.posts import (
     build_delivery_states,
+    can_delete_scheduled_post,
     create_scheduled_post,
     delete_scheduled_post,
     get_post,
@@ -392,6 +393,7 @@ def _serialize_post(post: CanonicalPost) -> ScheduledPostRead:
         origin_account_id=post.origin_account_id,
         published_at=post.published_at,
         last_error=post.last_error,
+        can_delete=can_delete_scheduled_post(post),
         created_at=post.created_at,
         updated_at=post.updated_at,
         deliveries=build_delivery_states(post),

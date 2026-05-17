@@ -219,6 +219,7 @@ def test_scheduled_post_templates_render_attachment_previews():
             post_type="standard",
             giveaway=None,
             display_status="partial_failure",
+            can_delete=True,
             target_account_ids=[],
             body="Hello",
             scheduled_for=None,
@@ -360,7 +361,8 @@ def test_scheduled_post_templates_render_attachment_previews():
     assert "let giveawayBuilder = null;" in create_html
     assert "if (giveawayBuilder) {" in detail_html
     assert "if (giveawayBuilder) {" in create_html
-    assert 'Delete Draft' in detail_html
+    assert 'Delete Post' in detail_html
+    assert 'id="delete-post-button"' in detail_html
     assert 'Post Type' in detail_html
     assert 'Post Type' in create_html
     assert 'Last delivery hiccup' in detail_html

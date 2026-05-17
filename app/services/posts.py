@@ -22,6 +22,9 @@ from app.services.giveaway_engine import (
 from app.services.personas import get_persona, persona_destination_accounts, routed_destination_accounts
 from app.services.storage import delete_managed_media_file
 
+NEEDS_ATTENTION_DISPLAY_STATUSES = {"partial_failure", "failure", "cancelled"}
+DELETABLE_DISPLAY_STATUSES = {"draft", *NEEDS_ATTENTION_DISPLAY_STATUSES}
+
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
@@ -203,6 +206,12 @@ def scheduled_post_display_status(post: CanonicalPost) -> str:
     if breakdown["cancelled"]:
         return "cancelled"
     return post.status
+
+
+def can_delete_scheduled_post(post: CanonicalPost) -> bool:
+    if post.origin_kind != "composer":
+        return False
+    return scheduled_post_display_status(post) in DELETABLE_DISPLAY_STATUSES
 
 
 def _desired_job_status(post_status: str) -> str:
@@ -422,8 +431,8 @@ def update_scheduled_post(
 def delete_scheduled_post(session: Session, post: CanonicalPost) -> None:
     if post.origin_kind != "composer":
         raise ValueError("Only scheduled posts created in the composer can be deleted.")
-    if post.status != "draft":
-        raise ValueError("Only draft scheduled posts can be deleted.")
+    if not can_delete_scheduled_post(post):
+        raise ValueError("Only draft or needs-attention scheduled posts can be deleted.")
     for attachment in list(post.attachments):
         other_attachment = session.scalar(
             select(MediaAttachment.id)
