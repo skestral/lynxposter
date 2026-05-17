@@ -806,6 +806,7 @@ details > summary::-webkit-details-marker {
 
 .scheduled-calendar-cell,
 .scheduled-calendar-column {
+    min-width: 0;
     min-height: 11.5rem;
     padding: 0.8rem;
     border: 1px solid var(--lp-border);
@@ -890,6 +891,7 @@ details > summary::-webkit-details-marker {
     display: flex;
     flex-direction: column;
     gap: 0.85rem;
+    min-width: 0;
     min-height: 22rem;
     padding: 0.95rem;
     border: 1px solid var(--lp-border);
@@ -903,12 +905,18 @@ details > summary::-webkit-details-marker {
     justify-content: space-between;
     gap: 0.75rem;
     align-items: flex-start;
+    min-width: 0;
+}
+
+.scheduled-kanban-lane-header > div {
+    min-width: 0;
 }
 
 .scheduled-kanban-list {
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
+    min-width: 0;
 }
 
 .scheduled-kanban-card {
@@ -952,6 +960,9 @@ details > summary::-webkit-details-marker {
 }
 
 .planner-card {
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
     padding: 0.85rem 0.9rem;
     border: 1px solid rgba(var(--lp-shadow-rgb), 0.08);
     border-radius: 1rem;
@@ -962,6 +973,23 @@ details > summary::-webkit-details-marker {
         box-shadow var(--lp-transition),
         opacity var(--lp-transition),
         border-color var(--lp-transition);
+}
+
+.planner-card-layout {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    min-width: 0;
+}
+
+.planner-card-main {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.planner-card-open {
+    flex: 0 0 auto;
 }
 
 .planner-card.is-draggable {
@@ -987,10 +1015,26 @@ details > summary::-webkit-details-marker {
     padding: 0.72rem 0.78rem;
 }
 
+.planner-card-compact .planner-card-layout {
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.planner-card-compact .planner-card-open {
+    align-self: flex-start;
+}
+
+.planner-card .badge {
+    max-width: 100%;
+    white-space: normal;
+    text-align: left;
+}
+
 .planner-card-title {
     font-weight: 650;
     color: var(--lp-ink);
     line-height: 1.35;
+    overflow-wrap: anywhere;
 }
 
 .planner-card-copy {
@@ -998,12 +1042,34 @@ details > summary::-webkit-details-marker {
     color: var(--lp-ink);
     font-size: 0.9rem;
     line-height: 1.45;
+    overflow-wrap: anywhere;
 }
 
 .planner-card-meta {
     margin-top: 0.45rem;
     color: var(--lp-ink-soft);
     font-size: 0.82rem;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.scheduled-kanban-list-summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.75rem 0.8rem;
+    border: 1px dashed var(--lp-border-soft);
+    border-radius: 1rem;
+    color: var(--lp-ink-soft);
+    font-size: 0.82rem;
+    background: rgba(var(--lp-shadow-rgb), 0.05);
+}
+
+.scheduled-kanban-toggle {
+    flex: 0 0 auto;
+    white-space: nowrap;
 }
 
 .planner-drop-zone {

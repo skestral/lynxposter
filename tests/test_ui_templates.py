@@ -340,6 +340,14 @@ def test_scheduled_post_templates_render_attachment_previews():
     assert 'scheduled-kanban-board' in planner_html
     assert 'kanban-lane-drafts' in planner_html
     assert 'kanban-lane-attention' in planner_html
+    assert 'const kanbanCollapsedLimit = 3;' in planner_html
+    assert 'const kanbanExpandedBuckets = new Set();' in planner_html
+    assert 'planner-card-layout' in planner_html
+    assert 'planner-card-main' in planner_html
+    assert 'planner-card-open' in planner_html
+    assert 'items.slice(-kanbanCollapsedLimit)' in planner_html
+    assert 'data-kanban-toggle="${bucket}"' in planner_html
+    assert 'Display All ${items.length}' in planner_html
     assert 'planner-move-modal' in planner_html
     assert 'document.body.appendChild(plannerMoveModalElement)' in planner_html
     assert 'function queueMoveModal(post, target)' in planner_html

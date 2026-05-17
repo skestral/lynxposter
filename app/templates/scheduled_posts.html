@@ -292,10 +292,12 @@ const kanbanCountIds = {
   attention: "kanban-count-attention",
   done: "kanban-count-done",
 };
+const kanbanCollapsedLimit = 3;
 const plannerState = {
   viewMode: "month",
   anchorDate: new Date(),
 };
+const kanbanExpandedBuckets = new Set();
 const plannerMoveModalElement = document.getElementById("planner-move-modal");
 if (plannerMoveModalElement && plannerMoveModalElement.parentElement !== document.body) {
   document.body.appendChild(plannerMoveModalElement);
@@ -557,8 +559,8 @@ function plannerCardMarkup(post, compact = false) {
       data-post-id="${post.id}"
       ${post.canDrag ? 'draggable="true"' : ""}
     >
-      <div class="d-flex justify-content-between align-items-start gap-2">
-        <div>
+      <div class="planner-card-layout">
+        <div class="planner-card-main">
           <div class="d-flex gap-1 flex-wrap mb-2">
             <span class="badge ${statusBadgeClass(post.displayStatus)}">${escapeHtml(statusLabel(post.displayStatus))}</span>
             ${post.postType === "giveaway" ? '<span class="badge text-bg-warning-subtle border text-dark">Giveaway</span>' : ""}
@@ -567,7 +569,7 @@ function plannerCardMarkup(post, compact = false) {
           <div class="planner-card-copy">${escapeHtml(compact ? compactMeta : summarizeBody(post.body))}</div>
           <div class="planner-card-meta">${escapeHtml(compact ? fullMeta : fullMeta)}</div>
         </div>
-        <a class="btn btn-sm btn-outline-primary" href="${post.href}">Open</a>
+        <a class="btn btn-sm btn-outline-primary planner-card-open" href="${post.href}">Open</a>
       </div>
       ${post.lastError ? `<div class="small text-danger mt-2">${escapeHtml(post.lastError)}</div>` : ""}
     </article>
@@ -698,9 +700,28 @@ function renderKanbanBoard() {
   Object.entries(buckets).forEach(([bucket, items]) => {
     const lane = document.getElementById(kanbanLaneIds[bucket]);
     const count = document.getElementById(kanbanCountIds[bucket]);
+    const isExpanded = kanbanExpandedBuckets.has(bucket);
+    const hasHiddenCards = items.length > kanbanCollapsedLimit;
+    const visibleItems = hasHiddenCards && !isExpanded ? items.slice(-kanbanCollapsedLimit) : items;
+    const toggleLabel = isExpanded ? "Show Last 3" : `Display All ${items.length}`;
+    const toggleMarkup = hasHiddenCards
+      ? `
+        <div class="scheduled-kanban-list-summary">
+          <span>Showing ${visibleItems.length} of ${items.length}</span>
+          <button
+            class="btn btn-sm btn-outline-secondary scheduled-kanban-toggle"
+            type="button"
+            data-kanban-toggle="${bucket}"
+            aria-expanded="${isExpanded ? "true" : "false"}"
+          >
+            ${toggleLabel}
+          </button>
+        </div>
+      `
+      : "";
     count.textContent = String(items.length);
     lane.innerHTML = items.length
-      ? items.map((post) => plannerCardMarkup(post)).join("")
+      ? `${visibleItems.map((post) => plannerCardMarkup(post)).join("")}${toggleMarkup}`
       : `<div class="scheduled-kanban-empty">${bucket === "attention" || bucket === "done" ? "Nothing to show here." : "Drop a card here."}</div>`;
   });
   bindPlannerInteractions();
@@ -824,6 +845,21 @@ function resetDragState() {
 }
 
 function bindPlannerInteractions() {
+  document.querySelectorAll("[data-kanban-toggle]").forEach((button) => {
+    if (button.dataset.toggleBound === "true") return;
+    button.dataset.toggleBound = "true";
+    button.addEventListener("click", () => {
+      const bucket = button.dataset.kanbanToggle;
+      if (!bucket) return;
+      if (kanbanExpandedBuckets.has(bucket)) {
+        kanbanExpandedBuckets.delete(bucket);
+      } else {
+        kanbanExpandedBuckets.add(bucket);
+      }
+      renderKanbanBoard();
+    });
+  });
+
   document.querySelectorAll(".planner-card[data-post-id]").forEach((card) => {
     if (card.dataset.dragBound === "true") return;
     card.dataset.dragBound = "true";
