@@ -500,6 +500,62 @@ def test_refresh_instagram_channel_state_collects_live_likes(session, monkeypatc
     assert like_event.active is True
 
 
+def test_giveaway_lifecycle_updates_qualification_checks_after_collection(session, monkeypatch):
+    persona = _create_persona(session, slug="giveaway-live-checks")
+    instagram = _create_account(session, persona, service="instagram", label="Instagram")
+    post = create_scheduled_post(
+        session,
+        _generic_giveaway_payload(
+            persona.id,
+            [instagram.id],
+            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            channels=[
+                {
+                    "service": "instagram",
+                    "account_id": instagram.id,
+                    "rules": {
+                        "kind": "all",
+                        "children": [{"kind": "atom", "atom": "like_present", "params": {}}],
+                    },
+                }
+            ],
+        ),
+        [],
+    )
+    _mark_posted(post, instagram.id, external_id="ig-media-live-checks")
+    session.flush()
+    media_liker_calls = 0
+
+    class _FakeInstagramClient:
+        def media_comments(self, media_id, amount=0):
+            assert media_id == "ig-media-live-checks"
+            return []
+
+        def media_likers(self, media_id):
+            nonlocal media_liker_calls
+            media_liker_calls += 1
+            assert media_id == "ig-media-live-checks"
+            return [SimpleNamespace(pk="ig-user-like", username="liker.one")]
+
+    monkeypatch.setattr("app.services.giveaway_engine._instagram_destination_dependency_issue", lambda: None)
+    monkeypatch.setattr("app.services.giveaway_engine._authenticated_publish_client", lambda credentials: _FakeInstagramClient())
+
+    process_giveaway_lifecycle(session, AlertDispatcher(), run_id="run-live-checks")
+
+    channel = post.giveaway_campaign.channels[0]
+    entrant = session.query(GiveawayEntrant).filter_by(channel_id=channel.id, provider_user_id="ig-user-like").one()
+    assert entrant.eligibility_status == ENTRY_STATUS_ELIGIBLE
+    assert entrant.rule_match_details_json["children"][0]["atom"] == "like_present"
+    assert entrant.rule_match_details_json["children"][0]["result"] is True
+    assert media_liker_calls == 1
+
+    serialized = serialize_giveaway(post.giveaway_campaign)
+    assert serialized is not None
+    checks = serialized.channels[0].entrants[0].checks
+    assert checks[0].label == "Like present"
+    assert checks[0].status == "passed"
+
+
 def test_instagram_refresh_backfills_existing_like_and_repost_webhooks(session, monkeypatch):
     persona = _create_persona(session, slug="giveaway-webhook-backfill")
     instagram = _create_account(session, persona, service="instagram", label="Instagram")

@@ -539,6 +539,8 @@ def _normalized_instagram_signal_state(state: dict[str, Any] | None) -> dict[str
         "reposts": reposts,
         "repost_present": bool(raw_state.get("repost_present") or reposts),
     }
+    if "like_collection_checked" in raw_state:
+        normalized["like_collection_checked"] = bool(raw_state.get("like_collection_checked"))
     if "follow_present" in raw_state:
         normalized["follow_present"] = raw_state.get("follow_present")
     return normalized
@@ -933,6 +935,8 @@ def _evaluate_instagram_atom(channel: GiveawayChannel, entrant: GiveawayEntrant,
     if atom == "like_present":
         if state.get("like_present") is True:
             return True, None
+        if state.get("like_collection_checked") is True:
+            return False, None
         return _instagram_verify_like(channel, entrant)
     if atom == "repost_present":
         if state.get("repost_present") is True:
@@ -1725,6 +1729,7 @@ def process_giveaway_lifecycle(
                         )
                 elif channel.service == "instagram":
                     refresh_instagram_channel_state(session, channel)
+                evaluate_channel_entrants(channel)
         if normalize_datetime(campaign.giveaway_end_at) and normalize_datetime(campaign.giveaway_end_at) <= now and campaign.status in {GIVEAWAY_STATUS_COLLECTING, GIVEAWAY_STATUS_SCHEDULED}:
             try:
                 finalize_giveaway_campaign(session, campaign, alerts, run_id=run_id)
@@ -1849,11 +1854,13 @@ def refresh_instagram_channel_state(session: Session, channel: GiveawayChannel) 
             for state in state_by_user.values():
                 state["likes"] = []
                 state["like_present"] = False
+                state["like_collection_checked"] = True
             for liker in live_likers or []:
                 provider_user_id, provider_username = _instagram_user_identity(liker)
                 if not provider_user_id:
                     continue
                 existing = state_by_user.setdefault(provider_user_id, _normalized_instagram_signal_state({}))
+                existing["like_collection_checked"] = True
                 entrant = get_or_create_channel_entrant(
                     channel,
                     provider_user_id=provider_user_id,
