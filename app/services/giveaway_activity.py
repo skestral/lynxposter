@@ -24,6 +24,8 @@ SERVICE_LABELS = {
 EVENT_LABELS = {
     "instagram_comment": "Comment",
     "instagram_story_mention": "Story Mention",
+    "instagram_like": "Like",
+    "instagram_repost": "Share",
     "bluesky_reply": "Reply",
     "bluesky_quote": "Quote",
     "bluesky_like": "Like",
@@ -105,6 +107,14 @@ def _event_detail(event_type: str, payload: dict[str, Any]) -> str | None:
         if event_type == "instagram_story_mention":
             mention_type = str(value.get("mention_type") or "story").strip().replace("_", " ")
             return f"{mention_type.title()} mention captured."
+        actor = value.get("from")
+        actor_label = None
+        if isinstance(actor, dict):
+            actor_label = str(actor.get("username") or actor.get("id") or "").strip()
+        if event_type == "instagram_like":
+            return f"{actor_label or 'Entrant'} liked the giveaway post."
+        if event_type == "instagram_repost":
+            return f"{actor_label or 'Entrant'} shared the giveaway post."
         return None
     text = str(payload.get("text") or "").strip()
     if text:

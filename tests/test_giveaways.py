@@ -395,6 +395,111 @@ def test_instagram_webhook_ingest_updates_generic_like_and_repost_state(session)
     assert repost_event.entrant_id == entrant.id
 
 
+def test_instagram_webhook_ingest_accepts_array_like_payload(session):
+    persona = _create_persona(session, slug="giveaway-webhook-like-array")
+    instagram = _create_account(session, persona, service="instagram", label="Instagram")
+    post = create_scheduled_post(
+        session,
+        _legacy_instagram_giveaway_payload(
+            persona.id,
+            [instagram.id],
+            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        ),
+        [],
+    )
+    _mark_posted(post, instagram.id, external_id="ig-media-like-array")
+    session.flush()
+
+    payload = {
+        "entry": [
+            {
+                "id": "17841463479494132",
+                "changes": [
+                    {
+                        "field": "likes",
+                        "value": [
+                            {
+                                "media_id": "ig-media-like-array",
+                                "id": "like-array-1",
+                                "from": {"id": "user-array-1", "username": "array.liker"},
+                            }
+                        ],
+                    }
+                ],
+            }
+        ]
+    }
+
+    events = ingest_instagram_webhook_payload(session, payload, signature_valid=True, run_id="run-like-array")
+    session.flush()
+
+    assert len(events) == 1
+    assert events[0].event_type == "like"
+    channel = post.giveaway_campaign.channels[0]
+    entrant = session.query(GiveawayEntrant).filter_by(channel_id=channel.id, provider_user_id="user-array-1").one()
+    assert entrant.provider_username == "array.liker"
+    assert entrant.signal_state_json["like_present"] is True
+    assert session.query(GiveawayEvidenceEvent).filter_by(
+        channel_id=channel.id,
+        event_type="instagram_like",
+        provider_event_id="like-array-1",
+    ).one()
+
+
+def test_refresh_instagram_channel_state_collects_live_likes(session, monkeypatch):
+    persona = _create_persona(session, slug="giveaway-live-like-collector")
+    instagram = _create_account(session, persona, service="instagram", label="Instagram")
+    post = create_scheduled_post(
+        session,
+        _generic_giveaway_payload(
+            persona.id,
+            [instagram.id],
+            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            channels=[
+                {
+                    "service": "instagram",
+                    "account_id": instagram.id,
+                    "rules": {
+                        "kind": "all",
+                        "children": [{"kind": "atom", "atom": "like_present", "params": {}}],
+                    },
+                }
+            ],
+        ),
+        [],
+    )
+    _mark_posted(post, instagram.id, external_id="ig-media-live-like")
+    channel = post.giveaway_campaign.channels[0]
+    channel.target_post_external_id = "ig-media-live-like"
+    session.flush()
+
+    class _FakeInstagramClient:
+        def media_comments(self, media_id, amount=0):
+            assert media_id == "ig-media-live-like"
+            return []
+
+        def media_likers(self, media_id):
+            assert media_id == "ig-media-live-like"
+            return [SimpleNamespace(pk="ig-user-like", username="liker.one")]
+
+    monkeypatch.setattr("app.services.giveaway_engine._instagram_destination_dependency_issue", lambda: None)
+    monkeypatch.setattr("app.services.giveaway_engine._authenticated_publish_client", lambda credentials: _FakeInstagramClient())
+
+    refresh_instagram_channel_state(session, channel)
+
+    entrant = session.query(GiveawayEntrant).filter_by(channel_id=channel.id, provider_user_id="ig-user-like").one()
+    assert entrant.provider_username == "liker.one"
+    assert entrant.signal_state_json["like_present"] is True
+    assert entrant.signal_state_json["likes"][0]["source"] == "live_collection"
+    like_event = session.query(GiveawayEvidenceEvent).filter_by(
+        channel_id=channel.id,
+        event_type="instagram_like",
+        source="live_collection",
+    ).one()
+    assert like_event.entrant_id == entrant.id
+    assert like_event.active is True
+
+
 def test_instagram_refresh_backfills_existing_like_and_repost_webhooks(session, monkeypatch):
     persona = _create_persona(session, slug="giveaway-webhook-backfill")
     instagram = _create_account(session, persona, service="instagram", label="Instagram")

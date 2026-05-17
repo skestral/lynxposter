@@ -79,6 +79,7 @@ BLUESKY_ACTIVITY_EVENT_TYPES = (
 COMMENT_EVIDENCE_SOURCE_LIVE = "close_time_live"
 INSTAGRAM_WEBHOOK_CAPTURE_SOURCE = "webhook_capture"
 INSTAGRAM_MESSAGE_SHARE_CAPTURE_SOURCE = "message_share_capture"
+INSTAGRAM_LIVE_COLLECTION_SOURCE = "live_collection"
 INSTAGRAM_ACTIVITY_EVENT_TYPES = (
     "instagram_comment",
     "instagram_story_mention",
@@ -1842,8 +1843,43 @@ def refresh_instagram_channel_state(session: Session, channel: GiveawayChannel) 
                 )
             session.flush()
             _sync_instagram_live_comment_events(session, channel, observed_comments)
+
+            live_likers = client.media_likers(channel.target_post_external_id)
+            observed_likes: list[tuple[GiveawayEntrant, dict[str, Any]]] = []
+            for state in state_by_user.values():
+                state["likes"] = []
+                state["like_present"] = False
+            for liker in live_likers or []:
+                provider_user_id, provider_username = _instagram_user_identity(liker)
+                if not provider_user_id:
+                    continue
+                existing = state_by_user.setdefault(provider_user_id, _normalized_instagram_signal_state({}))
+                entrant = get_or_create_channel_entrant(
+                    channel,
+                    provider_user_id=provider_user_id,
+                    provider_username=provider_username,
+                    display_label=provider_username or provider_user_id,
+                )
+                like_summary = {
+                    "like_id": f"like:{provider_user_id}:{channel.target_post_external_id}",
+                    "media_id": channel.target_post_external_id,
+                    "actor_id": provider_user_id,
+                    "actor_username": provider_username,
+                    "source": INSTAGRAM_LIVE_COLLECTION_SOURCE,
+                }
+                existing["likes"] = _append_unique_evidence_item(
+                    list(existing.get("likes") or []),
+                    like_summary,
+                    key_fields=("like_id",),
+                )
+                existing["like_present"] = True
+                entrant.signal_state_json = dict(entrant.signal_state_json or {})
+                observed_likes.append((entrant, like_summary))
+            session.flush()
+            _sync_instagram_live_like_events(session, channel, observed_likes)
+            channel.last_error = None
         except Exception as exc:
-            channel.last_error = f"Instagram live comment revalidation failed: {exc}"
+            channel.last_error = f"Instagram live activity collection failed: {exc}"
 
     for entrant in channel.entrants:
         state = state_by_user.setdefault(entrant.provider_user_id, _normalized_instagram_signal_state(dict(entrant.signal_state_json or {})))
@@ -2040,6 +2076,88 @@ def _sync_bluesky_activity_events(
         existing.active = True
 
     observed_keys = set(observed)
+    for key, existing in existing_by_key.items():
+        if key in observed_keys:
+            continue
+        payload = dict(existing.payload_json or {})
+        payload["last_seen_at"] = seen_at
+        existing.payload_json = payload
+        existing.active = False
+
+
+def _instagram_user_identity(user: Any) -> tuple[str | None, str | None]:
+    if isinstance(user, dict):
+        provider_user_id = str(user.get("pk") or user.get("id") or user.get("user_id") or "").strip() or None
+        provider_username = str(user.get("username") or user.get("name") or "").strip() or None
+        return provider_user_id, provider_username
+    provider_user_id = str(
+        getattr(user, "pk", "")
+        or getattr(user, "id", "")
+        or getattr(user, "user_id", "")
+        or ""
+    ).strip() or None
+    provider_username = str(getattr(user, "username", "") or getattr(user, "name", "") or "").strip() or None
+    return provider_user_id, provider_username
+
+
+def _sync_instagram_live_like_events(
+    session: Session,
+    channel: GiveawayChannel,
+    observed_likes: list[tuple[GiveawayEntrant, dict[str, Any]]],
+) -> None:
+    existing_events = list(
+        session.scalars(
+            select(GiveawayEvidenceEvent).where(
+                GiveawayEvidenceEvent.channel_id == channel.id,
+                GiveawayEvidenceEvent.event_type == "instagram_like",
+                GiveawayEvidenceEvent.source == INSTAGRAM_LIVE_COLLECTION_SOURCE,
+            )
+        )
+    )
+    existing_by_key = {str(event.provider_event_id or ""): event for event in existing_events}
+    observed_keys: set[str] = set()
+    seen_at = utcnow().isoformat()
+
+    for entrant, summary in observed_likes:
+        provider_event_id = str(summary.get("like_id") or "").strip()
+        if not provider_event_id:
+            continue
+        observed_keys.add(provider_event_id)
+        payload = {
+            "change": {
+                "field": "likes",
+                "value": {
+                    "media_id": channel.target_post_external_id,
+                    "id": provider_event_id,
+                    "from": {
+                        "id": entrant.provider_user_id,
+                        "username": entrant.provider_username,
+                    },
+                },
+            },
+            "source": INSTAGRAM_LIVE_COLLECTION_SOURCE,
+            "last_seen_at": seen_at,
+        }
+        existing = existing_by_key.get(provider_event_id)
+        if existing is None:
+            payload["first_seen_at"] = seen_at
+            _record_evidence_event(
+                session,
+                channel.campaign,
+                channel,
+                entrant=entrant,
+                provider_event_id=provider_event_id,
+                event_type="instagram_like",
+                source=INSTAGRAM_LIVE_COLLECTION_SOURCE,
+                payload=payload,
+            )
+            continue
+        existing.entrant_id = entrant.id
+        existing_payload = dict(existing.payload_json or {})
+        payload["first_seen_at"] = existing_payload.get("first_seen_at") or existing.created_at.isoformat()
+        existing.payload_json = payload
+        existing.active = True
+
     for key, existing in existing_by_key.items():
         if key in observed_keys:
             continue

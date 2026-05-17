@@ -851,15 +851,20 @@ def _iter_instagram_webhook_events(entry_payload: dict[str, Any]) -> list[dict[s
         if not isinstance(change, dict):
             continue
         field = str(change.get("field") or "").strip()
-        value = dict(change.get("value") or {})
-        parsed.append(
-            {
-                "account_id": account_id,
-                "field": field,
-                "value": value,
-                "payload_json": {"entry": entry_payload, "change": change},
-            }
-        )
+        raw_value = change.get("value") or {}
+        value_items = raw_value if isinstance(raw_value, list) else [raw_value]
+        for value_item in value_items:
+            value = dict(value_item) if isinstance(value_item, dict) else {"value": value_item}
+            normalized_change = dict(change)
+            normalized_change["value"] = value
+            parsed.append(
+                {
+                    "account_id": account_id,
+                    "field": field,
+                    "value": value,
+                    "payload_json": {"entry": entry_payload, "change": normalized_change},
+                }
+            )
 
     for container in ("messaging", "standby"):
         for item in entry_payload.get(container) or []:
@@ -1548,6 +1553,10 @@ def _instagram_activity_link(event_type: str, parent_post: dict[str, Any] | None
         return instagram_external_url, "Open shared Instagram post"
     if event_type == "comment":
         return instagram_external_url, "Open Instagram post"
+    if event_type == "like":
+        return instagram_external_url, "Open Instagram post"
+    if event_type == "share":
+        return instagram_external_url, "Open shared Instagram post"
     if event_type == "live_comment":
         return instagram_external_url, "Open live post"
     if event_type == "story_mention":
@@ -1907,7 +1916,7 @@ def instagram_webhook_observability(
         day_counts[event.created_at.strftime("%Y-%m-%d")] += 1
         if event.matched_giveaway_id:
             matched_events += 1
-        if event.event_type in {"comment", "story_mention", "live_comment"} or (
+        if event.event_type in {"comment", "story_mention", "live_comment", "like", "share"} or (
             event.event_type == "message" and _is_shared_post_message(value)
         ):
             giveaway_relevant_events += 1

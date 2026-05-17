@@ -1107,7 +1107,7 @@ def settings_page(request: Request) -> HTMLResponse:
                 instagram_webhook_callback_url=webhook_callback_url,
                 instagram_webhook_latest_received_at=latest_webhook.created_at if latest_webhook else None,
                 instagram_webhook_latest_event_type=latest_webhook.event_type if latest_webhook else None,
-                instagram_webhook_required_fields=["comments", "mentions", "likes", "shares"],
+                instagram_webhook_required_fields=["comments", "mentions", "messages"],
                 instagram_tunnel_local_target=local_tunnel_target,
                 instagram_tunnel_cloudflared_command=f"cloudflared tunnel --url {local_tunnel_target}",
                 instagram_tunnel_ngrok_command=f"ngrok http {app_settings.app_port}",
