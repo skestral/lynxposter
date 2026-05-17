@@ -797,9 +797,9 @@ def test_dashboard_giveaway_activity_can_expand_long_recent_activity():
     )
 
     assert 'id="giveaway-activity-toggle"' in html
-    assert "Showing 6 of 8" in html
+    assert "Showing 3 of 8" in html
     assert 'data-expanded-count="Showing all 8"' in html
-    assert html.count("giveaway-activity-extra d-none") == 2
+    assert html.count("giveaway-activity-extra d-none") == 5
 
 
 def test_dashboard_template_truncates_long_navbar_identity_text():
