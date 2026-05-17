@@ -8,7 +8,7 @@ from app.adapters.bluesky import BlueskyDestinationAdapter
 from app.adapters.mastodon import MastodonDestinationAdapter
 from app.adapters.tumblr import TumblrDestinationAdapter
 from app.domain import CanonicalPostPayload, ExternalPostRefPayload, MediaItem, PublishResult
-from app.models import AccountPostRef, AccountRoute, AlertEvent, CanonicalPost, DeliveryJob
+from app.models import AccountPostRef, AccountRoute, AlertEvent, CanonicalPost, DeliveryJob, RunEvent
 from app.schemas import ScheduledPostCreate
 from app.services.alerts import AlertDispatcher
 from app.services.delivery import process_delivery_queue
@@ -279,6 +279,43 @@ def test_removed_route_cancels_queued_import_delivery(session):
 
     job = session.query(DeliveryJob).one()
     assert job.status == "cancelled"
+
+
+def test_validation_failure_is_recorded_for_import_delivery(session):
+    persona = _create_persona(session)
+    source = _create_account(session, persona, service="mastodon", label="Mastodon", source_enabled=True, destination_enabled=False)
+    bluesky = _create_account(session, persona, service="bluesky", label="Bluesky", source_enabled=False, destination_enabled=True)
+
+    replace_routes(
+        session,
+        get_persona(session, persona.id),
+        [{"source_account_id": source.id, "destination_account_id": bluesky.id, "is_enabled": True}],
+    )
+
+    post = upsert_polled_post(
+        session,
+        get_persona(session, persona.id),
+        source,
+        CanonicalPostPayload(
+            body="x" * 301,
+            external_refs=[ExternalPostRefPayload(external_id="source-too-long", external_url="https://example.social/post/1")],
+        ),
+    )
+
+    process_delivery_queue(session, AlertDispatcher(), run_id="run-validation")
+
+    job = session.query(DeliveryJob).filter_by(post_id=post.id, target_account_id=bluesky.id).one()
+    assert job.status == "failed"
+    assert job.last_error == "Bluesky posts are limited to 300 characters."
+    assert job.last_error_class == "ValidationError"
+    assert session.query(AlertEvent).count() == 1
+
+    event = session.query(RunEvent).filter_by(run_id="run-validation", delivery_job_id=job.id).one()
+    assert event.severity == "error"
+    assert event.operation == "validate"
+    assert event.service == "bluesky"
+    assert "Bluesky could not publish post" in event.message
+    assert (event.metadata_json or {}).get("delivery_status") == "failed"
 
 
 def test_failed_delivery_records_alert_after_max_retries(session, monkeypatch):

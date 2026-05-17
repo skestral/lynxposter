@@ -340,21 +340,49 @@ def process_delivery_queue(
         if issues:
             message = "; ".join(issue.message for issue in issues)
             post.last_error = message
-            _record_attempt_failure(job, message, "ValidationError")
-            if job.status == "failed":
-                alerts.emit_hard_failure(
-                    session,
-                    run_id=run_id,
-                    persona=persona,
-                    account=target_account,
-                    service=target_account.service,
-                    post=post,
-                    delivery_job=job,
-                    operation="validate",
-                    message=message,
-                    error_class="ValidationError",
-                    retry_count=job.attempt_count,
-                )
+            job.status = "failed"
+            job.last_error = message
+            job.last_error_class = "ValidationError"
+            job.last_attempt_at = now_utc()
+            alerts.emit_hard_failure(
+                session,
+                run_id=run_id,
+                persona=persona,
+                account=target_account,
+                service=target_account.service,
+                post=post,
+                delivery_job=job,
+                operation="validate",
+                message=message,
+                error_class="ValidationError",
+                retry_count=job.attempt_count,
+            )
+            log_run_event(
+                session,
+                run_id=run_id,
+                persona_id=persona.id,
+                persona_name=persona.name,
+                account_id=target_account.id,
+                service=target_account.service,
+                operation="validate",
+                severity="error",
+                message=f"{target_account.label} could not publish post {post.id}: {message}",
+                post_id=post.id,
+                delivery_job_id=job.id,
+                metadata={
+                    "delivery_status": "failed",
+                    "error_class": "ValidationError",
+                    "post_preview": _log_post_preview(post),
+                    "validation_issues": [
+                        {
+                            "service": issue.service,
+                            "field": issue.field,
+                            "message": issue.message,
+                        }
+                        for issue in issues
+                    ],
+                },
+            )
             refresh_post_status(post)
             continue
 
