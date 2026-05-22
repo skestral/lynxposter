@@ -57,6 +57,7 @@ The app serves on `http://127.0.0.1:8000/`.
 - Instagram outbound publishing now uses `instagrapi` direct uploads, so `APP_BASE_URL` does not need to be public just for Instagram publishing.
 - For publishing, configure either `INSTAGRAPI_SESSIONID` or both `INSTAGRAPI_USERNAME` and `INSTAGRAPI_PASSWORD`.
 - Instagram giveaway webhooks use `INSTAGRAM_WEBHOOKS_ENABLED`, `INSTAGRAM_WEBHOOK_VERIFY_TOKEN`, and `INSTAGRAM_APP_SECRET`, and the Settings page shows the callback URL at `/webhooks/instagram`.
+- Instagram giveaway private scans are rate-limited by `INSTAGRAM_PRIVATE_SCAN_INTERVAL_HOURS`, which defaults to `24`. Set it to `0` for manual scans only.
 - `instagrapi` is an unofficial/private API client. Session IDs are often the most reliable option when Instagram challenge or MFA flows block password logins.
 
 ### Testing Instagram webhooks with a tunnel

@@ -37,6 +37,7 @@ APP_SETTINGS_ENV_MAP = {
     "instagram_webhooks_enabled": "INSTAGRAM_WEBHOOKS_ENABLED",
     "instagram_webhook_verify_token": "INSTAGRAM_WEBHOOK_VERIFY_TOKEN",
     "instagram_app_secret": "INSTAGRAM_APP_SECRET",
+    "instagram_private_scan_interval_hours": "INSTAGRAM_PRIVATE_SCAN_INTERVAL_HOURS",
 }
 
 
@@ -70,6 +71,7 @@ def read_app_settings() -> AppSettingsRead:
         instagram_webhooks_enabled=settings.instagram_webhooks_enabled,
         instagram_webhook_verify_token=settings.instagram_webhook_verify_token,
         instagram_app_secret=settings.instagram_app_secret,
+        instagram_private_scan_interval_hours=settings.instagram_private_scan_interval_hours,
         config_dir=str(settings.config_dir),
         env_file_path=str(settings.env_file_path),
         app_data_dir=str(settings.app_data_dir),
@@ -112,6 +114,7 @@ def update_app_settings(payload: AppSettingsUpdate) -> AppSettingsRead:
         "INSTAGRAM_WEBHOOKS_ENABLED": "true" if payload.instagram_webhooks_enabled else "false",
         "INSTAGRAM_WEBHOOK_VERIFY_TOKEN": payload.instagram_webhook_verify_token,
         "INSTAGRAM_APP_SECRET": payload.instagram_app_secret,
+        "INSTAGRAM_PRIVATE_SCAN_INTERVAL_HOURS": str(payload.instagram_private_scan_interval_hours),
     }
     _write_env_updates(settings.env_file_path, env_updates)
     for key, value in env_updates.items():

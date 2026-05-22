@@ -30,6 +30,7 @@ from app.services.giveaway_engine import (
     evaluate_channel_entrants,
     process_giveaway_lifecycle,
     refresh_instagram_channel_state,
+    scan_instagram_giveaway_channels,
     serialize_giveaway,
 )
 from app.services.giveaways import (
@@ -573,6 +574,92 @@ def test_refresh_instagram_channel_state_collects_live_likes(session, monkeypatc
     ).one()
     assert like_event.entrant_id == entrant.id
     assert like_event.active is True
+
+
+def test_giveaway_lifecycle_skips_recent_instagram_private_scan(session, monkeypatch):
+    persona = _create_persona(session, slug="giveaway-private-scan-throttle")
+    instagram = _create_account(session, persona, service="instagram", label="Instagram")
+    post = create_scheduled_post(
+        session,
+        _generic_giveaway_payload(
+            persona.id,
+            [instagram.id],
+            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            channels=[
+                {
+                    "service": "instagram",
+                    "account_id": instagram.id,
+                    "rules": {
+                        "kind": "all",
+                        "children": [{"kind": "atom", "atom": "like_present", "params": {}}],
+                    },
+                }
+            ],
+        ),
+        [],
+    )
+    _mark_posted(post, instagram.id, external_id="ig-media-throttle")
+    channel = post.giveaway_campaign.channels[0]
+    previous_scan_at = datetime.now(timezone.utc)
+    channel.last_private_collected_at = previous_scan_at
+    session.flush()
+
+    def _fail_private_client(credentials):
+        raise AssertionError("Private Instagram scan should be throttled.")
+
+    monkeypatch.setattr("app.services.giveaway_engine._instagram_destination_dependency_issue", lambda: None)
+    monkeypatch.setattr("app.services.giveaway_engine._authenticated_publish_client", _fail_private_client)
+
+    process_giveaway_lifecycle(session, AlertDispatcher(), run_id="run-private-scan-throttle")
+
+    assert session.query(GiveawayEntrant).filter_by(channel_id=channel.id).count() == 0
+    assert channel.last_private_collected_at == previous_scan_at
+
+
+def test_manual_instagram_scan_ignores_private_scan_interval(session, monkeypatch):
+    persona = _create_persona(session, slug="giveaway-manual-private-scan")
+    instagram = _create_account(session, persona, service="instagram", label="Instagram")
+    post = create_scheduled_post(
+        session,
+        _generic_giveaway_payload(
+            persona.id,
+            [instagram.id],
+            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            channels=[
+                {
+                    "service": "instagram",
+                    "account_id": instagram.id,
+                    "rules": {
+                        "kind": "all",
+                        "children": [{"kind": "atom", "atom": "like_present", "params": {}}],
+                    },
+                }
+            ],
+        ),
+        [],
+    )
+    _mark_posted(post, instagram.id, external_id="ig-media-manual")
+    channel = post.giveaway_campaign.channels[0]
+    channel.last_private_collected_at = datetime.now(timezone.utc)
+    session.flush()
+
+    class _FakeInstagramClient:
+        def media_comments(self, media_id, amount=0):
+            assert media_id == "ig-media-manual"
+            return []
+
+        def media_likers(self, media_id):
+            assert media_id == "ig-media-manual"
+            return [SimpleNamespace(pk="ig-user-manual", username="manual.liker")]
+
+    monkeypatch.setattr("app.services.giveaway_engine._instagram_destination_dependency_issue", lambda: None)
+    monkeypatch.setattr("app.services.giveaway_engine._authenticated_publish_client", lambda credentials: _FakeInstagramClient())
+
+    scan_instagram_giveaway_channels(session, post.giveaway_campaign, run_id="run-manual-private-scan")
+
+    entrant = session.query(GiveawayEntrant).filter_by(channel_id=channel.id, provider_user_id="ig-user-manual").one()
+    assert entrant.provider_username == "manual.liker"
+    assert entrant.eligibility_status == ENTRY_STATUS_ELIGIBLE
 
 
 def test_giveaway_lifecycle_updates_qualification_checks_after_collection(session, monkeypatch):

@@ -69,6 +69,7 @@ from app.services.giveaway_engine import (
     confirm_giveaway_winner,
     end_giveaway_campaign,
     process_giveaway_lifecycle,
+    scan_instagram_giveaway_channels,
     serialize_giveaway,
 )
 from app.services.giveaways import (
@@ -525,6 +526,7 @@ async def _read_app_settings_payload(request: Request) -> dict[str, Any]:
         "instagram_webhooks_enabled": str(form.get("instagram_webhooks_enabled", "false")).lower() in {"1", "true", "on", "yes"},
         "instagram_webhook_verify_token": form.get("instagram_webhook_verify_token", ""),
         "instagram_app_secret": form.get("instagram_app_secret", ""),
+        "instagram_private_scan_interval_hours": int(form.get("instagram_private_scan_interval_hours", 24)),
     }
 
 
@@ -1788,6 +1790,29 @@ def api_end_giveaway(post_id: str, request: Request):
                 session,
                 post.giveaway_campaign,
                 _alert_dispatcher(request),
+                run_id=new_run_id(),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        publish_live_update(
+            LIVE_UPDATE_TOPIC_SCHEDULED_POSTS,
+            LIVE_UPDATE_TOPIC_DASHBOARD,
+            LIVE_UPDATE_TOPIC_LOGS,
+        )
+        return serialize_giveaway(updated)
+
+
+@app.post("/scheduled-posts/{post_id}/giveaway/instagram-scan")
+def api_scan_instagram_giveaway(post_id: str, request: Request):
+    principal = require_api_access(request, role="user")
+    with db_session() as session:
+        post = get_post(session, post_id, owner_user_id=_owner_user_id_for_principal(principal))
+        if not post or post.origin_kind != "composer" or post.giveaway_campaign is None:
+            raise HTTPException(status_code=404, detail="Giveaway not found.")
+        try:
+            updated = scan_instagram_giveaway_channels(
+                session,
+                post.giveaway_campaign,
                 run_id=new_run_id(),
             )
         except ValueError as exc:

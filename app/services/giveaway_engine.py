@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import re
 import secrets
 from typing import Any, Callable
@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.adapters.bluesky import _get_client as _get_bluesky_client
 from app.adapters.bluesky import _post_id_from_uri as _bluesky_post_id_from_uri
 from app.adapters.instagram import _authenticated_publish_client, _instagram_destination_dependency_issue
+from app.config import get_settings
 from app.models import (
     Account,
     CanonicalPost,
@@ -98,6 +99,31 @@ def normalize_datetime(value: datetime | None) -> datetime | None:
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc)
+
+
+def instagram_private_scan_interval_hours() -> int:
+    return max(0, int(get_settings().instagram_private_scan_interval_hours or 0))
+
+
+def instagram_private_scan_due_at(channel: GiveawayChannel, *, now: datetime | None = None) -> datetime | None:
+    if channel.service != "instagram":
+        return None
+    interval_hours = instagram_private_scan_interval_hours()
+    if interval_hours <= 0:
+        return None
+    last_private_scan = normalize_datetime(channel.last_private_collected_at)
+    if last_private_scan is None:
+        return now or utcnow()
+    return last_private_scan + timedelta(hours=interval_hours)
+
+
+def instagram_private_scan_is_due(channel: GiveawayChannel, *, now: datetime | None = None) -> bool:
+    if channel.service != "instagram":
+        return False
+    due_at = instagram_private_scan_due_at(channel, now=now)
+    if due_at is None:
+        return False
+    return normalize_datetime(now or utcnow()) >= normalize_datetime(due_at)
 
 
 def giveaway_selectinloads() -> tuple[Any, ...]:
@@ -797,6 +823,10 @@ def serialize_giveaway(campaign: GiveawayCampaign | None) -> GiveawayRead | None
                 target_post_cid=channel.target_post_cid,
                 target_post_url=channel.target_post_url,
                 last_collected_at=channel.last_collected_at,
+                last_private_collected_at=channel.last_private_collected_at,
+                private_scan_due_at=instagram_private_scan_due_at(channel),
+                private_scan_interval_hours=instagram_private_scan_interval_hours() if channel.service == "instagram" else None,
+                private_scan_available=channel.service == "instagram" and _channel_target_ready(channel),
                 last_error=channel.last_error,
                 summary=per_channel[channel.service],
                 entrants=[
@@ -1640,13 +1670,17 @@ def finalize_giveaway_campaign(
     alerts: AlertDispatcher,
     *,
     run_id: str,
+    force_instagram_private_scan: bool = False,
 ) -> GiveawayCampaign:
     hydrate_channel_targets(campaign)
     for channel in campaign.channels:
         if channel.service == "bluesky":
             collect_bluesky_channel_state(session, channel, run_id=run_id)
         elif channel.service == "instagram":
-            refresh_instagram_channel_state(session, channel)
+            if force_instagram_private_scan:
+                refresh_instagram_channel_state(session, channel, force_private_scan=True)
+            else:
+                refresh_instagram_channel_state(session, channel)
         evaluate_channel_entrants(channel)
 
     # Ensure entrant primary keys exist before we freeze candidate ordering.
@@ -1733,7 +1767,7 @@ def end_giveaway_campaign(
     )
 
     try:
-        return finalize_giveaway_campaign(session, campaign, alerts, run_id=run_id)
+        return finalize_giveaway_campaign(session, campaign, alerts, run_id=run_id, force_instagram_private_scan=True)
     except Exception as exc:
         campaign.status = GIVEAWAY_STATUS_FAILED
         campaign.last_error = str(exc)
@@ -1750,6 +1784,52 @@ def end_giveaway_campaign(
         )
         session.flush()
         return campaign
+
+
+def scan_instagram_giveaway_channels(
+    session: Session,
+    campaign: GiveawayCampaign,
+    *,
+    run_id: str,
+) -> GiveawayCampaign:
+    hydrate_channel_targets(campaign)
+    ready_channels = [
+        channel
+        for channel in campaign.channels
+        if channel.service == "instagram" and _channel_target_ready(channel)
+    ]
+    if not ready_channels:
+        raise ValueError("No published Instagram giveaway post is ready to scan.")
+
+    if campaign.status == GIVEAWAY_STATUS_SCHEDULED:
+        campaign.status = GIVEAWAY_STATUS_COLLECTING
+
+    for channel in ready_channels:
+        if channel.status == GIVEAWAY_STATUS_SCHEDULED:
+            channel.status = GIVEAWAY_STATUS_COLLECTING
+        refresh_instagram_channel_state(session, channel, force_private_scan=True)
+        evaluate_channel_entrants(channel)
+
+    campaign.last_evaluated_at = utcnow()
+    channel_errors = [str(channel.last_error) for channel in ready_channels if channel.last_error]
+    campaign.last_error = "; ".join(channel_errors) if channel_errors else None
+    log_run_event(
+        session,
+        run_id=run_id,
+        persona_id=campaign.post.persona_id,
+        persona_name=campaign.post.persona.name if campaign.post.persona else None,
+        service="instagram",
+        operation="giveaway_private_scan",
+        message=f"Ran manual Instagram activity scan for giveaway post {campaign.post_id}.",
+        post_id=campaign.post_id,
+        metadata={
+            "campaign_id": campaign.id,
+            "channel_ids": [channel.id for channel in ready_channels],
+            "private_scan_interval_hours": instagram_private_scan_interval_hours(),
+        },
+    )
+    session.flush()
+    return campaign
 
 
 def process_giveaway_lifecycle(
@@ -1876,102 +1956,111 @@ def advance_giveaway_winner(session: Session, campaign: GiveawayCampaign, *, run
     return campaign
 
 
-def refresh_instagram_channel_state(session: Session, channel: GiveawayChannel) -> None:
+def refresh_instagram_channel_state(
+    session: Session,
+    channel: GiveawayChannel,
+    *,
+    force_private_scan: bool = False,
+) -> None:
     sync_instagram_webhook_events_for_channel(session, channel)
     state_by_user: dict[str, dict[str, Any]] = {}
     for entrant in channel.entrants:
         state_by_user[entrant.provider_user_id] = _normalized_instagram_signal_state(dict(entrant.signal_state_json or {}))
 
-    dependency_issue = _instagram_destination_dependency_issue()
-    if dependency_issue or not str(channel.target_post_external_id or "").strip():
-        channel.last_error = dependency_issue or "Instagram media ID is not available for giveaway verification."
-    else:
-        try:
-            client = _authenticated_publish_client(_account_credentials(channel.account))
-            live_comments = client.media_comments(channel.target_post_external_id, amount=0)
-            observed_comments: list[tuple[GiveawayEntrant, dict[str, Any], dict[str, Any]]] = []
-            for state in state_by_user.values():
-                state["comments"] = []
-            for comment in live_comments or []:
-                user = getattr(comment, "user", None)
-                provider_user_id = str(getattr(user, "pk", "") or "").strip()
-                provider_username = str(getattr(user, "username", "") or "").strip() or None
-                if not provider_user_id:
-                    continue
-                existing = state_by_user.setdefault(provider_user_id, _normalized_instagram_signal_state({}))
-                existing["comments"].append(
-                    {
-                        "comment_id": str(getattr(comment, "pk", "") or "").strip() or None,
-                        "text": str(getattr(comment, "text", "") or "").strip(),
-                        "source": "close_time_live",
-                    }
-                )
-                entrant = get_or_create_channel_entrant(
-                    channel,
-                    provider_user_id=provider_user_id,
-                    provider_username=provider_username,
-                    display_label=provider_username or provider_user_id,
-                )
-                entrant.signal_state_json = dict(entrant.signal_state_json or {})
-                observed_comments.append(
-                    (
-                        entrant,
-                        existing["comments"][-1],
+    should_run_private_scan = force_private_scan or instagram_private_scan_is_due(channel)
+    if should_run_private_scan:
+        private_scan_started_at = utcnow()
+        channel.last_private_collected_at = private_scan_started_at
+        channel.last_collected_at = private_scan_started_at
+        dependency_issue = _instagram_destination_dependency_issue()
+        if dependency_issue or not str(channel.target_post_external_id or "").strip():
+            channel.last_error = dependency_issue or "Instagram media ID is not available for giveaway verification."
+        else:
+            try:
+                client = _authenticated_publish_client(_account_credentials(channel.account))
+                live_comments = client.media_comments(channel.target_post_external_id, amount=0)
+                observed_comments: list[tuple[GiveawayEntrant, dict[str, Any], dict[str, Any]]] = []
+                for state in state_by_user.values():
+                    state["comments"] = []
+                for comment in live_comments or []:
+                    user = getattr(comment, "user", None)
+                    provider_user_id = str(getattr(user, "pk", "") or "").strip()
+                    provider_username = str(getattr(user, "username", "") or "").strip() or None
+                    if not provider_user_id:
+                        continue
+                    existing = state_by_user.setdefault(provider_user_id, _normalized_instagram_signal_state({}))
+                    existing["comments"].append(
                         {
-                            "created_time": (
-                                normalize_datetime(getattr(comment, "created_at_utc", None)).isoformat()
-                                if getattr(comment, "created_at_utc", None)
-                                else None
-                            ),
-                        },
+                            "comment_id": str(getattr(comment, "pk", "") or "").strip() or None,
+                            "text": str(getattr(comment, "text", "") or "").strip(),
+                            "source": "close_time_live",
+                        }
                     )
-                )
-            session.flush()
-            _sync_instagram_live_comment_events(session, channel, observed_comments)
+                    entrant = get_or_create_channel_entrant(
+                        channel,
+                        provider_user_id=provider_user_id,
+                        provider_username=provider_username,
+                        display_label=provider_username or provider_user_id,
+                    )
+                    entrant.signal_state_json = dict(entrant.signal_state_json or {})
+                    observed_comments.append(
+                        (
+                            entrant,
+                            existing["comments"][-1],
+                            {
+                                "created_time": (
+                                    normalize_datetime(getattr(comment, "created_at_utc", None)).isoformat()
+                                    if getattr(comment, "created_at_utc", None)
+                                    else None
+                                ),
+                            },
+                        )
+                    )
+                session.flush()
+                _sync_instagram_live_comment_events(session, channel, observed_comments)
 
-            live_likers = client.media_likers(channel.target_post_external_id)
-            observed_likes: list[tuple[GiveawayEntrant, dict[str, Any]]] = []
-            for state in state_by_user.values():
-                state["likes"] = []
-                state["like_present"] = False
-                state["like_collection_checked"] = True
-            for liker in live_likers or []:
-                provider_user_id, provider_username = _instagram_user_identity(liker)
-                if not provider_user_id:
-                    continue
-                existing = state_by_user.setdefault(provider_user_id, _normalized_instagram_signal_state({}))
-                existing["like_collection_checked"] = True
-                entrant = get_or_create_channel_entrant(
-                    channel,
-                    provider_user_id=provider_user_id,
-                    provider_username=provider_username,
-                    display_label=provider_username or provider_user_id,
-                )
-                like_summary = {
-                    "like_id": f"like:{provider_user_id}:{channel.target_post_external_id}",
-                    "media_id": channel.target_post_external_id,
-                    "actor_id": provider_user_id,
-                    "actor_username": provider_username,
-                    "source": INSTAGRAM_LIVE_COLLECTION_SOURCE,
-                }
-                existing["likes"] = _append_unique_evidence_item(
-                    list(existing.get("likes") or []),
-                    like_summary,
-                    key_fields=("like_id",),
-                )
-                existing["like_present"] = True
-                entrant.signal_state_json = dict(entrant.signal_state_json or {})
-                observed_likes.append((entrant, like_summary))
-            session.flush()
-            _sync_instagram_live_like_events(session, channel, observed_likes)
-            channel.last_error = None
-        except Exception as exc:
-            channel.last_error = f"Instagram live activity collection failed: {exc}"
+                live_likers = client.media_likers(channel.target_post_external_id)
+                observed_likes: list[tuple[GiveawayEntrant, dict[str, Any]]] = []
+                for state in state_by_user.values():
+                    state["likes"] = []
+                    state["like_present"] = False
+                    state["like_collection_checked"] = True
+                for liker in live_likers or []:
+                    provider_user_id, provider_username = _instagram_user_identity(liker)
+                    if not provider_user_id:
+                        continue
+                    existing = state_by_user.setdefault(provider_user_id, _normalized_instagram_signal_state({}))
+                    existing["like_collection_checked"] = True
+                    entrant = get_or_create_channel_entrant(
+                        channel,
+                        provider_user_id=provider_user_id,
+                        provider_username=provider_username,
+                        display_label=provider_username or provider_user_id,
+                    )
+                    like_summary = {
+                        "like_id": f"like:{provider_user_id}:{channel.target_post_external_id}",
+                        "media_id": channel.target_post_external_id,
+                        "actor_id": provider_user_id,
+                        "actor_username": provider_username,
+                        "source": INSTAGRAM_LIVE_COLLECTION_SOURCE,
+                    }
+                    existing["likes"] = _append_unique_evidence_item(
+                        list(existing.get("likes") or []),
+                        like_summary,
+                        key_fields=("like_id",),
+                    )
+                    existing["like_present"] = True
+                    entrant.signal_state_json = dict(entrant.signal_state_json or {})
+                    observed_likes.append((entrant, like_summary))
+                session.flush()
+                _sync_instagram_live_like_events(session, channel, observed_likes)
+                channel.last_error = None
+            except Exception as exc:
+                channel.last_error = f"Instagram live activity collection failed: {exc}"
 
     for entrant in channel.entrants:
         state = state_by_user.setdefault(entrant.provider_user_id, _normalized_instagram_signal_state(dict(entrant.signal_state_json or {})))
         entrant.signal_state_json = _normalized_instagram_signal_state(state)
-    channel.last_collected_at = utcnow()
     session.flush()
     publish_live_update(LIVE_UPDATE_TOPIC_DASHBOARD, LIVE_UPDATE_TOPIC_LOGS)
 

@@ -69,6 +69,7 @@ class AppSettingsUpdate(BaseModel):
     instagram_webhooks_enabled: bool = False
     instagram_webhook_verify_token: str = ""
     instagram_app_secret: str = ""
+    instagram_private_scan_interval_hours: int = Field(default=24, ge=0, le=168)
 
     @field_validator("auth_oidc_scope", mode="before")
     @classmethod
@@ -355,6 +356,10 @@ class GiveawayChannelRead(BaseModel):
     target_post_cid: str | None = None
     target_post_url: str | None = None
     last_collected_at: datetime | None = None
+    last_private_collected_at: datetime | None = None
+    private_scan_due_at: datetime | None = None
+    private_scan_interval_hours: int | None = None
+    private_scan_available: bool = False
     last_error: str | None = None
     summary: GiveawayChannelSummaryRead = Field(default_factory=GiveawayChannelSummaryRead)
     entrants: list[GiveawayEntrantRead] = Field(default_factory=list)

@@ -40,6 +40,7 @@ APP_SETTING_KEYS = [
     "INSTAGRAM_WEBHOOKS_ENABLED",
     "INSTAGRAM_WEBHOOK_VERIFY_TOKEN",
     "INSTAGRAM_APP_SECRET",
+    "INSTAGRAM_PRIVATE_SCAN_INTERVAL_HOURS",
 ]
 
 
@@ -115,6 +116,7 @@ def test_update_app_settings_writes_env_and_refreshes_runtime(tmp_path):
                 instagram_webhooks_enabled=True,
                 instagram_webhook_verify_token="verify-me",
                 instagram_app_secret="instagram-secret",
+                instagram_private_scan_interval_hours=12,
             )
         )
 
@@ -128,9 +130,11 @@ def test_update_app_settings_writes_env_and_refreshes_runtime(tmp_path):
         assert "AUTH_OIDC_ISSUER_URL=https://auth.example.com" in text
         assert "INSTAGRAM_WEBHOOKS_ENABLED=true" in text
         assert "INSTAGRAM_WEBHOOK_VERIFY_TOKEN=verify-me" in text
+        assert "INSTAGRAM_PRIVATE_SCAN_INTERVAL_HOURS=12" in text
         assert updated.instance_name == "Test Node"
         assert updated.app_base_url == "https://lynxposter.example.com"
         assert updated.scheduler_automation_interval_seconds == 600
+        assert updated.instagram_private_scan_interval_hours == 12
 
         current = get_settings()
         assert current.instance_name == "Test Node"
@@ -144,6 +148,7 @@ def test_update_app_settings_writes_env_and_refreshes_runtime(tmp_path):
         assert current.auth_oidc_admin_groups == "admins"
         assert current.instagram_webhooks_enabled is True
         assert current.instagram_webhook_verify_token == "verify-me"
+        assert current.instagram_private_scan_interval_hours == 12
     finally:
         _restore_env(previous)
 

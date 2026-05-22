@@ -438,6 +438,7 @@ const savedAttachmentEmpty = document.getElementById("saved-attachment-empty");
 const savedMediaCount = document.getElementById("saved-media-count");
 const deletePostButton = document.getElementById("delete-post-button");
 const endGiveawayButton = document.getElementById("end-giveaway-button");
+const instagramScanButton = document.getElementById("instagram-scan-button");
 const postTypeSelect = document.getElementById("post-type-select");
 const giveawayConfigPanel = document.getElementById("giveaway-config-panel");
 const giveawayTargetHint = document.getElementById("giveaway-target-hint");
@@ -905,6 +906,26 @@ if (endGiveawayButton) {
     } finally {
       endGiveawayButton.disabled = false;
       endGiveawayButton.textContent = "End Giveaway";
+    }
+  });
+}
+
+if (instagramScanButton) {
+  instagramScanButton.addEventListener("click", async () => {
+    const confirmed = window.confirm("Run an Instagram private activity scan now? This uses the saved Instagram login and should be used intentionally.");
+    if (!confirmed) return;
+    instagramScanButton.disabled = true;
+    instagramScanButton.textContent = "Scanning Instagram...";
+    try {
+      const response = await fetch(`/scheduled-posts/${postId}/giveaway/instagram-scan`, {method: "POST"});
+      if (!response.ok) {
+        alert(await window.readApiMessage(response));
+        return;
+      }
+      window.location.reload();
+    } finally {
+      instagramScanButton.disabled = false;
+      instagramScanButton.textContent = "Scan Instagram Now";
     }
   });
 }

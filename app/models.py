@@ -363,6 +363,7 @@ class GiveawayChannel(Base):
     target_post_cid: Mapped[str | None] = mapped_column(String(255), nullable=True)
     target_post_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_collected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_private_collected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)

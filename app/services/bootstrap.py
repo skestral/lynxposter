@@ -64,6 +64,10 @@ def _apply_additive_migrations() -> None:
                 connection.exec_driver_sql('ALTER TABLE "canonical_posts" ADD COLUMN post_type VARCHAR(32) NOT NULL DEFAULT "standard"')
             connection.exec_driver_sql('CREATE INDEX IF NOT EXISTS "ix_canonical_posts_post_type" ON "canonical_posts" ("post_type")')
             connection.exec_driver_sql('UPDATE "canonical_posts" SET "post_type" = "giveaway" WHERE "post_type" = "instagram_giveaway"')
+        if "giveaway_channels" in tables:
+            giveaway_channel_columns = {column["name"] for column in inspector.get_columns("giveaway_channels")}
+            if "last_private_collected_at" not in giveaway_channel_columns:
+                connection.exec_driver_sql('ALTER TABLE "giveaway_channels" ADD COLUMN last_private_collected_at DATETIME')
 
 
 def _migrate_legacy_giveaways() -> None:

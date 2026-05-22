@@ -133,6 +133,7 @@ class Settings:
     instagram_webhooks_enabled: bool
     instagram_webhook_verify_token: str
     instagram_app_secret: str
+    instagram_private_scan_interval_hours: int
     scheduler_automation_interval_seconds: int
     media_orphan_retention_days: int
     app_port: int
@@ -200,6 +201,7 @@ def get_settings() -> Settings:
         instagram_webhooks_enabled=_env_bool("INSTAGRAM_WEBHOOKS_ENABLED", False),
         instagram_webhook_verify_token=_env_str("INSTAGRAM_WEBHOOK_VERIFY_TOKEN", ""),
         instagram_app_secret=_env_str("INSTAGRAM_APP_SECRET", ""),
+        instagram_private_scan_interval_hours=_env_int("INSTAGRAM_PRIVATE_SCAN_INTERVAL_HOURS", 24),
         scheduler_automation_interval_seconds=_env_int("SCHEDULER_AUTORUN_INTERVAL_SECONDS", 300),
         media_orphan_retention_days=_env_int("MEDIA_ORPHAN_RETENTION_DAYS", 30),
         app_port=_env_int("APP_PORT", 8000),
