@@ -53,12 +53,13 @@ The app serves on `http://127.0.0.1:8000/`.
 
 ## Instagram notes
 
-- Instagram inbound polling still uses the Graph access token (`INSTAGRAM_API_KEY`).
-- Instagram outbound publishing now uses `instagrapi` direct uploads, so `APP_BASE_URL` does not need to be public just for Instagram publishing.
-- For publishing, configure either `INSTAGRAPI_SESSIONID` or both `INSTAGRAPI_USERNAME` and `INSTAGRAPI_PASSWORD`.
+- Instagram inbound polling uses the Graph access token (`INSTAGRAM_API_KEY`).
+- Instagram outbound publishing uses the official Instagram Graph content publishing flow. Configure a Graph access token plus the Instagram Professional Account ID, and set `APP_BASE_URL` to the externally reachable HTTPS URL for this app.
+- During Graph publishing, Meta fetches scheduled media from `https://<your-public-url>/media/instagram/<attachment-id>/<filename>`. That route is intentionally public and unauthenticated; it serves existing files from `app_data/uploads/` and `app_data/imported_media/` without creating long-lived staging copies.
 - Instagram giveaway webhooks use `INSTAGRAM_WEBHOOKS_ENABLED`, `INSTAGRAM_WEBHOOK_VERIFY_TOKEN`, and `INSTAGRAM_APP_SECRET`, and the Settings page shows the callback URL at `/webhooks/instagram`.
 - Instagram giveaway private scans are rate-limited by `INSTAGRAM_PRIVATE_SCAN_INTERVAL_HOURS`, which defaults to `24`. Set it to `0` for manual scans only.
-- `instagrapi` is an unofficial/private API client. Session IDs are often the most reliable option when Instagram challenge or MFA flows block password logins.
+- The remaining private Instagram client usage is limited to explicit giveaway private scans and the login diagnostic button. Keep that interval conservative if the account has seen automation warnings.
+- Unreferenced media files are removed by the existing storage cleanup after `MEDIA_ORPHAN_RETENTION_DAYS`.
 
 ### Testing Instagram webhooks with a tunnel
 

@@ -158,9 +158,10 @@ def build_default_persona_seed() -> tuple[dict[str, Any], list[dict[str, Any]]]:
                 label="Instagram",
                 handle_or_identifier=instagrapi_username or instagram_user_id or "Instagram",
                 source_enabled=bool(instagram_key),
-                destination_enabled=bool(instagrapi_sessionid or (instagrapi_username and instagrapi_password)),
+                destination_enabled=bool(instagram_key and instagram_user_id),
                 credentials_json={
                     "api_key": instagram_key,
+                    "instagram_user_id": instagram_user_id,
                     "instagrapi_username": instagrapi_username,
                     "instagrapi_password": instagrapi_password,
                     "instagrapi_sessionid": instagrapi_sessionid,

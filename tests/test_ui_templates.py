@@ -67,8 +67,9 @@ def test_instagram_service_definition_exposes_destination_credentials():
     assert definition.destination_supported is True
     assert fields["api_key"].input_type == "password"
     assert fields["api_key"].label == "Graph Access Token"
-    assert fields["instagrapi_password"].input_type == "password"
-    assert fields["instagrapi_sessionid"].label == "Session ID"
+    assert fields["instagram_user_id"].label == "Instagram Professional Account ID"
+    publish_fields = {field.name: field for field in definition.publish_setting_fields}
+    assert publish_fields["video_media_type"].label == "Single Video Type"
 
 
 def test_mastodon_and_twitter_service_definitions_expose_language_publish_fields():
@@ -121,8 +122,8 @@ def test_persona_detail_template_renders_telegram_controls_and_secret_toggles():
     assert 'data-field-name="channel_id"' in html
     assert "secret-toggle-button" in html
     assert "Channel ID" in html
-    assert 'data-field-name="instagrapi_sessionid"' in html
-    assert 'data-field-name="instagrapi_username"' in html
+    assert 'data-field-name="instagram_user_id"' in html
+    assert "Instagram Professional Account ID" in html
     assert 'id="persona-detail-tabs"' in html
 
 
@@ -163,6 +164,7 @@ def test_persona_detail_template_renders_instagram_token_tracking_controls():
                     destination_enabled=True,
                     credentials_json={
                         "api_key": "secret",
+                        "instagram_user_id": "17841400000000000",
                         "instagrapi_username": "larkyn.lynx",
                         "instagrapi_sessionid": "12345%3Aabcdef1234567890abcdef1234567890",
                     },
@@ -172,6 +174,7 @@ def test_persona_detail_template_renders_instagram_token_tracking_controls():
                 ),
                 "account_read": SimpleNamespace(source_supported=True, destination_supported=True, configured=True),
                 "definition": definition,
+                "publish_field_values": {},
                 "instagram_token_status": {
                     "token_present": True,
                     "tracking_enabled": True,

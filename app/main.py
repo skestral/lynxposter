@@ -124,7 +124,7 @@ from app.services.posts import (
 )
 from app.services.scheduler import CrossposterScheduler
 from app.services.sandbox import build_sandbox_preview
-from app.services.storage import store_upload
+from app.services.storage import public_instagram_media_filename, store_upload
 from app.services.ui import (
     ui_mode_label,
     ui_theme_catalog_for_client,
@@ -723,6 +723,26 @@ def public_attachment(attachment_id: str):
         if file_path is None:
             raise HTTPException(status_code=404, detail="Attachment file not found.")
         return FileResponse(path=file_path, media_type=attachment.mime_type or None)
+
+
+@app.get("/media/instagram/{attachment_id}/{filename}")
+def public_instagram_media(attachment_id: str, filename: str):
+    with db_session() as session:
+        attachment = session.get(MediaAttachment, attachment_id)
+        if attachment is None:
+            raise HTTPException(status_code=404, detail="Attachment not found.")
+        expected_filename = public_instagram_media_filename(attachment.storage_path)
+        if filename != expected_filename:
+            raise HTTPException(status_code=404, detail="Attachment file not found.")
+        file_path = _public_attachment_path(attachment)
+        if file_path is None:
+            raise HTTPException(status_code=404, detail="Attachment file not found.")
+        return FileResponse(
+            path=file_path,
+            media_type=attachment.mime_type or None,
+            filename=expected_filename,
+            headers={"Cache-Control": "public, max-age=3600"},
+        )
 
 
 @app.get("/auth/login")

@@ -397,7 +397,7 @@
 
                                         <div class="d-flex gap-2 flex-wrap">
                                             <button class="btn btn-outline-primary" type="submit">Save Account</button>
-                                            {% if entry.account.service == "instagram" %}
+                                            {% if entry.account.service == "instagram" and (entry.account.credentials_json.get("instagrapi_sessionid") or (entry.account.credentials_json.get("instagrapi_username") and entry.account.credentials_json.get("instagrapi_password"))) %}
                                             <button
                                                 class="btn btn-outline-secondary instagram-login-validate-button"
                                                 type="button"

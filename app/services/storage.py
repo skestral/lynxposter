@@ -51,6 +51,16 @@ def delete_managed_media_file(path_like: str | Path) -> bool:
     return True
 
 
+def public_instagram_media_filename(storage_path: str | Path) -> str:
+    return _normalized_filename(str(storage_path), default_name="instagram-media.bin")
+
+
+def public_instagram_media_url(attachment_id: str, storage_path: str | Path, *, base_url: str) -> str:
+    normalized_base = str(base_url or "").strip().rstrip("/")
+    filename = public_instagram_media_filename(storage_path)
+    return f"{normalized_base}/media/instagram/{attachment_id}/{filename}"
+
+
 def prune_unreferenced_managed_media_files(
     referenced_paths: set[str],
     *,

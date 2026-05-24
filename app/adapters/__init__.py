@@ -89,11 +89,12 @@ SERVICE_REGISTRY: dict[str, ServiceDefinition] = {
         composer_constraints=ComposerConstraintDefinition(
             max_attachments=10,
             requires_media=True,
-            allowed_image_mime_types=("image/jpeg", "image/jpg", "image/pjpeg", "image/png", "image/webp"),
+            allowed_image_mime_types=("image/jpeg", "image/jpg", "image/pjpeg"),
             supported_attachment_kinds=("image", "video"),
             notes=(
-                "Instagram destination publishing uses instagrapi direct uploads, so Public Base URL is not required.",
-                "Supported inputs are JPEG, PNG, or WEBP images plus MP4 videos for feed posts and carousels.",
+                "Instagram destination publishing uses the official Graph content publishing flow.",
+                "Public Base URL must be an externally reachable HTTPS URL so Meta can fetch each attachment.",
+                "Supported inputs are JPEG images and MP4 videos.",
             ),
         ),
         credential_fields=(
@@ -101,30 +102,22 @@ SERVICE_REGISTRY: dict[str, ServiceDefinition] = {
                 "api_key",
                 "Graph Access Token",
                 input_type="password",
-                help_text="Used for inbound polling and token-lifecycle tracking. It is not used by instagrapi publishing.",
+                help_text="Used for inbound polling, token-lifecycle tracking, and Graph publishing.",
             ),
             AccountFieldDefinition(
-                "instagrapi_username",
-                "Login Username",
-                help_text="Used for Instagram publishing when Session ID is blank.",
-            ),
-            AccountFieldDefinition(
-                "instagrapi_password",
-                "Login Password",
-                input_type="password",
-                help_text="Used together with Login Username for Instagram publishing.",
-            ),
-            AccountFieldDefinition(
-                "instagrapi_sessionid",
-                "Session ID",
-                input_type="password",
-                help_text=(
-                    "Preferred for publishing when you want to avoid storing the account password or when challenge flows make password login unreliable. "
-                    "If provided, LynxPoster uses this instead of Login Username and Login Password."
-                ),
+                "instagram_user_id",
+                "Instagram Professional Account ID",
+                help_text="The IG user id for the Business or Creator account connected to your Meta app.",
             ),
         ),
         source_setting_fields=(AccountFieldDefinition("post_time_limit", "Initial Poll Lookback (hours)", input_type="number"),),
+        publish_setting_fields=(
+            AccountFieldDefinition(
+                "video_media_type",
+                "Single Video Type",
+                help_text="Use REELS by default. STORIES is also accepted for story publishing.",
+            ),
+        ),
     ),
     "mastodon": ServiceDefinition(
         service="mastodon",
@@ -323,7 +316,7 @@ def destination_configured(service: str, credentials: dict[str, Any]) -> bool:
     if service == "bluesky":
         return bool(credentials.get("session_string") or (credentials.get("handle") and credentials.get("password")))
     if service == "instagram":
-        return bool(credentials.get("instagrapi_sessionid") or (credentials.get("instagrapi_username") and credentials.get("instagrapi_password")))
+        return bool(credentials.get("api_key") and credentials.get("instagram_user_id"))
     if service == "mastodon":
         return bool(credentials.get("instance") and credentials.get("token"))
     if service == "twitter":

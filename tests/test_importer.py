@@ -108,5 +108,4 @@ def test_apply_legacy_seed_to_persona_enables_instagram_destination_when_instagr
     assert instagram.source_enabled is True
     assert instagram.destination_enabled is True
     assert instagram.credentials_json["api_key"] == "instagram-token"
-    assert instagram.credentials_json["instagrapi_username"] == "larkyn.lynx"
-    assert instagram.credentials_json["instagrapi_password"] == "insta-password"
+    assert instagram.credentials_json["instagram_user_id"] == "17841400000000000"

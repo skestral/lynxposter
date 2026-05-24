@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import shutil
+import time
 from datetime import datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -12,15 +13,21 @@ from sqlalchemy.orm import Session
 
 from app.adapters.base import ConfigurationError, DestinationAdapter, SourceAdapter, get_account_credentials
 from app.adapters.common import cutoff_for_initial_poll, import_existing_posts_on_first_scan, is_initial_sync, now_utc, service_body
+from app.config import get_settings
 from app.domain import CanonicalPostPayload, ExternalPostRefPayload, PollResult, PublishPreview, PublishResult, ValidationIssue
-from app.models import Account, AccountSyncState, CanonicalPost, Persona
+from app.models import Account, AccountSyncState, CanonicalPost, MediaAttachment, Persona
 from app.services.instagram_private_api import apply_instagram_private_settings, get_instagram_private_settings
-from app.services.storage import download_media
+from app.services.storage import download_media, public_instagram_media_url
 
 INSTAGRAM_API_VERSION = "v25.0"
 INSTAGRAM_GRAPH_API_BASE_URL = f"https://graph.instagram.com/{INSTAGRAM_API_VERSION}"
+INSTAGRAM_PUBLISH_API_BASE_URL = f"https://graph.facebook.com/{INSTAGRAM_API_VERSION}"
 INSTAGRAM_SUPPORTED_IMAGE_MIME_TYPES = {"image/jpeg", "image/jpg", "image/pjpeg", "image/png", "image/webp"}
 INSTAGRAM_SUPPORTED_VIDEO_MIME_TYPES = {"video/mp4"}
+INSTAGRAM_GRAPH_IMAGE_MIME_TYPES = {"image/jpeg", "image/jpg", "image/pjpeg"}
+INSTAGRAM_GRAPH_VIDEO_MIME_TYPES = {"video/mp4"}
+INSTAGRAM_CONTAINER_READY_STATUSES = {"FINISHED", "PUBLISHED"}
+INSTAGRAM_CONTAINER_PENDING_STATUSES = {"IN_PROGRESS", "PROCESSING", "CREATED"}
 
 
 def _load_instagram_dependencies() -> tuple[Any | None, Any | None, type[Exception]]:
@@ -68,6 +75,16 @@ def _configured_graph_access_token(config: dict[str, Any]) -> str:
     return str(config.get("api_key") or "").strip()
 
 
+def _configured_instagram_user_id(config: dict[str, Any]) -> str:
+    return str(
+        config.get("instagram_user_id")
+        or config.get("ig_user_id")
+        or config.get("professional_account_id")
+        or config.get("provider_account_id")
+        or ""
+    ).strip()
+
+
 def _configured_instagrapi_username(config: dict[str, Any]) -> str:
     return str(config.get("instagrapi_username") or "").strip()
 
@@ -87,6 +104,107 @@ def _instagrapi_destination_issue(config: dict[str, Any]) -> str | None:
     if sessionid or (username and password):
         return None
     return "Instagram publishing requires Session ID or both Login Username and Login Password."
+
+
+def _instagram_graph_destination_issue(config: dict[str, Any]) -> str | None:
+    if not _configured_graph_access_token(config):
+        return "Instagram Graph publishing requires a Graph access token."
+    if not _configured_instagram_user_id(config):
+        return "Instagram Graph publishing requires the Instagram professional account ID."
+    base_url = get_settings().app_base_url.strip()
+    if not base_url:
+        return "Instagram Graph publishing requires Public Base URL so Meta can fetch media."
+    if not base_url.startswith("https://"):
+        return "Instagram Graph publishing requires Public Base URL to be an externally reachable HTTPS URL."
+    return None
+
+
+def _instagram_public_media_url(attachment: MediaAttachment) -> str:
+    return public_instagram_media_url(attachment.id, attachment.storage_path, base_url=get_settings().app_base_url)
+
+
+def _raise_graph_error(response: requests.Response, *, action: str) -> None:
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = {"body": response.text}
+    if response.ok:
+        return
+    error_payload = payload.get("error") if isinstance(payload, dict) else None
+    if isinstance(error_payload, dict):
+        message = error_payload.get("message") or error_payload.get("error_user_msg") or str(error_payload)
+    else:
+        message = str(payload)
+    raise RuntimeError(f"Instagram Graph {action} failed: {message}")
+
+
+def _post_graph(path: str, data: dict[str, Any]) -> dict[str, Any]:
+    response = requests.post(f"{INSTAGRAM_PUBLISH_API_BASE_URL}/{path.lstrip('/')}", data=data, timeout=60)
+    _raise_graph_error(response, action=path)
+    payload = response.json()
+    return payload if isinstance(payload, dict) else {}
+
+
+def _get_graph(path: str, params: dict[str, Any]) -> dict[str, Any]:
+    response = requests.get(f"{INSTAGRAM_PUBLISH_API_BASE_URL}/{path.lstrip('/')}", params=params, timeout=30)
+    _raise_graph_error(response, action=path)
+    payload = response.json()
+    return payload if isinstance(payload, dict) else {}
+
+
+def _graph_container_id(payload: dict[str, Any]) -> str:
+    container_id = str(payload.get("id") or "").strip()
+    if not container_id:
+        raise RuntimeError("Instagram Graph did not return a media container id.")
+    return container_id
+
+
+def _wait_for_container_ready(container_id: str, access_token: str) -> dict[str, Any]:
+    last_payload: dict[str, Any] = {}
+    for attempt in range(8):
+        payload = _get_graph(
+            container_id,
+            {"fields": "status_code,status", "access_token": access_token},
+        )
+        last_payload = payload
+        status_code = str(payload.get("status_code") or "").upper()
+        if status_code in INSTAGRAM_CONTAINER_READY_STATUSES or not status_code:
+            return payload
+        if status_code == "ERROR":
+            raise RuntimeError(f"Instagram Graph media container {container_id} failed processing: {payload.get('status') or 'unknown error'}")
+        if status_code not in INSTAGRAM_CONTAINER_PENDING_STATUSES:
+            return payload
+        if attempt < 7:
+            time.sleep(2)
+    raise RuntimeError(f"Instagram Graph media container {container_id} was not ready before the publish timeout.")
+
+
+def _graph_create_container(
+    *,
+    instagram_user_id: str,
+    access_token: str,
+    data: dict[str, Any],
+    wait_until_ready: bool = True,
+) -> tuple[str, dict[str, Any]]:
+    payload = _post_graph(f"{instagram_user_id}/media", {**data, "access_token": access_token})
+    container_id = _graph_container_id(payload)
+    status_payload = _wait_for_container_ready(container_id, access_token) if wait_until_ready else {}
+    return container_id, {"create": payload, "status": status_payload}
+
+
+def _graph_publish_container(instagram_user_id: str, access_token: str, container_id: str) -> dict[str, Any]:
+    return _post_graph(
+        f"{instagram_user_id}/media_publish",
+        {"creation_id": container_id, "access_token": access_token},
+    )
+
+
+def _graph_permalink(access_token: str, media_id: str) -> str | None:
+    if not media_id:
+        return None
+    payload = _get_graph(media_id, {"fields": "permalink", "access_token": access_token})
+    permalink = str(payload.get("permalink") or "").strip()
+    return permalink or None
 
 
 def _flatten_image_to_jpeg(source_path: Path, target_path: Path) -> None:
@@ -323,15 +441,11 @@ class InstagramDestinationAdapter(DestinationAdapter):
         config = get_account_credentials(account)
         attachments = sorted(post.attachments, key=lambda item: item.sort_order)
 
-        dependency_issue = _instagram_destination_dependency_issue()
-        if dependency_issue:
-            return [ValidationIssue(service="instagram", field="dependencies", message=dependency_issue)]
-
         issues: list[ValidationIssue] = []
 
-        auth_issue = _instagrapi_destination_issue(config)
+        auth_issue = _instagram_graph_destination_issue(config)
         if auth_issue:
-            issues.append(ValidationIssue(service="instagram", field="instagrapi_sessionid", message=auth_issue))
+            issues.append(ValidationIssue(service="instagram", field="graph", message=auth_issue))
 
         if not attachments:
             issues.append(ValidationIssue(service="instagram", field="media", message="Instagram publishing requires at least one image or video attachment."))
@@ -341,16 +455,16 @@ class InstagramDestinationAdapter(DestinationAdapter):
 
         for attachment in attachments:
             mime_type = str(attachment.mime_type or "").lower()
-            if mime_type in INSTAGRAM_SUPPORTED_IMAGE_MIME_TYPES:
+            if mime_type in INSTAGRAM_GRAPH_IMAGE_MIME_TYPES:
                 continue
-            if mime_type in INSTAGRAM_SUPPORTED_VIDEO_MIME_TYPES:
+            if mime_type in INSTAGRAM_GRAPH_VIDEO_MIME_TYPES:
                 continue
             if mime_type.startswith("image/"):
                 issues.append(
                     ValidationIssue(
                         service="instagram",
                         field="media",
-                        message=f"{attachment.storage_path} must be JPEG, PNG, or WEBP for Instagram publishing.",
+                        message=f"{attachment.storage_path} must be JPEG for Instagram Graph publishing.",
                     )
                 )
                 continue
@@ -382,30 +496,37 @@ class InstagramDestinationAdapter(DestinationAdapter):
     ) -> PublishPreview:
         attachments = sorted(post.attachments, key=lambda item: item.sort_order)
         caption = service_body(post, account)
-        dependency_issue = _instagram_destination_dependency_issue()
 
         if len(attachments) <= 1:
-            upload_call = "client.video_upload(path='<local-video-path>.mp4', caption=<caption>)"
+            container_shape: dict[str, Any] = {"caption": "<caption>", "video_url": "<public-video-url>", "media_type": "REELS"}
             if not attachments or str(attachments[0].mime_type or "").lower().startswith("image/"):
-                upload_call = "client.photo_upload(path='<local-image-path>.jpg', caption=<caption>)"
+                container_shape = {"caption": "<caption>", "image_url": "<public-image-url>"}
         else:
-            upload_call = "client.album_upload(paths=['<local-media-path-1>', '<local-media-path-2>'], caption=<caption>)"
+            container_shape = {
+                "media_type": "CAROUSEL",
+                "caption": "<caption>",
+                "children": ["<child-container-id-1>", "<child-container-id-2>"],
+            }
 
         notes = [
-            "Instagram destination publishing uses instagrapi direct uploads from LynxPoster's local media files.",
-            "Public Base URL is not required for Instagram destination publishing.",
+            "Instagram destination publishing uses the official Graph content publishing flow.",
+            "Meta fetches each attachment from LynxPoster's public /media/instagram/... URL.",
         ]
-        if dependency_issue:
-            notes.append(dependency_issue)
+        graph_issue = _instagram_graph_destination_issue(get_account_credentials(account))
+        if graph_issue:
+            notes.append(graph_issue)
         if any(str(attachment.alt_text or "").strip() for attachment in attachments):
-            notes.append("Instagram alt text is not currently forwarded through the instagrapi feed upload path.")
+            notes.append("Alt text is sent for single image posts when present.")
 
         return PublishPreview(
             service="instagram",
-            action="instagram_private_api_publish",
+            action="instagram_graph_publish",
             rendered_body=caption,
-            endpoint_label="instagrapi Private API",
-            request_shape={"call": upload_call},
+            endpoint_label="Instagram Graph API",
+            request_shape={
+                "create_container": container_shape,
+                "publish_container": {"creation_id": "<container-id>"},
+            },
             notes=notes,
         )
 
@@ -419,43 +540,99 @@ class InstagramDestinationAdapter(DestinationAdapter):
         context: dict[str, str | None] | None = None,
     ) -> PublishResult:
         config = get_account_credentials(account)
-        dependency_issue = _instagram_destination_dependency_issue()
-        if dependency_issue:
-            raise ConfigurationError(dependency_issue)
-        if _instagrapi_destination_issue(config):
-            raise ConfigurationError("Instagram publishing requires Session ID or both Login Username and Login Password.")
+        graph_issue = _instagram_graph_destination_issue(config)
+        if graph_issue:
+            raise ConfigurationError(graph_issue)
 
         attachments = sorted(post.attachments, key=lambda item: item.sort_order)
         if not attachments:
             raise ConfigurationError("Instagram publishing requires at least one image or video attachment.")
-
-        client = _authenticated_publish_client(config)
-        _persist_publish_client_state(account, client)
+        if len(attachments) > 10:
+            raise ConfigurationError("Instagram carousel posts support up to 10 attachments.")
 
         caption = service_body(post, account)
-        with TemporaryDirectory(prefix="lynxposter-instagram-") as temp_dir:
-            prepared_paths = _prepared_upload_paths(attachments, temp_dir=temp_dir)
-            if len(prepared_paths) == 1:
-                if str(attachments[0].mime_type or "").lower().startswith("video/"):
-                    media = client.video_upload(prepared_paths[0], caption)
-                else:
-                    media = client.photo_upload(prepared_paths[0], caption)
+        access_token = _configured_graph_access_token(config)
+        instagram_user_id = _configured_instagram_user_id(config)
+        raw: dict[str, Any] = {"children": []}
+
+        if len(attachments) == 1:
+            attachment = attachments[0]
+            mime_type = str(attachment.mime_type or "").lower()
+            if mime_type in INSTAGRAM_GRAPH_IMAGE_MIME_TYPES:
+                container_data = {
+                    "image_url": _instagram_public_media_url(attachment),
+                    "caption": caption,
+                }
+                alt_text = str(attachment.alt_text or "").strip()
+                if alt_text:
+                    container_data["alt_text"] = alt_text
+            elif mime_type in INSTAGRAM_GRAPH_VIDEO_MIME_TYPES:
+                video_media_type = str((account.publish_settings_json or {}).get("video_media_type") or "REELS").strip().upper()
+                if video_media_type not in {"REELS", "STORIES"}:
+                    video_media_type = "REELS"
+                container_data = {
+                    "video_url": _instagram_public_media_url(attachment),
+                    "media_type": video_media_type,
+                    "caption": caption,
+                }
             else:
-                media = client.album_upload(prepared_paths, caption)
+                raise ConfigurationError(f"{attachment.storage_path} is not a supported Instagram Graph image or MP4 video attachment.")
+            container_id, container_raw = _graph_create_container(
+                instagram_user_id=instagram_user_id,
+                access_token=access_token,
+                data=container_data,
+                wait_until_ready=mime_type in INSTAGRAM_GRAPH_VIDEO_MIME_TYPES,
+            )
+        else:
+            child_ids: list[str] = []
+            for attachment in attachments:
+                mime_type = str(attachment.mime_type or "").lower()
+                if mime_type in INSTAGRAM_GRAPH_IMAGE_MIME_TYPES:
+                    child_data = {
+                        "image_url": _instagram_public_media_url(attachment),
+                        "is_carousel_item": "true",
+                    }
+                elif mime_type in INSTAGRAM_GRAPH_VIDEO_MIME_TYPES:
+                    child_data = {
+                        "video_url": _instagram_public_media_url(attachment),
+                        "media_type": "VIDEO",
+                        "is_carousel_item": "true",
+                    }
+                else:
+                    raise ConfigurationError(f"{attachment.storage_path} is not a supported Instagram Graph image or MP4 video attachment.")
+                child_id, child_raw = _graph_create_container(
+                    instagram_user_id=instagram_user_id,
+                    access_token=access_token,
+                    data=child_data,
+                    wait_until_ready=mime_type in INSTAGRAM_GRAPH_VIDEO_MIME_TYPES,
+                )
+                child_ids.append(child_id)
+                raw["children"].append({"id": child_id, **child_raw})
+            container_id, container_raw = _graph_create_container(
+                instagram_user_id=instagram_user_id,
+                access_token=access_token,
+                data={
+                    "media_type": "CAROUSEL",
+                    "children": ",".join(child_ids),
+                    "caption": caption,
+                },
+            )
 
-        _persist_publish_client_state(account, client)
-        session.flush()
-
-        media_id = _published_media_id(media)
-        external_url = _published_media_url(media)
+        publish_raw = _graph_publish_container(instagram_user_id, access_token, container_id)
+        media_id = str(publish_raw.get("id") or "").strip()
+        if not media_id:
+            raise RuntimeError("Instagram Graph did not return a published media id.")
+        external_url = _graph_permalink(access_token, media_id)
+        raw.update(
+            {
+                "container": {"id": container_id, **container_raw},
+                "publish": publish_raw,
+                "media_public_base_url": f"{get_settings().app_base_url.rstrip('/')}/media/instagram/",
+            }
+        )
         return PublishResult(
             service="instagram",
             external_id=media_id,
             external_url=external_url,
-            raw={
-                "id": media_id,
-                "code": str(getattr(media, "code", "") or "").strip() or None,
-                "product_type": str(getattr(media, "product_type", "") or "").strip() or None,
-                "instagrapi_username": str(getattr(client, "username", "") or "").strip() or None,
-            },
+            raw=raw,
         )

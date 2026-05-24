@@ -159,6 +159,8 @@ If you use host bind mounts on Linux, make sure the mounted directory is writabl
 | `INSTAGRAM_WEBHOOK_VERIFY_TOKEN` | unset | Meta webhook verify token |
 | `INSTAGRAM_APP_SECRET` | unset | Meta app secret for signature validation |
 
+Instagram Graph publishing also needs `APP_BASE_URL` set to the public HTTPS origin for the app. Meta fetches post media from `APP_BASE_URL + /media/instagram/<attachment-id>/<filename>`, which is public by design and serves files from managed media storage without creating extra staging copies.
+
 ### Legacy import and account seeding
 
 These are optional and mostly useful when migrating from the old flat config model. See [env.example](../env.example) for the full list.
@@ -172,9 +174,7 @@ Notable examples:
 - `TELEGRAM_BOT_TOKEN`
 - `TUMBLR_OAUTH_TOKEN`
 - `INSTAGRAM_API_KEY`
-- `INSTAGRAPI_USERNAME`
-- `INSTAGRAPI_PASSWORD`
-- `INSTAGRAPI_SESSIONID`
+- `INSTAGRAM_USER_ID`
 
 ## Recommended Linux deployment flow
 
@@ -232,6 +232,7 @@ If you want to preserve any existing Docker-side data and only merge files in, o
 - The SQLite database lives inside `APP_DATA_DIR`; back up `/data` or the named volume regularly.
 - If OIDC login fails on Linux, verify the container can reach the issuer URL from inside the host network.
 - If Instagram webhooks are enabled, make sure the public callback URL in Meta exactly matches `APP_BASE_URL + /webhooks/instagram`.
+- If Instagram publishing is enabled, make sure `APP_BASE_URL + /media/instagram/...` is reachable from the public internet and returns the correct media `Content-Type`.
 
 ## Suggested host-side validation
 
@@ -248,4 +249,4 @@ If you use a reverse proxy, also verify:
 
 - the proxy forwards requests to the container port
 - the externally visible URL matches `APP_BASE_URL`
-- OIDC callback and Instagram webhook routes are reachable publicly
+- OIDC callback, Instagram webhook, and Instagram media routes are reachable publicly

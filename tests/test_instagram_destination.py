@@ -3,15 +3,24 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from PIL import Image
 
 from app.adapters.instagram import InstagramDestinationAdapter, validate_instagram_account_login
+from app.config import reload_settings
 from app.domain import MediaItem
 from app.models import CanonicalPost
 from app.schemas import ScheduledPostCreate
 from app.services.instagram_private_api import INSTAGRAM_INSTAGRAPI_SETTINGS_KEY
 from app.services.personas import create_account, create_persona
 from app.services.posts import create_scheduled_post
+
+
+@pytest.fixture(autouse=True)
+def _reload_settings_after_instagram_destination_test():
+    reload_settings()
+    yield
+    reload_settings()
 
 
 class _FakeInstagrapiClient:
@@ -85,10 +94,10 @@ def _create_instagram_account(session, persona, *, credentials: dict[str, str] |
             "source_enabled": False,
             "destination_enabled": True,
             "credentials_json": credentials
-            or {
+            if credentials is not None
+            else {
                 "api_key": "instagram-token",
-                "instagrapi_username": "larkyn.lynx",
-                "instagrapi_password": "insta-password",
+                "instagram_user_id": "17841400000000000",
             },
             "source_settings_json": {},
             "publish_settings_json": {},
@@ -100,33 +109,49 @@ def _create_image(path: Path, *, image_format: str) -> None:
     Image.new("RGB", (4, 4), (40, 90, 180)).save(path, format=image_format)
 
 
-def test_instagram_destination_validate_requires_login_and_media(session):
+def test_instagram_destination_validate_requires_login_and_media(session, monkeypatch):
+    monkeypatch.delenv("APP_BASE_URL", raising=False)
+    reload_settings()
     persona = _create_persona(session, slug="instagram-validate")
-    account = _create_instagram_account(session, persona, credentials={"api_key": "instagram-token"})
+    account = _create_instagram_account(session, persona, credentials={})
     post = CanonicalPost(persona_id=persona.id, origin_kind="composer", body="No media")
     post.persona = persona
 
     issues = InstagramDestinationAdapter().validate(post, persona, account)
     messages = [issue.message for issue in issues]
 
-    assert any("requires Session ID or both Login Username and Login Password" in message for message in messages)
+    assert any("requires a Graph access token" in message for message in messages)
     assert any("requires at least one image or video attachment" in message for message in messages)
-    assert not any("Public Base URL" in message for message in messages)
+    assert not any("Session ID" in message for message in messages)
 
 
-def test_instagram_destination_validate_reports_missing_optional_dependencies(session, monkeypatch):
-    persona = _create_persona(session, slug="instagram-missing-deps")
+def test_instagram_destination_validate_requires_https_public_base_url(session, monkeypatch, tmp_path):
+    monkeypatch.setenv("APP_BASE_URL", "http://127.0.0.1:8000")
+    reload_settings()
+    persona = _create_persona(session, slug="instagram-base-url")
     account = _create_instagram_account(session, persona)
-    post = CanonicalPost(persona_id=persona.id, origin_kind="composer", body="No media")
-    post.persona = persona
-
-    monkeypatch.setattr("app.adapters.instagram._load_instagram_dependencies", lambda: (None, None, Exception))
+    image_path = tmp_path / "photo.jpg"
+    _create_image(image_path, image_format="JPEG")
+    post = create_scheduled_post(
+        session,
+        ScheduledPostCreate.model_validate(
+            {
+                "persona_id": persona.id,
+                "body": "Hello Instagram",
+                "status": "draft",
+                "target_account_ids": [account.id],
+                "publish_overrides_json": {},
+                "metadata_json": {},
+                "scheduled_for": None,
+            }
+        ),
+        [MediaItem(storage_path=image_path, mime_type="image/jpeg", size_bytes=4, checksum="img-1", sort_order=0)],
+    )
 
     issues = InstagramDestinationAdapter().validate(post, persona, account)
     messages = [issue.message for issue in issues]
 
-    assert len(issues) == 1
-    assert any("Run `pip install -r requirements.txt` with that same interpreter." in message for message in messages)
+    assert any("externally reachable HTTPS URL" in message for message in messages)
 
 
 def test_validate_instagram_account_login_captures_sessionid_and_settings(monkeypatch):
@@ -147,7 +172,9 @@ def test_validate_instagram_account_login_captures_sessionid_and_settings(monkey
     assert credentials[INSTAGRAM_INSTAGRAPI_SETTINGS_KEY]["cookies"]["sessionid"] == "persisted-session"
 
 
-def test_instagram_destination_publish_single_image_uses_instagrapi_and_persists_settings(session, monkeypatch, tmp_path):
+def test_instagram_destination_publish_single_image_uses_graph(session, monkeypatch, tmp_path):
+    monkeypatch.setenv("APP_BASE_URL", "https://lynxposter.example.com")
+    reload_settings()
     persona = _create_persona(session, slug="instagram-single")
     account = _create_instagram_account(session, persona)
     image_path = tmp_path / "photo.jpg"
@@ -178,34 +205,61 @@ def test_instagram_destination_publish_single_image_uses_instagrapi_and_persists
         ],
     )
     session.refresh(post)
-    _FakeInstagrapiClient.instances.clear()
-    monkeypatch.setattr("app.adapters.instagram._load_instagram_dependencies", lambda: (_FakeInstagrapiClient, Image, Exception))
+
+    calls = []
+
+    class FakeResponse:
+        ok = True
+        text = ""
+
+        def __init__(self, payload):
+            self._payload = payload
+
+        def json(self):
+            return self._payload
+
+    def fake_post(url, data=None, timeout=0):
+        calls.append(("post", url, dict(data or {})))
+        if url.endswith("/17841400000000000/media"):
+            assert data["image_url"].startswith("https://lynxposter.example.com/media/instagram/")
+            assert data["caption"] == "Hello Instagram"
+            assert data["alt_text"] == "Alt text"
+            return FakeResponse({"id": "container-1"})
+        if url.endswith("/17841400000000000/media_publish"):
+            assert data["creation_id"] == "container-1"
+            return FakeResponse({"id": "media-1"})
+        raise AssertionError(url)
+
+    def fake_get(url, params=None, timeout=0):
+        calls.append(("get", url, dict(params or {})))
+        assert url.endswith("/media-1")
+        return FakeResponse({"permalink": "https://www.instagram.com/p/ABC123/"})
+
+    monkeypatch.setattr("app.adapters.instagram.requests.post", fake_post)
+    monkeypatch.setattr("app.adapters.instagram.requests.get", fake_get)
 
     result = InstagramDestinationAdapter().publish(session, post, persona, account)
 
-    client = _FakeInstagrapiClient.instances[0]
     assert result.external_id == "media-1"
     assert result.external_url == "https://www.instagram.com/p/ABC123/"
-    assert client.calls[0][0] == "login"
-    upload_call = next(payload for action, payload in client.calls if action == "photo_upload")
-    assert upload_call["caption"] == "Hello Instagram"
-    assert upload_call["path"].suffix == ".jpg"
-    assert account.credentials_json[INSTAGRAM_INSTAGRAPI_SETTINGS_KEY]["cookies"]["sessionid"] == "persisted-session"
+    assert [call[0] for call in calls] == ["post", "post", "get"]
 
 
-def test_instagram_destination_publish_album_uses_sessionid_and_normalizes_media(session, monkeypatch, tmp_path):
+def test_instagram_destination_publish_album_uses_graph_children(session, monkeypatch, tmp_path):
+    monkeypatch.setenv("APP_BASE_URL", "https://lynxposter.example.com")
+    reload_settings()
     persona = _create_persona(session, slug="instagram-album")
     account = _create_instagram_account(
         session,
         persona,
         credentials={
             "api_key": "instagram-token",
-            "instagrapi_sessionid": "12345%3Aabcdef1234567890abcdef1234567890",
+            "instagram_user_id": "17841400000000000",
         },
     )
-    image_path = tmp_path / "one.png"
+    image_path = tmp_path / "one.jpg"
     video_path = tmp_path / "clip-source.bin"
-    _create_image(image_path, image_format="PNG")
+    _create_image(image_path, image_format="JPEG")
     video_path.write_bytes(b"video")
 
     post = create_scheduled_post(
@@ -222,20 +276,52 @@ def test_instagram_destination_publish_album_uses_sessionid_and_normalizes_media
             }
         ),
         [
-            MediaItem(storage_path=image_path, mime_type="image/png", alt_text="", size_bytes=4, checksum="img-1", sort_order=0),
+            MediaItem(storage_path=image_path, mime_type="image/jpeg", alt_text="", size_bytes=4, checksum="img-1", sort_order=0),
             MediaItem(storage_path=video_path, mime_type="video/mp4", alt_text="", size_bytes=5, checksum="vid-1", sort_order=1),
         ],
     )
     session.refresh(post)
-    _FakeInstagrapiClient.instances.clear()
-    monkeypatch.setattr("app.adapters.instagram._load_instagram_dependencies", lambda: (_FakeInstagrapiClient, Image, Exception))
+
+    post_calls = []
+
+    class FakeResponse:
+        ok = True
+        text = ""
+
+        def __init__(self, payload):
+            self._payload = payload
+
+        def json(self):
+            return self._payload
+
+    def fake_post(url, data=None, timeout=0):
+        payload = dict(data or {})
+        post_calls.append(payload)
+        if payload.get("is_carousel_item") == "true":
+            return FakeResponse({"id": f"child-{len(post_calls)}"})
+        if payload.get("media_type") == "CAROUSEL":
+            assert payload["children"] == "child-1,child-2"
+            assert payload["caption"] == "Carousel time"
+            return FakeResponse({"id": "carousel-container"})
+        if payload.get("creation_id") == "carousel-container":
+            return FakeResponse({"id": "media-3"})
+        raise AssertionError(payload)
+
+    def fake_get(url, params=None, timeout=0):
+        if url.endswith("/child-2"):
+            return FakeResponse({"status_code": "FINISHED"})
+        if url.endswith("/carousel-container"):
+            return FakeResponse({"status_code": "FINISHED"})
+        if url.endswith("/media-3"):
+            return FakeResponse({"permalink": "https://www.instagram.com/p/GHI789/"})
+        raise AssertionError(url)
+
+    monkeypatch.setattr("app.adapters.instagram.requests.post", fake_post)
+    monkeypatch.setattr("app.adapters.instagram.requests.get", fake_get)
 
     result = InstagramDestinationAdapter().publish(session, post, persona, account)
 
-    client = _FakeInstagrapiClient.instances[0]
     assert result.external_id == "media-3"
-    assert client.calls[0] == ("login_by_sessionid", "12345%3Aabcdef1234567890abcdef1234567890")
-    album_call = next(payload for action, payload in client.calls if action == "album_upload")
-    assert album_call["caption"] == "Carousel time"
-    assert [path.suffix for path in album_call["paths"]] == [".jpg", ".mp4"]
-    assert account.credentials_json["instagrapi_username"] == "session-user"
+    assert result.external_url == "https://www.instagram.com/p/GHI789/"
+    assert post_calls[0]["image_url"].startswith("https://lynxposter.example.com/media/instagram/")
+    assert post_calls[1]["video_url"].startswith("https://lynxposter.example.com/media/instagram/")
