@@ -10,7 +10,7 @@ from app.adapters import get_destination_adapter_for_account, get_source_adapter
 from app.adapters.common import autorun_initial_import_guard_reason, logical_post_limit_reached, looks_like_historical_backfill, now_utc
 from app.adapters.discord import discord_link_preference_order, discord_should_wait_for_preferred_links
 from app.domain import ExternalPostRefPayload
-from app.models import Account, AccountPostRef, AccountRoute, CanonicalPost, DeliveryAttempt, DeliveryJob, Persona
+from app.models import Account, AccountPostRef, AccountRoute, CanonicalPost, DeliveryAttempt, DeliveryJob, GiveawayCampaign, Persona
 from app.services.alerts import AlertDispatcher
 from app.services.events import log_run_event
 from app.services.posts import (
@@ -274,6 +274,43 @@ def _all_delivery_jobs_posted(post: CanonicalPost) -> bool:
     return bool(delivery_jobs) and all(job.status == "posted" for job in delivery_jobs)
 
 
+def _giveaway_channel_for_job(job: DeliveryJob):
+    campaign = getattr(job.post, "giveaway_campaign", None)
+    if campaign is None:
+        return None
+    for channel in campaign.channels:
+        if channel.account_id == job.target_account_id:
+            return channel
+    return None
+
+
+def _restore_posted_giveaway_job_from_channel(job: DeliveryJob) -> bool:
+    channel = _giveaway_channel_for_job(job)
+    external_id = str(getattr(channel, "target_post_external_id", "") or "").strip()
+    if not external_id:
+        return False
+    job.status = "posted"
+    job.external_id = external_id
+    job.external_url = getattr(channel, "target_post_url", None) or job.external_url
+    job.delivered_at = job.delivered_at or now_utc()
+    job.last_error = None
+    job.last_error_class = None
+    return True
+
+
+def _is_stale_instagram_giveaway_delivery(job: DeliveryJob) -> bool:
+    post = job.post
+    target_account = job.target_account
+    return (
+        post is not None
+        and target_account is not None
+        and post.post_type == "giveaway"
+        and target_account.service == "instagram"
+        and not list(post.attachments or [])
+        and (post.published_at is not None or any(sibling.status == "posted" for sibling in post.delivery_jobs or []))
+    )
+
+
 def process_delivery_queue(
     session: Session,
     alerts: AlertDispatcher,
@@ -287,6 +324,7 @@ def process_delivery_queue(
         .options(
             selectinload(DeliveryJob.post).selectinload(CanonicalPost.attachments),
             selectinload(DeliveryJob.post).selectinload(CanonicalPost.delivery_jobs).selectinload(DeliveryJob.target_account),
+            selectinload(DeliveryJob.post).selectinload(CanonicalPost.giveaway_campaign).selectinload(GiveawayCampaign.channels),
             selectinload(DeliveryJob.post).selectinload(CanonicalPost.persona),
             selectinload(DeliveryJob.post).selectinload(CanonicalPost.origin_account),
             selectinload(DeliveryJob.target_account),
@@ -310,6 +348,30 @@ def process_delivery_queue(
             refresh_post_status(post)
             if _all_delivery_jobs_posted(post) and can_remove_post_media_after_delivery(post):
                 remove_post_media_files(session, post)
+            continue
+        if _is_stale_instagram_giveaway_delivery(job):
+            if _restore_posted_giveaway_job_from_channel(job):
+                refresh_post_status(post)
+                continue
+            job.status = "cancelled"
+            job.last_error = "Skipped stale Instagram giveaway delivery because the local media is no longer available."
+            job.last_error_class = "StaleGiveawayDelivery"
+            post.last_error = None
+            log_run_event(
+                session,
+                run_id=run_id,
+                persona_id=post.persona_id,
+                persona_name=post.persona.name if post.persona else None,
+                account_id=target_account.id if target_account else None,
+                service="instagram",
+                operation="publish",
+                severity="warning",
+                message=job.last_error,
+                post_id=post.id,
+                delivery_job_id=job.id,
+                metadata={"delivery_status": "cancelled", "reason": "stale_giveaway_media_missing"},
+            )
+            refresh_post_status(post)
             continue
         if not persona or not target_account:
             job.status = "cancelled"

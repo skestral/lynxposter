@@ -884,6 +884,34 @@ def serialize_giveaway(campaign: GiveawayCampaign | None) -> GiveawayRead | None
         for channel in channels
         for entrant in channel.entrants
     }
+
+    def serialize_channel(channel: GiveawayChannel) -> GiveawayChannelRead:
+        delivery_job = _channel_delivery_job(channel)
+        target_post_external_id = channel.target_post_external_id or (delivery_job.external_id if delivery_job else None)
+        target_post_url = channel.target_post_url or (delivery_job.external_url if delivery_job else None)
+        return GiveawayChannelRead(
+            id=channel.id,
+            service=channel.service,
+            account_id=channel.account_id,
+            status=channel.status,
+            rules=GiveawayRuleNodeInput.model_validate(channel.rules_json or {"kind": "all", "children": []}),
+            target_post_external_id=target_post_external_id,
+            target_post_uri=channel.target_post_uri,
+            target_post_cid=channel.target_post_cid,
+            target_post_url=target_post_url,
+            last_collected_at=channel.last_collected_at,
+            last_private_collected_at=channel.last_private_collected_at,
+            private_scan_due_at=instagram_private_scan_due_at(channel),
+            private_scan_interval_hours=instagram_private_scan_interval_hours() if channel.service == "instagram" else None,
+            private_scan_available=channel.service == "instagram" and bool(target_post_external_id or channel.target_post_uri),
+            last_error=channel.last_error,
+            summary=per_channel[channel.service],
+            entrants=[
+                serialized_entrant_map[entrant.id]
+                for entrant in sorted(channel.entrants, key=lambda item: (item.provider_username or item.provider_user_id))
+            ],
+        )
+
     return GiveawayRead(
         id=campaign.id,
         post_id=campaign.post_id,
@@ -901,31 +929,7 @@ def serialize_giveaway(campaign: GiveawayCampaign | None) -> GiveawayRead | None
             engagement_activities=sum(summary.engagement_activities for summary in per_channel.values()),
             per_channel=per_channel,
         ),
-        channels=[
-            GiveawayChannelRead(
-                id=channel.id,
-                service=channel.service,
-                account_id=channel.account_id,
-                status=channel.status,
-                rules=GiveawayRuleNodeInput.model_validate(channel.rules_json or {"kind": "all", "children": []}),
-                target_post_external_id=channel.target_post_external_id,
-                target_post_uri=channel.target_post_uri,
-                target_post_cid=channel.target_post_cid,
-                target_post_url=channel.target_post_url,
-                last_collected_at=channel.last_collected_at,
-                last_private_collected_at=channel.last_private_collected_at,
-                private_scan_due_at=instagram_private_scan_due_at(channel),
-                private_scan_interval_hours=instagram_private_scan_interval_hours() if channel.service == "instagram" else None,
-                private_scan_available=channel.service == "instagram" and _channel_target_ready(channel),
-                last_error=channel.last_error,
-                summary=per_channel[channel.service],
-                entrants=[
-                    serialized_entrant_map[entrant.id]
-                    for entrant in sorted(channel.entrants, key=lambda item: (item.provider_username or item.provider_user_id))
-                ],
-            )
-            for channel in channels
-        ],
+        channels=[serialize_channel(channel) for channel in channels],
         pools=[
             GiveawayPoolRead(
                 id=pool.id,
@@ -1784,14 +1788,15 @@ def finalize_giveaway_campaign(
 ) -> GiveawayCampaign:
     hydrate_channel_targets(campaign)
     for channel in campaign.channels:
+        private_scan_ran = False
         if channel.service == "bluesky":
             collect_bluesky_channel_state(session, channel, run_id=run_id)
         elif channel.service == "instagram":
             if force_instagram_private_scan:
-                refresh_instagram_channel_state(session, channel, force_private_scan=True)
+                private_scan_ran = refresh_instagram_channel_state(session, channel, force_private_scan=True)
             else:
-                refresh_instagram_channel_state(session, channel, allow_due_private_scan=allow_instagram_private_scan)
-        evaluate_channel_entrants(channel, allow_instagram_private_verification=force_instagram_private_scan or allow_instagram_private_scan)
+                private_scan_ran = refresh_instagram_channel_state(session, channel, allow_due_private_scan=allow_instagram_private_scan)
+        evaluate_channel_entrants(channel, allow_instagram_private_verification=force_instagram_private_scan or private_scan_ran)
 
     # Ensure entrant primary keys exist before we freeze candidate ordering.
     session.flush()
@@ -1917,8 +1922,8 @@ def scan_instagram_giveaway_channels(
     for channel in ready_channels:
         if channel.status == GIVEAWAY_STATUS_SCHEDULED:
             channel.status = GIVEAWAY_STATUS_COLLECTING
-        refresh_instagram_channel_state(session, channel, force_private_scan=True)
-        evaluate_channel_entrants(channel, allow_instagram_private_verification=True)
+        private_scan_ran = refresh_instagram_channel_state(session, channel, force_private_scan=True)
+        evaluate_channel_entrants(channel, allow_instagram_private_verification=private_scan_ran)
 
     campaign.last_evaluated_at = utcnow()
     channel_errors = [str(channel.last_error) for channel in ready_channels if channel.last_error]
@@ -1966,6 +1971,7 @@ def process_giveaway_lifecycle(
                 channel.status = GIVEAWAY_STATUS_COLLECTING
         if campaign.status == GIVEAWAY_STATUS_COLLECTING:
             for channel in ready_channels:
+                private_scan_ran = False
                 if channel.service == "bluesky":
                     try:
                         collect_bluesky_channel_state(session, channel, run_id=run_id)
@@ -1999,8 +2005,8 @@ def process_giveaway_lifecycle(
                             event_type="giveaway_collection_failed",
                         )
                 elif channel.service == "instagram":
-                    refresh_instagram_channel_state(session, channel, allow_due_private_scan=allow_instagram_private_scan)
-                evaluate_channel_entrants(channel, allow_instagram_private_verification=allow_instagram_private_scan)
+                    private_scan_ran = refresh_instagram_channel_state(session, channel, allow_due_private_scan=allow_instagram_private_scan)
+                evaluate_channel_entrants(channel, allow_instagram_private_verification=private_scan_ran)
         if normalize_datetime(campaign.giveaway_end_at) and normalize_datetime(campaign.giveaway_end_at) <= now and campaign.status in {GIVEAWAY_STATUS_COLLECTING, GIVEAWAY_STATUS_SCHEDULED}:
             try:
                 finalize_giveaway_campaign(session, campaign, alerts, run_id=run_id, force_instagram_private_scan=True)
@@ -2073,7 +2079,7 @@ def refresh_instagram_channel_state(
     *,
     force_private_scan: bool = False,
     allow_due_private_scan: bool = True,
-) -> None:
+) -> bool:
     sync_instagram_webhook_events_for_channel(session, channel)
     state_by_user: dict[str, dict[str, Any]] = {}
     for entrant in channel.entrants:
@@ -2175,6 +2181,7 @@ def refresh_instagram_channel_state(
         entrant.signal_state_json = _normalized_instagram_signal_state(state)
     session.flush()
     publish_live_update(LIVE_UPDATE_TOPIC_DASHBOARD, LIVE_UPDATE_TOPIC_LOGS)
+    return should_run_private_scan
 
 
 def _is_bluesky_collection_timeout(exc: Exception) -> bool:

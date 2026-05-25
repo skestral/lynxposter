@@ -781,6 +781,59 @@ def test_giveaway_lifecycle_defers_instagram_follow_verification_without_private
     assert "waiting for a manual" in entrant.inconclusive_reasons_json[0]
 
 
+def test_giveaway_lifecycle_does_not_verify_follow_when_private_scan_not_due(session, monkeypatch):
+    persona = _create_persona(session, slug="giveaway-follow-due-gate")
+    instagram = _create_account(session, persona, service="instagram", label="Instagram")
+    post = create_scheduled_post(
+        session,
+        _generic_giveaway_payload(
+            persona.id,
+            [instagram.id],
+            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            channels=[
+                {
+                    "service": "instagram",
+                    "account_id": instagram.id,
+                    "rules": {
+                        "kind": "all",
+                        "children": [{"kind": "atom", "atom": "follow_present", "params": {}}],
+                    },
+                }
+            ],
+        ),
+        [],
+    )
+    _mark_posted(post, instagram.id, external_id="ig-media-follow-due-gate")
+    channel = post.giveaway_campaign.channels[0]
+    channel.last_private_collected_at = datetime.now(timezone.utc)
+    channel.entrants.append(
+        GiveawayEntrant(
+            provider_user_id="ig-user-follow",
+            provider_username="follower.one",
+            display_label="follower.one",
+            signal_state_json={},
+        )
+    )
+    session.flush()
+
+    def _fail_private_client(credentials):
+        raise AssertionError("Private Instagram follow checks should wait until the scan interval is due.")
+
+    monkeypatch.setattr("app.services.giveaway_engine._instagram_destination_dependency_issue", lambda: None)
+    monkeypatch.setattr("app.services.giveaway_engine._authenticated_publish_client", _fail_private_client)
+
+    process_giveaway_lifecycle(
+        session,
+        AlertDispatcher(),
+        run_id="run-follow-due-gate",
+        allow_instagram_private_scan=True,
+    )
+
+    entrant = session.query(GiveawayEntrant).filter_by(channel_id=channel.id, provider_user_id="ig-user-follow").one()
+    assert entrant.eligibility_status == ENTRY_STATUS_PROVISIONAL
+    assert "waiting for a manual" in entrant.inconclusive_reasons_json[0]
+
+
 def test_instagram_follow_verification_retries_transient_private_api_errors(session, monkeypatch):
     persona = _create_persona(session, slug="giveaway-follow-retry")
     instagram = _create_account(session, persona, service="instagram", label="Instagram")
@@ -889,6 +942,40 @@ def test_giveaway_lifecycle_updates_qualification_checks_after_collection(sessio
     checks = serialized.channels[0].entrants[0].checks
     assert checks[0].label == "Like present"
     assert checks[0].status == "passed"
+
+
+def test_serialize_giveaway_exposes_instagram_private_scan_when_job_is_posted(session):
+    persona = _create_persona(session, slug="giveaway-serialize-private-scan")
+    instagram = _create_account(session, persona, service="instagram", label="Instagram")
+    post = create_scheduled_post(
+        session,
+        _generic_giveaway_payload(
+            persona.id,
+            [instagram.id],
+            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            channels=[
+                {
+                    "service": "instagram",
+                    "account_id": instagram.id,
+                    "rules": {"kind": "all", "children": [{"kind": "atom", "atom": "comment_present", "params": {}}]},
+                }
+            ],
+        ),
+        [],
+    )
+    _mark_posted(post, instagram.id, external_id="ig-posted-job", external_url="https://instagram.test/p/posted-job/")
+    channel = post.giveaway_campaign.channels[0]
+    channel.target_post_external_id = None
+    channel.target_post_url = None
+    session.flush()
+
+    serialized = serialize_giveaway(post.giveaway_campaign)
+
+    assert serialized is not None
+    serialized_channel = serialized.channels[0]
+    assert serialized_channel.target_post_external_id == "ig-posted-job"
+    assert serialized_channel.target_post_url == "https://instagram.test/p/posted-job/"
+    assert serialized_channel.private_scan_available is True
 
 
 def test_instagram_refresh_backfills_existing_like_and_repost_webhooks(session, monkeypatch):
@@ -1434,6 +1521,108 @@ def test_delivery_recovers_requeued_job_that_already_has_external_id(session, mo
 
     assert job.status == "posted"
     assert post.status == "posted"
+
+
+def test_delivery_recovers_instagram_giveaway_job_from_channel_target(session, monkeypatch):
+    persona = _create_persona(session, slug="giveaway-recover-channel-target")
+    instagram = _create_account(session, persona, service="instagram", label="Instagram")
+    post = create_scheduled_post(
+        session,
+        _generic_giveaway_payload(
+            persona.id,
+            [instagram.id],
+            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            channels=[
+                {
+                    "service": "instagram",
+                    "account_id": instagram.id,
+                    "rules": {"kind": "all", "children": [{"kind": "atom", "atom": "comment_present", "params": {}}]},
+                }
+            ],
+        ),
+        [
+            MediaItem(
+                storage_path="/tmp/recover-channel-target.jpg",
+                mime_type="image/jpeg",
+                alt_text="",
+                size_bytes=4,
+                checksum="img-1",
+                sort_order=0,
+            )
+        ],
+    )
+    for attachment in list(post.attachments):
+        session.delete(attachment)
+    session.flush()
+    session.expire(post, ["attachments"])
+    channel = post.giveaway_campaign.channels[0]
+    channel.target_post_external_id = "ig-existing-channel-target"
+    channel.target_post_url = "https://instagram.test/p/channel-target/"
+    post.published_at = datetime.now(timezone.utc) - timedelta(minutes=5)
+    job = post.delivery_jobs[0]
+    job.status = "queued"
+    job.external_id = None
+    session.flush()
+
+    def fail_adapter(account):
+        raise AssertionError("Recovered giveaway jobs should not publish again.")
+
+    monkeypatch.setattr("app.services.delivery.get_destination_adapter_for_account", fail_adapter)
+
+    process_delivery_queue(session, AlertDispatcher(), run_id="run-recover-channel-target")
+
+    assert job.status == "posted"
+    assert job.external_id == "ig-existing-channel-target"
+    assert job.external_url == "https://instagram.test/p/channel-target/"
+
+
+def test_delivery_cancels_stale_instagram_giveaway_job_without_media(session, monkeypatch):
+    persona = _create_persona(session, slug="giveaway-cancel-stale-instagram")
+    instagram = _create_account(session, persona, service="instagram", label="Instagram")
+    post = create_scheduled_post(
+        session,
+        _generic_giveaway_payload(
+            persona.id,
+            [instagram.id],
+            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            channels=[
+                {
+                    "service": "instagram",
+                    "account_id": instagram.id,
+                    "rules": {"kind": "all", "children": [{"kind": "atom", "atom": "comment_present", "params": {}}]},
+                }
+            ],
+        ),
+        [
+            MediaItem(
+                storage_path="/tmp/stale-instagram-giveaway.jpg",
+                mime_type="image/jpeg",
+                alt_text="",
+                size_bytes=4,
+                checksum="img-1",
+                sort_order=0,
+            )
+        ],
+    )
+    for attachment in list(post.attachments):
+        session.delete(attachment)
+    session.flush()
+    session.expire(post, ["attachments"])
+    post.published_at = datetime.now(timezone.utc) - timedelta(minutes=5)
+    job = post.delivery_jobs[0]
+    job.status = "queued"
+    job.external_id = None
+    session.flush()
+
+    def fail_adapter(account):
+        raise AssertionError("Stale giveaway jobs without media should be stopped before validation.")
+
+    monkeypatch.setattr("app.services.delivery.get_destination_adapter_for_account", fail_adapter)
+
+    process_delivery_queue(session, AlertDispatcher(), run_id="run-cancel-stale-instagram")
+
+    assert job.status == "cancelled"
+    assert job.last_error_class == "StaleGiveawayDelivery"
 
 
 def test_process_giveaway_lifecycle_creates_separate_winners_for_mixed_channels(session, monkeypatch):

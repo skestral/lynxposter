@@ -136,7 +136,7 @@ class CrossposterScheduler:
                     session,
                     self.alerts,
                     run_id=run_id,
-                    allow_instagram_private_scan=(trigger != "autorun"),
+                    allow_instagram_private_scan=True,
                 )
                 check_instagram_token_expiry(session, self.alerts, run_id=run_id)
                 cleanup_stale_media_files(session, run_id=run_id)
