@@ -32,6 +32,7 @@ INSTAGRAM_GRAPH_IMAGE_MIME_TYPES = {"image/jpeg", "image/jpg", "image/pjpeg"}
 INSTAGRAM_GRAPH_VIDEO_MIME_TYPES = {"video/mp4"}
 INSTAGRAM_CONTAINER_READY_STATUSES = {"FINISHED", "PUBLISHED"}
 INSTAGRAM_CONTAINER_PENDING_STATUSES = {"IN_PROGRESS", "PROCESSING", "CREATED"}
+INSTAGRAM_CONTAINER_PUBLISH_ATTEMPTS = 4
 
 
 def _load_instagram_dependencies() -> tuple[Any | None, Any | None, type[Exception]]:
@@ -274,11 +275,20 @@ def _graph_create_container(
 
 
 def _graph_publish_container(instagram_user_id: str, access_token: str, container_id: str, *, base_url: str) -> dict[str, Any]:
-    return _post_graph(
-        f"{instagram_user_id}/media_publish",
-        {"creation_id": container_id, "access_token": access_token},
-        base_url=base_url,
-    )
+    for attempt in range(INSTAGRAM_CONTAINER_PUBLISH_ATTEMPTS):
+        try:
+            return _post_graph(
+                f"{instagram_user_id}/media_publish",
+                {"creation_id": container_id, "access_token": access_token},
+                base_url=base_url,
+            )
+        except RuntimeError as exc:
+            if "media id is not available" not in str(exc).lower() or attempt == INSTAGRAM_CONTAINER_PUBLISH_ATTEMPTS - 1:
+                raise
+            _wait_for_container_ready(container_id, access_token, base_url=base_url)
+            time.sleep(2)
+    raise RuntimeError(f"Instagram Graph media container {container_id} could not be published.")
+
 
 
 def _graph_permalink(access_token: str, media_id: str, *, base_url: str) -> str | None:
@@ -719,7 +729,6 @@ class InstagramDestinationAdapter(DestinationAdapter):
                 access_token=access_token,
                 data=container_data,
                 base_url=graph_base_url,
-                wait_until_ready=mime_type in INSTAGRAM_GRAPH_VIDEO_MIME_TYPES,
             )
         else:
             child_ids: list[str] = []
@@ -746,7 +755,6 @@ class InstagramDestinationAdapter(DestinationAdapter):
                     access_token=access_token,
                     data=child_data,
                     base_url=graph_base_url,
-                    wait_until_ready=mime_type in INSTAGRAM_GRAPH_VIDEO_MIME_TYPES,
                 )
                 child_ids.append(child_id)
                 raw["children"].append({"id": child_id, **child_raw})

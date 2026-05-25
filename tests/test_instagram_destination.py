@@ -264,6 +264,8 @@ def test_instagram_destination_publish_single_image_uses_graph(session, monkeypa
 
     def fake_get(url, params=None, timeout=0):
         calls.append(("get", url, dict(params or {})))
+        if url.endswith("/container-1"):
+            return FakeResponse({"status_code": "FINISHED"})
         assert url.endswith("/media-1")
         return FakeResponse({"permalink": "https://www.instagram.com/p/ABC123/"})
 
@@ -274,7 +276,72 @@ def test_instagram_destination_publish_single_image_uses_graph(session, monkeypa
 
     assert result.external_id == "media-1"
     assert result.external_url == "https://www.instagram.com/p/ABC123/"
-    assert [call[0] for call in calls] == ["post", "post", "get"]
+    assert [call[0] for call in calls] == ["post", "get", "post", "get"]
+
+
+def test_instagram_destination_retries_publish_when_container_is_still_processing(session, monkeypatch, tmp_path):
+    monkeypatch.setenv("APP_BASE_URL", "https://lynxposter.example.com")
+    reload_settings()
+    monkeypatch.setattr("app.adapters.instagram.time.sleep", lambda seconds: None)
+    persona = _create_persona(session, slug="instagram-publish-retry")
+    account = _create_instagram_account(session, persona)
+    image_path = tmp_path / "photo.jpg"
+    _create_image(image_path, image_format="JPEG")
+
+    post = create_scheduled_post(
+        session,
+        ScheduledPostCreate.model_validate(
+            {
+                "persona_id": persona.id,
+                "body": "Hello Instagram",
+                "status": "draft",
+                "target_account_ids": [account.id],
+                "publish_overrides_json": {},
+                "metadata_json": {},
+                "scheduled_for": None,
+            }
+        ),
+        [MediaItem(storage_path=image_path, mime_type="image/jpeg", size_bytes=4, checksum="img-1", sort_order=0)],
+    )
+    session.refresh(post)
+
+    publish_attempts = 0
+
+    class FakeResponse:
+        text = ""
+
+        def __init__(self, payload, *, ok=True):
+            self._payload = payload
+            self.ok = ok
+
+        def json(self):
+            return self._payload
+
+    def fake_post(url, data=None, timeout=0):
+        nonlocal publish_attempts
+        if url.endswith("/17841400000000000/media"):
+            return FakeResponse({"id": "container-1"})
+        if url.endswith("/17841400000000000/media_publish"):
+            publish_attempts += 1
+            if publish_attempts == 1:
+                return FakeResponse({"error": {"message": "Media ID is not available"}}, ok=False)
+            return FakeResponse({"id": "media-1"})
+        raise AssertionError(url)
+
+    def fake_get(url, params=None, timeout=0):
+        if url.endswith("/container-1"):
+            return FakeResponse({"status_code": "FINISHED"})
+        if url.endswith("/media-1"):
+            return FakeResponse({"permalink": "https://www.instagram.com/p/ABC123/"})
+        raise AssertionError(url)
+
+    monkeypatch.setattr("app.adapters.instagram.requests.post", fake_post)
+    monkeypatch.setattr("app.adapters.instagram.requests.get", fake_get)
+
+    result = InstagramDestinationAdapter().publish(session, post, persona, account)
+
+    assert result.external_id == "media-1"
+    assert publish_attempts == 2
 
 
 def test_instagram_destination_publish_error_includes_media_url(session, monkeypatch, tmp_path):
@@ -380,6 +447,8 @@ def test_instagram_destination_publish_uses_instagram_graph_for_instagram_login_
 
     def fake_get(url, params=None, timeout=0):
         urls.append(url)
+        if url.endswith("/container-1"):
+            return FakeResponse({"status_code": "FINISHED"})
         assert url.endswith("/media-1")
         return FakeResponse({"permalink": "https://www.instagram.com/p/ABC123/"})
 
@@ -455,6 +524,8 @@ def test_instagram_destination_publish_album_uses_graph_children(session, monkey
         raise AssertionError(payload)
 
     def fake_get(url, params=None, timeout=0):
+        if url.endswith("/child-1"):
+            return FakeResponse({"status_code": "FINISHED"})
         if url.endswith("/child-2"):
             return FakeResponse({"status_code": "FINISHED"})
         if url.endswith("/carousel-container"):
