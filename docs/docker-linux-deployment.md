@@ -115,6 +115,22 @@ If you use host bind mounts on Linux, make sure the mounted directory is writabl
 | `APP_INSTANCE_NAME` | hostname | Instance label shown in logs and health |
 | `APP_BASE_URL` | unset | Public URL used for callbacks and external links |
 
+### Build identity
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `APP_GIT_SHA` | `unknown` | Commit SHA baked into the Docker image and shown in the footer and `/version` endpoint |
+| `GITHUB_SHA` | unset | Used by Compose as a fallback build SHA when `APP_GIT_SHA` is not set |
+| `COMMIT_SHA` | unset | Used by Compose as a fallback build SHA when `APP_GIT_SHA` and `GITHUB_SHA` are not set |
+
+Pass `APP_GIT_SHA` from the shell that runs the build:
+
+```bash
+APP_GIT_SHA="$(git rev-parse HEAD)" docker compose up --build -d
+```
+
+The app also reads `BUILD_SHA` inside the image, which lets production keep showing the right commit even though `.git` is not copied into the container.
+
 ### Scheduler
 
 | Variable | Default | Purpose |

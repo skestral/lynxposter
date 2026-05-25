@@ -5,6 +5,8 @@ FROM python:${PYTHON_VERSION}
 
 ARG APP_GIT_SHA=unknown
 
+LABEL org.opencontainers.image.revision=${APP_GIT_SHA}
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
@@ -29,6 +31,8 @@ RUN pip install --upgrade pip \
     && pip install -r requirements.txt
 
 COPY . .
+
+RUN printf "%s\n" "${APP_GIT_SHA}" > /app/BUILD_SHA
 
 RUN mkdir -p /data /data/config \
     && chown -R appuser:appuser /app /data

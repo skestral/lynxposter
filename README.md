@@ -181,6 +181,8 @@ The app footer and `/version` endpoint show the deployed version and short commi
 APP_GIT_SHA="$(git rev-parse HEAD)" docker compose up --build -d
 ```
 
+That value must be present in the shell that starts the build. The app's runtime `docker/config/.env` file is loaded after the image exists, so it cannot fill in the Docker build arg by itself. If your deploy runner already exposes `GITHUB_SHA` or `COMMIT_SHA`, Compose will use that automatically when `APP_GIT_SHA` is not set.
+
 The app will be available on `http://127.0.0.1:${APP_PORT:-8000}`.
 
 The settings UI can also create and update `docker/config/.env` for you, as long as the mounted directory is writable by the container user.

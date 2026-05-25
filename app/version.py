@@ -20,6 +20,7 @@ GIT_SHA_ENV_KEYS = (
     "RAILWAY_GIT_COMMIT_SHA",
     "COMMIT_SHA",
 )
+GIT_SHA_BUILD_FILES = ("BUILD_SHA", ".build-sha", "REVISION")
 UNKNOWN_BUILD = "unknown"
 
 
@@ -73,6 +74,19 @@ def _git_sha_from_environment() -> tuple[str | None, str]:
     return None, UNKNOWN_BUILD
 
 
+def _git_sha_from_build_file() -> tuple[str | None, str]:
+    project_root = _project_root()
+    for filename in GIT_SHA_BUILD_FILES:
+        build_file = project_root / filename
+        try:
+            sha = _normalize_git_sha(build_file.read_text(encoding="utf-8"))
+        except OSError:
+            continue
+        if sha:
+            return sha, filename
+    return None, UNKNOWN_BUILD
+
+
 def _git_sha_from_command() -> tuple[str | None, str]:
     try:
         result = subprocess.run(
@@ -92,6 +106,8 @@ def _git_sha_from_command() -> tuple[str | None, str]:
 def get_app_version() -> AppVersion:
     version = _version_from_environment() or _read_version_file()
     git_sha, git_source = _git_sha_from_environment()
+    if git_sha is None:
+        git_sha, git_source = _git_sha_from_build_file()
     if git_sha is None:
         git_sha, git_source = _git_sha_from_command()
     git_sha_short = git_sha[:8] if git_sha else None
