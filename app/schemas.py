@@ -291,6 +291,7 @@ class GiveawayEntrantRead(BaseModel):
     provider_user_id: str
     provider_username: str | None = None
     display_label: str | None = None
+    profile_url: str | None = None
     signal_state: dict[str, Any] = Field(default_factory=dict)
     rule_match_details: dict[str, Any] = Field(default_factory=dict)
     activity_total: int = 0

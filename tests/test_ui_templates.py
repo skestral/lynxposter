@@ -440,6 +440,7 @@ def test_scheduled_post_templates_render_generic_giveaway_controls():
                     {
                         "display_label": "entrant.one",
                         "provider_user_id": "user-1",
+                        "profile_url": "https://www.instagram.com/entrant.one/",
                         "signal_state": {"comment_count": 1, "friend_mention_count": 1, "story_mention_count": 1},
                         "eligibility_status": "provisional",
                         "inconclusive_reasons": ["Missing final live check."],
@@ -463,6 +464,7 @@ def test_scheduled_post_templates_render_generic_giveaway_controls():
                     {
                         "display_label": "bsky.one",
                         "provider_user_id": "did:plc:user-1",
+                        "profile_url": "https://bsky.app/profile/bsky.one",
                         "signal_state": {"reply_present": True, "like_present": True},
                         "eligibility_status": "provisional",
                         "inconclusive_reasons": [],
@@ -480,6 +482,7 @@ def test_scheduled_post_templates_render_generic_giveaway_controls():
                 "provisional_winner": {
                     "display_label": "entrant.one",
                     "provider_user_id": "user-1",
+                    "profile_url": "https://www.instagram.com/entrant.one/",
                     "inconclusive_reasons": ["Missing final live check."],
                 },
                 "final_winner": None,
@@ -498,6 +501,7 @@ def test_scheduled_post_templates_render_generic_giveaway_controls():
                             "entrant": {
                                 "display_label": "entrant.one",
                                 "provider_user_id": "user-1",
+                                "profile_url": "https://www.instagram.com/entrant.one/",
                                 "eligibility_status": "provisional",
                             },
                         }
@@ -553,7 +557,10 @@ def test_scheduled_post_templates_render_generic_giveaway_controls():
     assert '"giveaway_end_at": "2026-05-15T15:30"' in html
     assert "Timezone: America/Los_Angeles" in html
     assert "Entrant Audit Log" in html
-    assert "Selection Log" in html
+    assert "Raffle Results" in html
+    assert "Provisional Winner" in html
+    assert 'href="https://www.instagram.com/entrant.one/"' in html
+    assert 'href="https://bsky.app/profile/bsky.one"' in html
     assert "Confirm Winner" in html
     assert "Advance To Next Candidate" in html
     assert "End Giveaway" in html

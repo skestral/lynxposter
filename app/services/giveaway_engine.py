@@ -6,6 +6,7 @@ import re
 import secrets
 import time
 from typing import Any, Callable
+from urllib.parse import quote
 
 import requests
 from sqlalchemy import Select, select
@@ -680,6 +681,20 @@ def _entry_display_label(entrant: GiveawayEntrant) -> str:
     return entrant.display_label or entrant.provider_username or entrant.provider_user_id
 
 
+def _entry_profile_url(channel: GiveawayChannel, entrant: GiveawayEntrant) -> str | None:
+    username = str(entrant.provider_username or "").strip().lstrip("@")
+    if channel.service == "instagram":
+        if not username:
+            return None
+        return f"https://www.instagram.com/{quote(username, safe='._')}/"
+    if channel.service == "bluesky":
+        actor = username or str(entrant.provider_user_id or "").strip()
+        if not actor:
+            return None
+        return f"https://bsky.app/profile/{quote(actor, safe='._:-')}"
+    return None
+
+
 def _normalize_evidence_items(items: list[dict[str, Any]] | None, *, default_source: str) -> list[dict[str, Any]]:
     normalized: list[dict[str, Any]] = []
     for item in items or []:
@@ -927,6 +942,7 @@ def _serialize_entrant(channel: GiveawayChannel, entrant: GiveawayEntrant) -> Gi
         provider_user_id=entrant.provider_user_id,
         provider_username=entrant.provider_username,
         display_label=_entry_display_label(entrant),
+        profile_url=_entry_profile_url(channel, entrant),
         signal_state=dict(entrant.signal_state_json or {}),
         rule_match_details=dict(entrant.rule_match_details_json or {}),
         activity_total=activity_total,
@@ -1201,7 +1217,12 @@ def _instagram_verify_follow(channel: GiveawayChannel, entrant: GiveawayEntrant)
     try:
         client = _authenticated_publish_client(_account_credentials(channel.account))
         relationship = _call_instagram_private(lambda: client.user_friendship_v1(entrant.provider_user_id))
-        return bool(getattr(relationship, "followed_by", False)), None
+        follows_account = bool(getattr(relationship, "followed_by", False))
+        state = _normalized_instagram_signal_state(dict(entrant.signal_state_json or {}))
+        state["follow_present"] = follows_account
+        state["follow_collection_checked"] = True
+        entrant.signal_state_json = state
+        return follows_account, None
     except Exception as exc:
         return None, f"Follow verification could not be completed: {exc}"
 
@@ -1243,13 +1264,16 @@ def _evaluate_instagram_atom(
             return True, None
         return False, "No Instagram repost or share evidence was captured."
     if atom == "follow_present":
+        if allow_private_verification:
+            verified, reason = _instagram_verify_follow(channel, entrant)
+            if verified is None and state.get("follow_collection_checked") is True:
+                return bool(state.get("follow_present")), None
+            return verified, reason
         if state.get("follow_present") is True:
             return True, None
         if state.get("follow_collection_checked") is True:
             return False, None
-        if not allow_private_verification:
-            return None, "Instagram follow verification is waiting for a manual, due, or end-of-giveaway private check."
-        return _instagram_verify_follow(channel, entrant)
+        return None, "Instagram follow verification is waiting for a manual, due, or end-of-giveaway private check."
     return False, f"Unsupported Instagram atom: {atom}"
 
 

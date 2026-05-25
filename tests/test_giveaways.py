@@ -24,6 +24,7 @@ from app.schemas import ScheduledPostCreate
 from app.services.alerts import AlertDispatcher
 from app.services.auth import Principal
 from app.services.giveaway_engine import (
+    ENTRY_STATUS_DISQUALIFIED,
     ENTRY_STATUS_ELIGIBLE,
     ENTRY_STATUS_PROVISIONAL,
     GIVEAWAY_STATUS_COLLECTING,
@@ -1111,6 +1112,114 @@ def test_instagram_follow_verification_retries_transient_private_api_errors(sess
     assert entrant.inconclusive_reasons_json == []
 
 
+def test_instagram_follow_verification_persists_for_public_rechecks(session, monkeypatch):
+    persona = _create_persona(session, slug="giveaway-follow-persist")
+    instagram = _create_account(session, persona, service="instagram", label="Instagram")
+    post = create_scheduled_post(
+        session,
+        _generic_giveaway_payload(
+            persona.id,
+            [instagram.id],
+            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            channels=[
+                {
+                    "service": "instagram",
+                    "account_id": instagram.id,
+                    "rules": {
+                        "kind": "all",
+                        "children": [{"kind": "atom", "atom": "follow_present", "params": {}}],
+                    },
+                }
+            ],
+        ),
+        [],
+    )
+    channel = post.giveaway_campaign.channels[0]
+    channel.entrants.append(
+        GiveawayEntrant(
+            provider_user_id="ig-user-follow",
+            provider_username="follower.one",
+            display_label="follower.one",
+            signal_state_json={},
+        )
+    )
+    session.flush()
+
+    class _FollowingClient:
+        def user_friendship_v1(self, user_id):
+            assert user_id == "ig-user-follow"
+            return SimpleNamespace(followed_by=True)
+
+    monkeypatch.setattr("app.services.giveaway_engine._instagram_destination_dependency_issue", lambda: None)
+    monkeypatch.setattr("app.services.giveaway_engine._authenticated_publish_client", lambda credentials: _FollowingClient())
+
+    evaluate_channel_entrants(channel, allow_instagram_private_verification=True)
+
+    entrant = session.query(GiveawayEntrant).filter_by(channel_id=channel.id, provider_user_id="ig-user-follow").one()
+    assert entrant.eligibility_status == ENTRY_STATUS_ELIGIBLE
+    assert entrant.signal_state_json["follow_present"] is True
+    assert entrant.signal_state_json["follow_collection_checked"] is True
+
+    monkeypatch.setattr(
+        "app.services.giveaway_engine._authenticated_publish_client",
+        lambda credentials: pytest.fail("Public rechecks should reuse the stored follow state."),
+    )
+
+    evaluate_channel_entrants(channel, allow_instagram_private_verification=False)
+
+    assert entrant.eligibility_status == ENTRY_STATUS_ELIGIBLE
+    assert entrant.signal_state_json["follow_present"] is True
+
+
+def test_instagram_follow_verification_can_record_a_real_unfollow(session, monkeypatch):
+    persona = _create_persona(session, slug="giveaway-follow-unfollow")
+    instagram = _create_account(session, persona, service="instagram", label="Instagram")
+    post = create_scheduled_post(
+        session,
+        _generic_giveaway_payload(
+            persona.id,
+            [instagram.id],
+            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            channels=[
+                {
+                    "service": "instagram",
+                    "account_id": instagram.id,
+                    "rules": {
+                        "kind": "all",
+                        "children": [{"kind": "atom", "atom": "follow_present", "params": {}}],
+                    },
+                }
+            ],
+        ),
+        [],
+    )
+    channel = post.giveaway_campaign.channels[0]
+    channel.entrants.append(
+        GiveawayEntrant(
+            provider_user_id="ig-user-follow",
+            provider_username="follower.one",
+            display_label="follower.one",
+            signal_state_json={"follow_present": True, "follow_collection_checked": True},
+        )
+    )
+    session.flush()
+
+    class _NotFollowingClient:
+        def user_friendship_v1(self, user_id):
+            assert user_id == "ig-user-follow"
+            return SimpleNamespace(followed_by=False)
+
+    monkeypatch.setattr("app.services.giveaway_engine._instagram_destination_dependency_issue", lambda: None)
+    monkeypatch.setattr("app.services.giveaway_engine._authenticated_publish_client", lambda credentials: _NotFollowingClient())
+
+    evaluate_channel_entrants(channel, allow_instagram_private_verification=True)
+
+    entrant = session.query(GiveawayEntrant).filter_by(channel_id=channel.id, provider_user_id="ig-user-follow").one()
+    assert entrant.eligibility_status == ENTRY_STATUS_DISQUALIFIED
+    assert entrant.signal_state_json["follow_present"] is False
+    assert entrant.signal_state_json["follow_collection_checked"] is True
+
+
 def test_giveaway_lifecycle_updates_qualification_checks_after_collection(session, monkeypatch):
     persona = _create_persona(session, slug="giveaway-live-checks")
     instagram = _create_account(session, persona, service="instagram", label="Instagram")
@@ -1948,6 +2057,9 @@ def test_process_giveaway_lifecycle_creates_separate_winners_for_mixed_channels(
     assert serialized is not None
     assert serialized.audit_summary.engagement_activities >= 2
     assert serialized.channels[0].summary.engagement_activities >= 1
+    channels_by_service = {channel.service: channel for channel in serialized.channels}
+    assert channels_by_service["instagram"].entrants[0].profile_url == "https://www.instagram.com/ig.one/"
+    assert channels_by_service["bluesky"].entrants[0].profile_url == "https://bsky.app/profile/bsky.one"
     assert serialized.pools[0].selection_log is not None
     assert serialized.pools[0].selection_log.candidates
 

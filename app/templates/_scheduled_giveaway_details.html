@@ -1,3 +1,11 @@
+{% macro entrant_profile_link(entry, class_name="") -%}
+{% set entrant_name = entry.display_label or entry.provider_username or entry.provider_user_id %}
+{% if entry.profile_url %}
+<a href="{{ entry.profile_url }}" target="_blank" rel="noreferrer" {% if class_name %}class="{{ class_name }}"{% endif %}>{{ entrant_name }}</a>
+{% else %}
+<span {% if class_name %}class="{{ class_name }}"{% endif %}>{{ entrant_name }}</span>
+{% endif %}
+{%- endmacro %}
 {% set instagram_scan = namespace(available=false, interval_hours=None, last_private=None, due_at=None) %}
 {% for channel in post.giveaway.channels %}
     {% if channel.service == "instagram" %}
@@ -151,7 +159,7 @@
     {% if pool.provisional_winner %}
     <div class="mt-2">
         <div class="small text-secondary">Provisional winner</div>
-        <div>{{ pool.provisional_winner.display_label or pool.provisional_winner.provider_username or pool.provisional_winner.provider_user_id }}</div>
+        <div>{{ entrant_profile_link(pool.provisional_winner, "fw-semibold") }}</div>
         {% if pool.provisional_winner.inconclusive_reasons %}
         <div class="small text-secondary mt-2">{{ pool.provisional_winner.inconclusive_reasons|join("; ") }}</div>
         {% endif %}
@@ -160,7 +168,7 @@
     {% if pool.final_winner %}
     <div class="mt-2">
         <div class="small text-secondary">Final winner</div>
-        <div>{{ pool.final_winner.display_label or pool.final_winner.provider_username or pool.final_winner.provider_user_id }}</div>
+        <div>{{ entrant_profile_link(pool.final_winner, "fw-semibold") }}</div>
     </div>
     {% endif %}
     {% if pool.status == "review_required" and pool.provisional_winner %}
@@ -171,7 +179,7 @@
     {% endif %}
     {% if pool.selection_log %}
     <div class="border rounded p-3 bg-white mt-3">
-        <div class="fw-semibold mb-2">Selection Log</div>
+        <div class="fw-semibold mb-2">Raffle Results</div>
         <div class="small text-secondary mb-2">
             Method: {{ pool.selection_log.selection_method|replace('_', ' ')|title }} •
             Candidate Source: {{ pool.selection_log.candidate_source|replace('_', ' ')|title }} •
@@ -186,35 +194,34 @@
             <div class="small text-secondary mb-1">Qualified Members</div>
             <div class="d-flex gap-2 flex-wrap">
                 {% for member in pool.selection_log.qualified_members %}
-                <span class="badge text-bg-light border">{{ member.display_label or member.provider_username or member.provider_user_id }}</span>
+                {{ entrant_profile_link(member, "badge text-bg-light border") }}
                 {% endfor %}
             </div>
         </div>
         {% endif %}
         {% if pool.selection_log.candidates %}
-        <div class="table-responsive">
-            <table class="table align-middle mb-0">
-                <thead>
-                    <tr><th>Rank</th><th>Entrant</th><th>Status</th><th>Selection Detail</th></tr>
-                </thead>
-                <tbody>
-                    {% for candidate in pool.selection_log.candidates %}
-                    <tr>
-                        <td>{{ candidate.rank }}</td>
-                        <td>{{ candidate.entrant.display_label or candidate.entrant.provider_username or candidate.entrant.provider_user_id }}</td>
-                        <td>{{ candidate.entrant.eligibility_status|replace('_', ' ')|title }}</td>
-                        <td>
-                            {% if candidate.selected %}
+        <div class="list-group">
+            {% for candidate in pool.selection_log.candidates %}
+            <div class="list-group-item {% if candidate.rank == 1 %}list-group-item-success{% endif %}">
+                <div class="d-flex flex-column flex-md-row justify-content-between gap-2">
+                    <div>
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            <span class="badge {% if candidate.rank == 1 %}text-bg-success{% else %}text-bg-light border{% endif %}">#{{ candidate.rank }}</span>
+                            {{ entrant_profile_link(candidate.entrant, "fw-semibold") }}
+                            {% if candidate.rank == 1 %}
+                            <span class="badge text-bg-success">{{ "Provisional Winner" if pool.status == "review_required" else "Winner" }}</span>
+                            {% elif candidate.selected %}
                             <span class="badge text-bg-success">Selected</span>
                             {% endif %}
-                            {% if candidate.note %}
-                            <div class="small text-secondary mt-1">{{ candidate.note }}</div>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+                        </div>
+                        {% if candidate.note %}
+                        <div class="small text-secondary mt-1">{{ candidate.note }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="small text-secondary">{{ candidate.entrant.eligibility_status|replace('_', ' ')|title }}</div>
+                </div>
+            </div>
+            {% endfor %}
         </div>
         {% endif %}
     </div>
@@ -246,7 +253,7 @@
                     {% for entry in channel.entrants %}
                     <tr>
                         <td>
-                            <div class="fw-semibold">{{ entry.display_label or entry.provider_username or entry.provider_user_id }}</div>
+                            <div>{{ entrant_profile_link(entry, "fw-semibold") }}</div>
                             <div class="small text-secondary">{{ entry.provider_user_id }}</div>
                         </td>
                         <td class="small">
