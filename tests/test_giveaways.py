@@ -2076,7 +2076,7 @@ def test_giveaway_lifecycle_records_bluesky_collection_failures(session, monkeyp
     session.flush()
 
     def fail_collection(session, channel, run_id):
-        raise TimeoutError("collector timed out")
+        raise RuntimeError("collector stopped")
 
     monkeypatch.setattr("app.services.giveaway_engine.collect_bluesky_channel_state", fail_collection)
 
@@ -2084,10 +2084,67 @@ def test_giveaway_lifecycle_records_bluesky_collection_failures(session, monkeyp
 
     channel = post.giveaway_campaign.channels[0]
     assert post.giveaway_campaign.status == GIVEAWAY_STATUS_COLLECTING
-    assert channel.last_error == "Bluesky giveaway collection failed: collector timed out"
+    assert channel.last_error == "Bluesky giveaway collection failed: collector stopped"
     alert = session.query(AlertEvent).filter(AlertEvent.event_type == "giveaway_collection_failed").one()
     assert alert.post_id == post.id
     assert alert.service == "bluesky"
+
+
+def test_giveaway_lifecycle_treats_bluesky_timeouts_as_transient_warnings(session, monkeypatch):
+    persona = _create_persona(session, slug="giveaway-bluesky-transient-timeout")
+    bluesky = _create_account(session, persona, service="bluesky", label="Bluesky")
+    post = create_scheduled_post(
+        session,
+        _generic_giveaway_payload(
+            persona.id,
+            [bluesky.id],
+            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            channels=[
+                {
+                    "service": "bluesky",
+                    "account_id": bluesky.id,
+                    "rules": {
+                        "kind": "all",
+                        "children": [
+                            {"kind": "atom", "atom": "reply_or_quote_present", "params": {}},
+                        ],
+                    },
+                }
+            ],
+        ),
+        [],
+    )
+    _mark_posted(
+        post,
+        bluesky.id,
+        external_id="post-1",
+        external_url="https://bsky.app/profile/savannah.test/post/post-1",
+    )
+    session.flush()
+
+    class InvokeTimeoutError(Exception):
+        pass
+
+    def fail_collection(session, channel, run_id):
+        raise InvokeTimeoutError("collector timed out")
+
+    monkeypatch.setattr("app.services.giveaway_engine.collect_bluesky_channel_state", fail_collection)
+
+    process_giveaway_lifecycle(session, AlertDispatcher(), run_id="run-bsky-timeout-warning")
+
+    channel = post.giveaway_campaign.channels[0]
+    assert channel.last_error == "Bluesky giveaway collection failed: collector timed out"
+    assert session.query(AlertEvent).filter(AlertEvent.event_type == "giveaway_collection_failed").count() == 0
+
+    def collect_success(session, channel, run_id):
+        channel.last_error = None
+
+    monkeypatch.setattr("app.services.giveaway_engine.collect_bluesky_channel_state", collect_success)
+
+    process_giveaway_lifecycle(session, AlertDispatcher(), run_id="run-bsky-timeout-cleared")
+
+    assert channel.last_error is None
+    assert post.giveaway_campaign.last_error is None
 
 
 @pytest.fixture()

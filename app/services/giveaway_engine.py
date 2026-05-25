@@ -2043,6 +2043,7 @@ def process_giveaway_lifecycle(
                         collect_bluesky_channel_state(session, channel, run_id=run_id)
                     except Exception as exc:
                         message = f"Bluesky giveaway collection failed: {str(exc) or exc.__class__.__name__}"
+                        transient_timeout = _is_bluesky_collection_timeout(exc)
                         channel.last_error = message
                         campaign.last_error = message
                         log_run_event(
@@ -2053,26 +2054,29 @@ def process_giveaway_lifecycle(
                             account_id=channel.account_id,
                             service=channel.service,
                             operation="giveaway",
-                            severity="error",
+                            severity="warning" if transient_timeout else "error",
                             message=message,
                             post_id=campaign.post_id,
-                            metadata={"channel_id": channel.id},
+                            metadata={"channel_id": channel.id, "transient_timeout": transient_timeout},
                         )
-                        alerts.emit_hard_failure(
-                            session,
-                            run_id=run_id,
-                            persona=campaign.post.persona,
-                            account=channel.account,
-                            service=channel.service,
-                            post=campaign.post,
-                            operation="giveaway_collection",
-                            message=message,
-                            error_class=exc.__class__.__name__,
-                            event_type="giveaway_collection_failed",
-                        )
+                        if not transient_timeout:
+                            alerts.emit_hard_failure(
+                                session,
+                                run_id=run_id,
+                                persona=campaign.post.persona,
+                                account=channel.account,
+                                service=channel.service,
+                                post=campaign.post,
+                                operation="giveaway_collection",
+                                message=message,
+                                error_class=exc.__class__.__name__,
+                                event_type="giveaway_collection_failed",
+                            )
                 elif channel.service == "instagram":
                     private_scan_ran = refresh_instagram_channel_state(session, channel, allow_due_private_scan=allow_instagram_private_scan)
                 evaluate_channel_entrants(channel, allow_instagram_private_verification=private_scan_ran)
+            channel_errors = [str(channel.last_error) for channel in ready_channels if channel.last_error]
+            campaign.last_error = "; ".join(channel_errors) if channel_errors else None
         if normalize_datetime(campaign.giveaway_end_at) and normalize_datetime(campaign.giveaway_end_at) <= now and campaign.status in {GIVEAWAY_STATUS_COLLECTING, GIVEAWAY_STATUS_SCHEDULED}:
             try:
                 finalize_giveaway_campaign(session, campaign, alerts, run_id=run_id, force_instagram_private_scan=True)
