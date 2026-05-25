@@ -119,6 +119,10 @@ def remove_post_media_files(session: Session, post: CanonicalPost) -> int:
     return removed
 
 
+def can_remove_post_media_after_delivery(post: CanonicalPost) -> bool:
+    return post.post_type != POST_TYPE_GIVEAWAY
+
+
 def _sync_post_attachments(
     session: Session,
     post: CanonicalPost,

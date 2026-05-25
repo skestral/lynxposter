@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 import hashlib
 import hmac
@@ -17,7 +18,8 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.config import reload_settings
 from app.database import Base
 from app.main import app
-from app.models import AlertEvent, GiveawayEntrant, GiveawayEvidenceEvent, InstagramGiveawayWebhookEvent
+from app.domain import MediaItem, PublishResult
+from app.models import AlertEvent, GiveawayEntrant, GiveawayEvidenceEvent, InstagramGiveawayWebhookEvent, MediaAttachment
 from app.schemas import ScheduledPostCreate
 from app.services.alerts import AlertDispatcher
 from app.services.auth import Principal
@@ -40,7 +42,9 @@ from app.services.giveaways import (
     process_instagram_giveaway_lifecycle,
 )
 from app.services.personas import create_account, create_persona
+from app.services.delivery import process_delivery_queue
 from app.services.posts import create_scheduled_post, get_post, schedule_post_now
+from app.services.storage import settings as storage_settings
 
 
 class _DumpableResponse:
@@ -1197,6 +1201,119 @@ def test_giveaway_lifecycle_collects_ready_channels_before_all_platforms_publish
     assert channels["instagram"].status == GIVEAWAY_STATUS_COLLECTING
     assert channels["bluesky"].status == "scheduled"
     assert calls == ["instagram"]
+
+
+def test_giveaway_delivery_keeps_media_available_after_initial_publish(session, monkeypatch, tmp_path):
+    uploads_dir = tmp_path / "uploads"
+    imported_dir = tmp_path / "imported"
+    uploads_dir.mkdir()
+    imported_dir.mkdir()
+    monkeypatch.setattr("app.services.storage.settings", replace(storage_settings, uploads_dir=uploads_dir, imported_media_dir=imported_dir))
+    persona = _create_persona(session, slug="giveaway-media-retention")
+    instagram = _create_account(session, persona, service="instagram", label="Instagram")
+    bluesky = _create_account(session, persona, service="bluesky", label="Bluesky")
+    image_path = uploads_dir / "giveaway.jpg"
+    image_path.write_bytes(b"jpeg")
+    post = create_scheduled_post(
+        session,
+        _generic_giveaway_payload(
+            persona.id,
+            [instagram.id, bluesky.id],
+            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            channels=[
+                {
+                    "service": "instagram",
+                    "account_id": instagram.id,
+                    "rules": {"kind": "all", "children": [{"kind": "atom", "atom": "comment_present", "params": {}}]},
+                },
+                {
+                    "service": "bluesky",
+                    "account_id": bluesky.id,
+                    "rules": {"kind": "all", "children": [{"kind": "atom", "atom": "reply_or_quote_present", "params": {}}]},
+                },
+            ],
+        ),
+        [
+            MediaItem(
+                storage_path=image_path,
+                mime_type="image/jpeg",
+                alt_text="",
+                size_bytes=image_path.stat().st_size,
+                checksum="img-1",
+                sort_order=0,
+            ),
+        ],
+    )
+    for job in post.delivery_jobs:
+        job.status = "queued"
+    session.flush()
+
+    class FakeDestinationAdapter:
+        def validate(self, post, persona, account):
+            return []
+
+        def publish(self, session, post, persona, account, *, context=None):
+            return PublishResult(
+                service=account.service,
+                external_id=f"{account.service}-post",
+                external_url=f"https://example.com/{account.service}/post",
+            )
+
+    monkeypatch.setattr("app.services.delivery.get_destination_adapter_for_account", lambda account: FakeDestinationAdapter())
+
+    process_delivery_queue(session, AlertDispatcher(), run_id="run-giveaway-media-retention")
+
+    assert {job.status for job in post.delivery_jobs} == {"posted"}
+    assert session.query(MediaAttachment).filter_by(post_id=post.id).count() == 1
+    assert image_path.exists()
+
+
+def test_delivery_recovers_requeued_job_that_already_has_external_id(session, monkeypatch):
+    persona = _create_persona(session, slug="giveaway-requeued-published-job")
+    instagram = _create_account(session, persona, service="instagram", label="Instagram")
+    post = create_scheduled_post(
+        session,
+        _generic_giveaway_payload(
+            persona.id,
+            [instagram.id],
+            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            channels=[
+                {
+                    "service": "instagram",
+                    "account_id": instagram.id,
+                    "rules": {"kind": "all", "children": [{"kind": "atom", "atom": "comment_present", "params": {}}]},
+                }
+            ],
+        ),
+        [
+            MediaItem(
+                storage_path="/tmp/already-posted-giveaway.jpg",
+                mime_type="image/jpeg",
+                alt_text="",
+                size_bytes=4,
+                checksum="img-1",
+                sort_order=0,
+            )
+        ],
+    )
+    for attachment in list(post.attachments):
+        session.delete(attachment)
+    session.flush()
+    job = post.delivery_jobs[0]
+    job.status = "queued"
+    job.external_id = "ig-media-existing"
+    job.external_url = "https://instagram.test/p/existing/"
+    session.flush()
+
+    def fail_adapter(account):
+        raise AssertionError("Published jobs with external IDs should not be sent again.")
+
+    monkeypatch.setattr("app.services.delivery.get_destination_adapter_for_account", fail_adapter)
+
+    process_delivery_queue(session, AlertDispatcher(), run_id="run-recover-published")
+
+    assert job.status == "posted"
+    assert post.status == "posted"
 
 
 def test_process_giveaway_lifecycle_creates_separate_winners_for_mixed_channels(session, monkeypatch):

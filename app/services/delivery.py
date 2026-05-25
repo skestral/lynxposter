@@ -14,6 +14,7 @@ from app.models import Account, AccountPostRef, AccountRoute, CanonicalPost, Del
 from app.services.alerts import AlertDispatcher
 from app.services.events import log_run_event
 from app.services.posts import (
+    can_remove_post_media_after_delivery,
     get_or_create_sync_state,
     persona_max_retries,
     reconcile_pending_relationships,
@@ -303,6 +304,13 @@ def process_delivery_queue(
         post = job.post
         persona = post.persona
         target_account = job.target_account
+        if job.external_id:
+            job.status = "posted"
+            job.delivered_at = job.delivered_at or now_utc()
+            refresh_post_status(post)
+            if _all_delivery_jobs_posted(post) and can_remove_post_media_after_delivery(post):
+                remove_post_media_files(session, post)
+            continue
         if not persona or not target_account:
             job.status = "cancelled"
             continue
@@ -468,7 +476,11 @@ def process_delivery_queue(
 
             refresh_post_status(post)
             post_preview = _log_post_preview(post)
-            removed_media_count = remove_post_media_files(session, post) if _all_delivery_jobs_posted(post) else 0
+            removed_media_count = (
+                remove_post_media_files(session, post)
+                if _all_delivery_jobs_posted(post) and can_remove_post_media_after_delivery(post)
+                else 0
+            )
             log_run_event(
                 session,
                 run_id=run_id,
