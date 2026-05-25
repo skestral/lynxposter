@@ -2452,6 +2452,21 @@ def _bluesky_payload_value(payload: dict[str, Any], key: str, default: Any = Non
     return payload.get(_snake_case_key(key), default)
 
 
+def _bluesky_actor_identity(payload: dict[str, Any]) -> tuple[str | None, str | None, str | None]:
+    for key in ("actor", "author", "subject", "profile"):
+        nested = payload.get(key)
+        if isinstance(nested, dict):
+            did = str(nested.get("did") or "").strip() or None
+            handle = str(nested.get("handle") or "").strip() or None
+            display_name = str(nested.get("displayName") or nested.get("display_name") or "").strip() or None
+            if did:
+                return did, handle, display_name
+    did = str(payload.get("did") or "").strip() or None
+    handle = str(payload.get("handle") or "").strip() or None
+    display_name = str(payload.get("displayName") or payload.get("display_name") or "").strip() or None
+    return did, handle, display_name
+
+
 def _collect_all_pages(fetch_page: Callable[..., Any], *, key: str, uri: str, cid: str | None = None) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     cursor: str | None = None
@@ -2554,8 +2569,7 @@ def _sync_bluesky_activity_events(
         )
 
     for like in likes:
-        actor = dict(like.get("actor") or {})
-        did = str(actor.get("did") or "").strip()
+        did, handle, display_name = _bluesky_actor_identity(like)
         if not did:
             continue
         remember(
@@ -2564,13 +2578,13 @@ def _sync_bluesky_activity_events(
             entrants_by_user_id.get(did),
             {
                 "actor_did": did,
-                "actor_handle": str(actor.get("handle") or "").strip() or None,
-                "actor_display_label": str(actor.get("handle") or "").strip() or did,
+                "actor_handle": handle,
+                "actor_display_label": display_name or handle or did,
             },
         )
 
     for repost in reposts:
-        did = str(repost.get("did") or "").strip()
+        did, handle, display_name = _bluesky_actor_identity(repost)
         if not did:
             continue
         remember(
@@ -2579,8 +2593,8 @@ def _sync_bluesky_activity_events(
             entrants_by_user_id.get(did),
             {
                 "actor_did": did,
-                "actor_handle": str(repost.get("handle") or "").strip() or None,
-                "actor_display_label": str(repost.get("handle") or "").strip() or did,
+                "actor_handle": handle,
+                "actor_display_label": display_name or handle or did,
             },
         )
 
@@ -2865,22 +2879,21 @@ def collect_bluesky_channel_state(session: Session, channel: GiveawayChannel, *,
         entry["reply_or_quote_mention_count"] = max(int(entry["reply_or_quote_mention_count"] or 0), mention_count)
 
     for like in likes:
-        actor = dict(like.get("actor") or {})
-        did = str(actor.get("did") or "").strip()
+        did, handle, display_name = _bluesky_actor_identity(like)
         if not did:
             continue
         entry = entrants[did]
-        entry["provider_username"] = str(actor.get("handle") or "").strip() or entry["provider_username"]
-        entry["display_label"] = entry["provider_username"] or did
+        entry["provider_username"] = handle or entry["provider_username"]
+        entry["display_label"] = display_name or entry["provider_username"] or did
         entry["like_present"] = True
 
     for repost in reposts:
-        did = str(repost.get("did") or "").strip()
+        did, handle, display_name = _bluesky_actor_identity(repost)
         if not did:
             continue
         entry = entrants[did]
-        entry["provider_username"] = str(repost.get("handle") or "").strip() or entry["provider_username"]
-        entry["display_label"] = entry["provider_username"] or did
+        entry["provider_username"] = handle or entry["provider_username"]
+        entry["display_label"] = display_name or entry["provider_username"] or did
         entry["repost_present"] = True
 
     other_dids = list(entrants.keys())
