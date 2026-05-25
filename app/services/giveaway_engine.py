@@ -2486,6 +2486,36 @@ def _collect_all_pages(fetch_page: Callable[..., Any], *, key: str, uri: str, ci
     return items
 
 
+def _bluesky_author_feed_has_repost(client: Any, *, actor: str, target_uri: str, target_cid: str | None = None) -> bool:
+    cursor: str | None = None
+    for _ in range(3):
+        params: dict[str, Any] = {
+            "actor": actor,
+            "limit": 100,
+            "includePins": False,
+            "filter": "posts_with_replies",
+        }
+        if cursor:
+            params["cursor"] = cursor
+        payload = _call_bluesky_collection(client.app.bsky.feed.get_author_feed, params)
+        for item in list(_bluesky_payload_value(payload, "feed", []) or []):
+            if not isinstance(item, dict):
+                continue
+            post = dict(item.get("post") or {})
+            if str(post.get("uri") or "").strip() != target_uri:
+                continue
+            if target_cid and str(post.get("cid") or "").strip() not in {"", target_cid}:
+                continue
+            reason = dict(item.get("reason") or {})
+            reason_type = str(reason.get("$type") or reason.get("py_type") or "").strip()
+            if reason_type.endswith("#reasonRepost") or "reasonRepost" in reason_type:
+                return True
+        cursor = payload.get("cursor")
+        if not cursor:
+            break
+    return False
+
+
 def _walk_thread_replies(thread: dict[str, Any], *, target_uri: str) -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
 
@@ -2897,6 +2927,30 @@ def collect_bluesky_channel_state(session: Session, channel: GiveawayChannel, *,
         entry["provider_username"] = handle or entry["provider_username"]
         entry["display_label"] = display_name or entry["provider_username"] or did
         entry["repost_present"] = True
+
+    for did, entry in list(entrants.items()):
+        if entry.get("repost_present"):
+            continue
+        try:
+            has_repost = _bluesky_author_feed_has_repost(
+                client,
+                actor=did,
+                target_uri=channel.target_post_uri,
+                target_cid=channel.target_post_cid,
+            )
+        except Exception:
+            continue
+        if not has_repost:
+            continue
+        entry["repost_present"] = True
+        reposts.append(
+            {
+                "did": did,
+                "handle": entry.get("provider_username"),
+                "displayName": entry.get("display_label"),
+                "source": "author_feed",
+            }
+        )
 
     other_dids = list(entrants.keys())
     for index in range(0, len(other_dids), 30):

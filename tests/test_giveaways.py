@@ -2227,6 +2227,106 @@ def test_collect_bluesky_channel_state_handles_nested_repost_actor(session, monk
     assert session.query(GiveawayEvidenceEvent).filter_by(channel_id=channel.id, event_type="bluesky_repost").count() == 1
 
 
+def test_collect_bluesky_channel_state_falls_back_to_author_feed_reposts(session, monkeypatch):
+    persona = _create_persona(session, slug="giveaway-bluesky-author-feed-repost")
+    bluesky = _create_account(session, persona, service="bluesky", label="Bluesky")
+    post = create_scheduled_post(
+        session,
+        _generic_giveaway_payload(
+            persona.id,
+            [bluesky.id],
+            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            channels=[
+                {
+                    "service": "bluesky",
+                    "account_id": bluesky.id,
+                    "rules": {
+                        "kind": "all",
+                        "children": [
+                            {"kind": "atom", "atom": "reply_or_quote_present", "params": {}},
+                            {"kind": "atom", "atom": "like_present", "params": {}},
+                            {"kind": "atom", "atom": "follow_present", "params": {}},
+                            {"kind": "atom", "atom": "repost_present", "params": {}},
+                        ],
+                    },
+                }
+            ],
+        ),
+        [],
+    )
+    channel = post.giveaway_campaign.channels[0]
+    channel.target_post_uri = "at://did:plc:owner/app.bsky.feed.post/post-1"
+    channel.target_post_cid = "cid-1"
+    session.flush()
+
+    class _FakeBlueskyClient:
+        def __init__(self):
+            feed = SimpleNamespace(
+                get_likes=lambda params: _DumpableResponse(
+                    {
+                        "likes": [
+                            {"actor": {"did": "did:plc:user-1", "handle": "furkarufam.bsky.social"}},
+                        ]
+                    }
+                ),
+                get_reposted_by=lambda params: _DumpableResponse({"repostedBy": []}),
+                get_quotes=lambda params: _DumpableResponse({"posts": []}),
+                get_post_thread=lambda params: _DumpableResponse(
+                    {
+                        "thread": {
+                            "post": {"cid": "cid-1"},
+                            "replies": [
+                                {
+                                    "post": {
+                                        "uri": "at://did:plc:user-1/app.bsky.feed.post/reply-1",
+                                        "record": {
+                                            "text": "count me in",
+                                            "reply": {
+                                                "parent": {"uri": "at://did:plc:owner/app.bsky.feed.post/post-1"},
+                                            },
+                                        },
+                                        "author": {"did": "did:plc:user-1", "handle": "furkarufam.bsky.social"},
+                                    },
+                                    "replies": [],
+                                }
+                            ],
+                        }
+                    }
+                ),
+                get_author_feed=lambda params: _DumpableResponse(
+                    {
+                        "feed": [
+                            {
+                                "post": {"uri": "at://did:plc:owner/app.bsky.feed.post/post-1", "cid": "cid-1"},
+                                "reason": {"$type": "app.bsky.feed.defs#reasonRepost"},
+                            }
+                        ]
+                    }
+                ),
+            )
+            graph = SimpleNamespace(
+                get_relationships=lambda params: _DumpableResponse(
+                    {
+                        "relationships": [
+                            {"did": "did:plc:user-1", "followedBy": True},
+                        ]
+                    }
+                )
+            )
+            self.app = SimpleNamespace(bsky=SimpleNamespace(feed=feed, graph=graph))
+
+    monkeypatch.setattr("app.services.giveaway_engine._get_bluesky_client", lambda credentials: _FakeBlueskyClient())
+
+    collect_bluesky_channel_state(session, channel, run_id="run-bsky-author-feed-repost")
+    evaluate_channel_entrants(channel)
+
+    entrant = channel.entrants[0]
+    assert entrant.provider_username == "furkarufam.bsky.social"
+    assert entrant.signal_state_json["repost_present"] is True
+    assert entrant.eligibility_status == ENTRY_STATUS_ELIGIBLE
+    assert session.query(GiveawayEvidenceEvent).filter_by(channel_id=channel.id, event_type="bluesky_repost").count() == 1
+
+
 def test_collect_bluesky_channel_state_retries_transient_timeouts(session, monkeypatch):
     persona = _create_persona(session, slug="giveaway-bluesky-timeout-retry")
     bluesky = _create_account(session, persona, service="bluesky", label="Bluesky")
