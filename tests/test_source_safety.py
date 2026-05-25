@@ -181,6 +181,42 @@ def test_instagram_source_poll_uses_business_graph_endpoint_when_user_id_is_conf
     assert "access_token" not in calls[0][0]
 
 
+def test_instagram_source_poll_uses_instagram_graph_endpoint_for_instagram_login_token(session, monkeypatch):
+    persona = _create_persona(session, slug="instagram-login-graph")
+    account = _create_account(
+        session,
+        persona,
+        service="instagram",
+        label="Instagram",
+        source_enabled=True,
+        destination_enabled=True,
+        credentials_json={"api_key": "IGQVJ-secret-token", "instagram_user_id": "17841400000000000"},
+    )
+    calls: list[tuple[str, dict]] = []
+
+    class FakeResponse:
+        text = ""
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"data": []}
+
+    def fake_get(url, **kwargs):
+        calls.append((url, dict(kwargs.get("params") or {})))
+        return FakeResponse()
+
+    monkeypatch.setattr("app.adapters.instagram.requests.get", fake_get)
+    monkeypatch.setattr("app.adapters.instagram.now_utc", lambda: datetime(2026, 4, 14, 12, 0, tzinfo=timezone.utc))
+
+    InstagramSourceAdapter().poll(session, persona, account, AccountSyncState(source_account_id=account.id, state_json={}))
+
+    assert calls[0][0] == "https://graph.instagram.com/v25.0/17841400000000000/media"
+    assert calls[0][1]["access_token"] == "IGQVJ-secret-token"
+    assert "access_token" not in calls[0][0]
+
+
 def test_instagram_source_poll_normalizes_pasted_graph_access_token(session, monkeypatch):
     persona = _create_persona(session, slug="instagram-normalized-token")
     account = _create_account(

@@ -110,6 +110,11 @@ SERVICE_REGISTRY: dict[str, ServiceDefinition] = {
                 help_text="The IG user id for the Business or Creator account connected to your Meta app.",
             ),
             AccountFieldDefinition(
+                "graph_api_host",
+                "Graph API Host",
+                help_text="Optional. Leave blank or use auto. Use instagram for tokens from Meta's Instagram Use Cases flow, or facebook for Page access tokens.",
+            ),
+            AccountFieldDefinition(
                 "instagrapi_sessionid",
                 "Private Verification Session ID",
                 input_type="password",

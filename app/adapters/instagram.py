@@ -23,6 +23,8 @@ from app.services.storage import download_media, public_instagram_media_url
 INSTAGRAM_API_VERSION = "v25.0"
 INSTAGRAM_GRAPH_API_BASE_URL = f"https://graph.instagram.com/{INSTAGRAM_API_VERSION}"
 INSTAGRAM_PUBLISH_API_BASE_URL = f"https://graph.facebook.com/{INSTAGRAM_API_VERSION}"
+INSTAGRAM_GRAPH_HOST_INSTAGRAM = "instagram"
+INSTAGRAM_GRAPH_HOST_FACEBOOK = "facebook"
 INSTAGRAM_SUPPORTED_IMAGE_MIME_TYPES = {"image/jpeg", "image/jpg", "image/pjpeg", "image/png", "image/webp"}
 INSTAGRAM_SUPPORTED_VIDEO_MIME_TYPES = {"video/mp4"}
 INSTAGRAM_GRAPH_IMAGE_MIME_TYPES = {"image/jpeg", "image/jpg", "image/pjpeg"}
@@ -89,6 +91,25 @@ def _configured_graph_access_token(config: dict[str, Any]) -> str:
             return query_token.strip()
 
     return token
+
+
+def _configured_graph_api_host(config: dict[str, Any]) -> str:
+    return str(config.get("graph_api_host") or config.get("api_host") or "auto").strip().lower()
+
+
+def _looks_like_instagram_login_token(access_token: str) -> bool:
+    return access_token.upper().startswith("IG")
+
+
+def _instagram_account_graph_base_url(config: dict[str, Any]) -> str:
+    configured_host = _configured_graph_api_host(config)
+    if configured_host in {INSTAGRAM_GRAPH_HOST_INSTAGRAM, "instagram_login", "graph.instagram.com"}:
+        return INSTAGRAM_GRAPH_API_BASE_URL
+    if configured_host in {INSTAGRAM_GRAPH_HOST_FACEBOOK, "facebook_login", "business", "graph.facebook.com"}:
+        return INSTAGRAM_PUBLISH_API_BASE_URL
+    if _looks_like_instagram_login_token(_configured_graph_access_token(config)):
+        return INSTAGRAM_GRAPH_API_BASE_URL
+    return INSTAGRAM_PUBLISH_API_BASE_URL
 
 
 def _configured_instagram_user_id(config: dict[str, Any]) -> str:
@@ -173,25 +194,27 @@ def _raise_instagram_source_error(response: requests.Response, *, action: str) -
 def _instagram_source_media_endpoint(config: dict[str, Any]) -> tuple[str, str]:
     instagram_user_id = _configured_instagram_user_id(config)
     if instagram_user_id:
-        return f"{INSTAGRAM_PUBLISH_API_BASE_URL}/{instagram_user_id}/media", "business_media"
+        base_url = _instagram_account_graph_base_url(config)
+        action = "instagram_media" if base_url == INSTAGRAM_GRAPH_API_BASE_URL else "business_media"
+        return f"{base_url}/{instagram_user_id}/media", action
     return f"{INSTAGRAM_GRAPH_API_BASE_URL}/me/media", "login_media"
 
 
 def _instagram_source_children_endpoint(config: dict[str, Any], media_id: str) -> tuple[str, str]:
     instagram_user_id = _configured_instagram_user_id(config)
-    base_url = INSTAGRAM_PUBLISH_API_BASE_URL if instagram_user_id else INSTAGRAM_GRAPH_API_BASE_URL
+    base_url = _instagram_account_graph_base_url(config) if instagram_user_id else INSTAGRAM_GRAPH_API_BASE_URL
     return f"{base_url}/{media_id}/children", "media_children"
 
 
-def _post_graph(path: str, data: dict[str, Any]) -> dict[str, Any]:
-    response = requests.post(f"{INSTAGRAM_PUBLISH_API_BASE_URL}/{path.lstrip('/')}", data=data, timeout=60)
+def _post_graph(path: str, data: dict[str, Any], *, base_url: str = INSTAGRAM_PUBLISH_API_BASE_URL) -> dict[str, Any]:
+    response = requests.post(f"{base_url}/{path.lstrip('/')}", data=data, timeout=60)
     _raise_graph_error(response, action=path)
     payload = response.json()
     return payload if isinstance(payload, dict) else {}
 
 
-def _get_graph(path: str, params: dict[str, Any]) -> dict[str, Any]:
-    response = requests.get(f"{INSTAGRAM_PUBLISH_API_BASE_URL}/{path.lstrip('/')}", params=params, timeout=30)
+def _get_graph(path: str, params: dict[str, Any], *, base_url: str = INSTAGRAM_PUBLISH_API_BASE_URL) -> dict[str, Any]:
+    response = requests.get(f"{base_url}/{path.lstrip('/')}", params=params, timeout=30)
     _raise_graph_error(response, action=path)
     payload = response.json()
     return payload if isinstance(payload, dict) else {}
@@ -204,12 +227,13 @@ def _graph_container_id(payload: dict[str, Any]) -> str:
     return container_id
 
 
-def _wait_for_container_ready(container_id: str, access_token: str) -> dict[str, Any]:
+def _wait_for_container_ready(container_id: str, access_token: str, *, base_url: str) -> dict[str, Any]:
     last_payload: dict[str, Any] = {}
     for attempt in range(8):
         payload = _get_graph(
             container_id,
             {"fields": "status_code,status", "access_token": access_token},
+            base_url=base_url,
         )
         last_payload = payload
         status_code = str(payload.get("status_code") or "").upper()
@@ -229,25 +253,27 @@ def _graph_create_container(
     instagram_user_id: str,
     access_token: str,
     data: dict[str, Any],
+    base_url: str,
     wait_until_ready: bool = True,
 ) -> tuple[str, dict[str, Any]]:
-    payload = _post_graph(f"{instagram_user_id}/media", {**data, "access_token": access_token})
+    payload = _post_graph(f"{instagram_user_id}/media", {**data, "access_token": access_token}, base_url=base_url)
     container_id = _graph_container_id(payload)
-    status_payload = _wait_for_container_ready(container_id, access_token) if wait_until_ready else {}
+    status_payload = _wait_for_container_ready(container_id, access_token, base_url=base_url) if wait_until_ready else {}
     return container_id, {"create": payload, "status": status_payload}
 
 
-def _graph_publish_container(instagram_user_id: str, access_token: str, container_id: str) -> dict[str, Any]:
+def _graph_publish_container(instagram_user_id: str, access_token: str, container_id: str, *, base_url: str) -> dict[str, Any]:
     return _post_graph(
         f"{instagram_user_id}/media_publish",
         {"creation_id": container_id, "access_token": access_token},
+        base_url=base_url,
     )
 
 
-def _graph_permalink(access_token: str, media_id: str) -> str | None:
+def _graph_permalink(access_token: str, media_id: str, *, base_url: str) -> str | None:
     if not media_id:
         return None
-    payload = _get_graph(media_id, {"fields": "permalink", "access_token": access_token})
+    payload = _get_graph(media_id, {"fields": "permalink", "access_token": access_token}, base_url=base_url)
     permalink = str(payload.get("permalink") or "").strip()
     return permalink or None
 
@@ -607,6 +633,7 @@ class InstagramDestinationAdapter(DestinationAdapter):
         caption = service_body(post, account)
         access_token = _configured_graph_access_token(config)
         instagram_user_id = _configured_instagram_user_id(config)
+        graph_base_url = _instagram_account_graph_base_url(config)
         raw: dict[str, Any] = {"children": []}
 
         if len(attachments) == 1:
@@ -635,6 +662,7 @@ class InstagramDestinationAdapter(DestinationAdapter):
                 instagram_user_id=instagram_user_id,
                 access_token=access_token,
                 data=container_data,
+                base_url=graph_base_url,
                 wait_until_ready=mime_type in INSTAGRAM_GRAPH_VIDEO_MIME_TYPES,
             )
         else:
@@ -658,6 +686,7 @@ class InstagramDestinationAdapter(DestinationAdapter):
                     instagram_user_id=instagram_user_id,
                     access_token=access_token,
                     data=child_data,
+                    base_url=graph_base_url,
                     wait_until_ready=mime_type in INSTAGRAM_GRAPH_VIDEO_MIME_TYPES,
                 )
                 child_ids.append(child_id)
@@ -670,13 +699,14 @@ class InstagramDestinationAdapter(DestinationAdapter):
                     "children": ",".join(child_ids),
                     "caption": caption,
                 },
+                base_url=graph_base_url,
             )
 
-        publish_raw = _graph_publish_container(instagram_user_id, access_token, container_id)
+        publish_raw = _graph_publish_container(instagram_user_id, access_token, container_id, base_url=graph_base_url)
         media_id = str(publish_raw.get("id") or "").strip()
         if not media_id:
             raise RuntimeError("Instagram Graph did not return a published media id.")
-        external_url = _graph_permalink(access_token, media_id)
+        external_url = _graph_permalink(access_token, media_id, base_url=graph_base_url)
         raw.update(
             {
                 "container": {"id": container_id, **container_raw},

@@ -245,6 +245,72 @@ def test_instagram_destination_publish_single_image_uses_graph(session, monkeypa
     assert [call[0] for call in calls] == ["post", "post", "get"]
 
 
+def test_instagram_destination_publish_uses_instagram_graph_for_instagram_login_token(session, monkeypatch, tmp_path):
+    monkeypatch.setenv("APP_BASE_URL", "https://lynxposter.example.com")
+    reload_settings()
+    persona = _create_persona(session, slug="instagram-login-publish")
+    account = _create_instagram_account(
+        session,
+        persona,
+        credentials={
+            "api_key": "IGQVJ-secret-token",
+            "instagram_user_id": "17841400000000000",
+        },
+    )
+    image_path = tmp_path / "photo.jpg"
+    _create_image(image_path, image_format="JPEG")
+
+    post = create_scheduled_post(
+        session,
+        ScheduledPostCreate.model_validate(
+            {
+                "persona_id": persona.id,
+                "body": "Hello Instagram",
+                "status": "draft",
+                "target_account_ids": [account.id],
+                "publish_overrides_json": {},
+                "metadata_json": {},
+                "scheduled_for": None,
+            }
+        ),
+        [MediaItem(storage_path=image_path, mime_type="image/jpeg", size_bytes=4, checksum="img-1", sort_order=0)],
+    )
+    session.refresh(post)
+
+    urls = []
+
+    class FakeResponse:
+        ok = True
+        text = ""
+
+        def __init__(self, payload):
+            self._payload = payload
+
+        def json(self):
+            return self._payload
+
+    def fake_post(url, data=None, timeout=0):
+        urls.append(url)
+        if url.endswith("/17841400000000000/media"):
+            return FakeResponse({"id": "container-1"})
+        if url.endswith("/17841400000000000/media_publish"):
+            return FakeResponse({"id": "media-1"})
+        raise AssertionError(url)
+
+    def fake_get(url, params=None, timeout=0):
+        urls.append(url)
+        assert url.endswith("/media-1")
+        return FakeResponse({"permalink": "https://www.instagram.com/p/ABC123/"})
+
+    monkeypatch.setattr("app.adapters.instagram.requests.post", fake_post)
+    monkeypatch.setattr("app.adapters.instagram.requests.get", fake_get)
+
+    result = InstagramDestinationAdapter().publish(session, post, persona, account)
+
+    assert result.external_id == "media-1"
+    assert all(url.startswith("https://graph.instagram.com/v25.0/") for url in urls)
+
+
 def test_instagram_destination_publish_album_uses_graph_children(session, monkeypatch, tmp_path):
     monkeypatch.setenv("APP_BASE_URL", "https://lynxposter.example.com")
     reload_settings()
