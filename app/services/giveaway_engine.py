@@ -2194,7 +2194,10 @@ def _call_bluesky_collection(fetch: Callable[[dict[str, Any]], Any], params: dic
     for attempt in range(BLUESKY_COLLECTION_MAX_ATTEMPTS):
         try:
             response = fetch(params)
-            payload = response.model_dump()
+            try:
+                payload = response.model_dump(mode="json", by_alias=True)
+            except TypeError:
+                payload = response.model_dump()
             return payload if isinstance(payload, dict) else {}
         except Exception as exc:
             last_error = exc
@@ -2204,6 +2207,23 @@ def _call_bluesky_collection(fetch: Callable[[dict[str, Any]], Any], params: dic
     if last_error is not None:
         raise last_error
     return {}
+
+
+def _snake_case_key(name: str) -> str:
+    result: list[str] = []
+    for character in name:
+        if character.isupper():
+            result.append("_")
+            result.append(character.lower())
+        else:
+            result.append(character)
+    return "".join(result).lstrip("_")
+
+
+def _bluesky_payload_value(payload: dict[str, Any], key: str, default: Any = None) -> Any:
+    if key in payload:
+        return payload.get(key)
+    return payload.get(_snake_case_key(key), default)
 
 
 def _collect_all_pages(fetch_page: Callable[..., Any], *, key: str, uri: str, cid: str | None = None) -> list[dict[str, Any]]:
@@ -2216,7 +2236,7 @@ def _collect_all_pages(fetch_page: Callable[..., Any], *, key: str, uri: str, ci
         if cursor:
             params["cursor"] = cursor
         payload = _call_bluesky_collection(fetch_page, params)
-        items.extend(list(payload.get(key) or []))
+        items.extend(list(_bluesky_payload_value(payload, key, []) or []))
         cursor = payload.get("cursor")
         if not cursor:
             break
@@ -2578,7 +2598,7 @@ def collect_bluesky_channel_state(session: Session, channel: GiveawayChannel, *,
         for item in relationships.get("relationships") or []:
             did = str(item.get("did") or "").strip()
             if did in entrants:
-                entrants[did]["follow_present"] = bool(item.get("followedBy"))
+                entrants[did]["follow_present"] = bool(_bluesky_payload_value(item, "followedBy"))
 
     for provider_user_id, state in entrants.items():
         entrant = get_or_create_channel_entrant(

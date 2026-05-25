@@ -1839,6 +1839,74 @@ def test_collect_bluesky_channel_state_captures_reply_quote_like_repost_and_foll
     assert entrant.signal_state_json["reply_or_quote_mention_count"] >= 1
 
 
+def test_collect_bluesky_channel_state_handles_python_client_field_names(session, monkeypatch):
+    persona = _create_persona(session, slug="giveaway-bluesky-snake-fields")
+    bluesky = _create_account(session, persona, service="bluesky", label="Bluesky")
+    post = create_scheduled_post(
+        session,
+        _generic_giveaway_payload(
+            persona.id,
+            [bluesky.id],
+            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            channels=[
+                {
+                    "service": "bluesky",
+                    "account_id": bluesky.id,
+                    "rules": {
+                        "kind": "all",
+                        "children": [
+                            {"kind": "atom", "atom": "follow_present", "params": {}},
+                            {"kind": "atom", "atom": "repost_present", "params": {}},
+                        ],
+                    },
+                }
+            ],
+        ),
+        [],
+    )
+    channel = post.giveaway_campaign.channels[0]
+    channel.target_post_uri = "at://did:plc:owner/app.bsky.feed.post/post-1"
+    channel.target_post_cid = "cid-1"
+    session.flush()
+
+    class _FakeBlueskyClient:
+        def __init__(self):
+            feed = SimpleNamespace(
+                get_likes=lambda params: _DumpableResponse({"likes": []}),
+                get_reposted_by=lambda params: _DumpableResponse(
+                    {
+                        "reposted_by": [
+                            {"did": "did:plc:user-1", "handle": "bsky.one"},
+                        ]
+                    }
+                ),
+                get_quotes=lambda params: _DumpableResponse({"posts": []}),
+                get_post_thread=lambda params: _DumpableResponse({"thread": {"post": {"cid": "cid-1"}, "replies": []}}),
+            )
+            graph = SimpleNamespace(
+                get_relationships=lambda params: _DumpableResponse(
+                    {
+                        "relationships": [
+                            {"did": "did:plc:user-1", "followed_by": "at://did:plc:user-1/app.bsky.graph.follow/follow-1"},
+                        ]
+                    }
+                )
+            )
+            self.app = SimpleNamespace(bsky=SimpleNamespace(feed=feed, graph=graph))
+
+    monkeypatch.setattr("app.services.giveaway_engine._get_bluesky_client", lambda credentials: _FakeBlueskyClient())
+
+    collect_bluesky_channel_state(session, channel, run_id="run-bsky-snake-fields")
+    evaluate_channel_entrants(channel)
+
+    entrant = channel.entrants[0]
+    assert entrant.signal_state_json["repost_present"] is True
+    assert entrant.signal_state_json["follow_present"] is True
+    assert entrant.eligibility_status == ENTRY_STATUS_ELIGIBLE
+    assert session.query(GiveawayEvidenceEvent).filter_by(channel_id=channel.id, event_type="bluesky_repost").count() == 1
+    assert session.query(GiveawayEvidenceEvent).filter_by(channel_id=channel.id, event_type="bluesky_follow").count() == 1
+
+
 def test_collect_bluesky_channel_state_retries_transient_timeouts(session, monkeypatch):
     persona = _create_persona(session, slug="giveaway-bluesky-timeout-retry")
     bluesky = _create_account(session, persona, service="bluesky", label="Bluesky")
