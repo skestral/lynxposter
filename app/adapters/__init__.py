@@ -102,7 +102,7 @@ SERVICE_REGISTRY: dict[str, ServiceDefinition] = {
                 "api_key",
                 "Graph Access Token",
                 input_type="password",
-                help_text="Used for inbound polling, token-lifecycle tracking, and Graph publishing.",
+                help_text="Use the raw Meta Graph token. LynxPoster also accepts a pasted URL or access_token= value and will extract the token.",
             ),
             AccountFieldDefinition(
                 "instagram_user_id",

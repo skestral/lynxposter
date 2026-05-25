@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 import requests
 from sqlalchemy.orm import Session
@@ -72,7 +73,22 @@ def _instagram_destination_dependency_issue() -> str | None:
 
 
 def _configured_graph_access_token(config: dict[str, Any]) -> str:
-    return str(config.get("api_key") or "").strip()
+    token = str(config.get("api_key") or "").strip().strip("\"'")
+    if token.lower().startswith("bearer "):
+        token = token[7:].strip()
+
+    parsed = urlparse(token)
+    if parsed.query:
+        query_token = parse_qs(parsed.query).get("access_token", [""])[0]
+        if query_token:
+            return query_token.strip()
+
+    if token.startswith("access_token="):
+        query_token = parse_qs(token).get("access_token", [""])[0]
+        if query_token:
+            return query_token.strip()
+
+    return token
 
 
 def _configured_instagram_user_id(config: dict[str, Any]) -> str:

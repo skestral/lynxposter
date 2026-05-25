@@ -55,6 +55,7 @@ The app serves on `http://127.0.0.1:8000/`.
 
 - Instagram inbound polling uses the Graph access token (`INSTAGRAM_API_KEY`).
 - Instagram outbound publishing uses the official Instagram Graph content publishing flow. Configure a Graph access token plus the Instagram Professional Account ID, and set `APP_BASE_URL` to the externally reachable HTTPS URL for this app.
+- The Graph access token field should contain the raw Meta token. LynxPoster will extract the token from common pasted formats like `Bearer ...`, `access_token=...`, or a copied callback URL, but the token still needs to be valid for the Instagram Professional Account ID.
 - During Graph publishing, Meta fetches scheduled media from `https://<your-public-url>/media/instagram/<attachment-id>/<filename>`. That route is intentionally public and unauthenticated; it serves existing files from `app_data/uploads/` and `app_data/imported_media/` without creating long-lived staging copies.
 - Instagram giveaway webhooks use `INSTAGRAM_WEBHOOKS_ENABLED`, `INSTAGRAM_WEBHOOK_VERIFY_TOKEN`, and `INSTAGRAM_APP_SECRET`, and the Settings page shows the callback URL at `/webhooks/instagram`.
 - Instagram giveaway private scans are rate-limited by `INSTAGRAM_PRIVATE_SCAN_INTERVAL_HOURS`, which defaults to `168` for weekly checks. The 5-minute autorun cycle uses only official Graph/webhook data until a giveaway ends. Set the interval to `0` for manual and end-of-giveaway checks only.
