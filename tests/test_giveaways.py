@@ -734,6 +734,83 @@ def test_manual_instagram_scan_ignores_private_scan_interval(session, monkeypatc
     assert entrant.eligibility_status == ENTRY_STATUS_ELIGIBLE
 
 
+def test_manual_instagram_scan_captures_story_repost_for_existing_entrant(session, monkeypatch):
+    persona = _create_persona(session, slug="giveaway-manual-private-repost")
+    instagram = _create_account(session, persona, service="instagram", label="Instagram")
+    post = create_scheduled_post(
+        session,
+        _generic_giveaway_payload(
+            persona.id,
+            [instagram.id],
+            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            channels=[
+                {
+                    "service": "instagram",
+                    "account_id": instagram.id,
+                    "rules": {
+                        "kind": "all",
+                        "children": [
+                            {"kind": "atom", "atom": "comment_present", "params": {}},
+                            {"kind": "atom", "atom": "like_present", "params": {}},
+                            {"kind": "atom", "atom": "repost_present", "params": {}},
+                        ],
+                    },
+                }
+            ],
+        ),
+        [],
+    )
+    _mark_posted(
+        post,
+        instagram.id,
+        external_id="ig-media-manual-repost",
+        external_url="https://instagram.test/p/abc123/",
+    )
+    channel = post.giveaway_campaign.channels[0]
+    channel.last_private_collected_at = datetime.now(timezone.utc)
+    session.flush()
+
+    class _FakeInstagramClient:
+        def media_comments(self, media_id, amount=0):
+            assert media_id == "ig-media-manual-repost"
+            return [
+                SimpleNamespace(
+                    pk="comment-1",
+                    text="Tagging @friend",
+                    user=SimpleNamespace(pk="ig-user-repost", username="repost.user"),
+                )
+            ]
+
+        def media_likers(self, media_id):
+            assert media_id == "ig-media-manual-repost"
+            return [SimpleNamespace(pk="ig-user-repost", username="repost.user")]
+
+        def user_stories(self, user_id):
+            assert user_id == "ig-user-repost"
+            return [
+                SimpleNamespace(
+                    pk="story-1",
+                    medias=[SimpleNamespace(media_pk="ig-media-manual-repost", media_code="abc123")],
+                )
+            ]
+
+    monkeypatch.setattr("app.services.giveaway_engine._instagram_destination_dependency_issue", lambda: None)
+    monkeypatch.setattr("app.services.giveaway_engine._authenticated_publish_client", lambda credentials: _FakeInstagramClient())
+
+    scan_instagram_giveaway_channels(session, post.giveaway_campaign, run_id="run-manual-private-repost")
+
+    entrant = session.query(GiveawayEntrant).filter_by(channel_id=channel.id, provider_user_id="ig-user-repost").one()
+    assert entrant.eligibility_status == ENTRY_STATUS_ELIGIBLE
+    assert entrant.signal_state_json["repost_present"] is True
+    assert entrant.signal_state_json["reposts"][0]["story_id"] == "story-1"
+    repost_event = (
+        session.query(GiveawayEvidenceEvent)
+        .filter_by(channel_id=channel.id, event_type="instagram_repost", source="live_collection")
+        .one()
+    )
+    assert repost_event.entrant_id == entrant.id
+
+
 def test_giveaway_lifecycle_defers_instagram_follow_verification_without_private_scan(session, monkeypatch):
     persona = _create_persona(session, slug="giveaway-follow-private-guard")
     instagram = _create_account(session, persona, service="instagram", label="Instagram")

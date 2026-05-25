@@ -582,6 +582,61 @@ def _instagram_media_comments(client: Any, channel: GiveawayChannel) -> tuple[li
     raise RuntimeError("Instagram media ID is not available for giveaway verification.")
 
 
+def _object_value(item: Any, *keys: str) -> Any:
+    for key in keys:
+        if isinstance(item, dict):
+            value = item.get(key)
+        else:
+            value = getattr(item, key, None)
+        if value not in (None, ""):
+            return value
+    return None
+
+
+def _instagram_target_media_codes(channel: GiveawayChannel) -> set[str]:
+    codes: set[str] = set()
+    for value in (channel.target_post_url, channel.target_post_external_id):
+        text = str(value or "").strip()
+        if not text:
+            continue
+        match = re.search(r"/(?:p|reel|tv)/([^/?#]+)/?", text)
+        if match:
+            codes.add(match.group(1))
+    return codes
+
+
+def _instagram_story_share_summary(
+    story: Any,
+    *,
+    target_media_ids: set[str],
+    target_media_codes: set[str],
+    provider_user_id: str,
+    provider_username: str | None,
+) -> dict[str, Any] | None:
+    medias = list(_object_value(story, "medias") or [])
+    for media in medias:
+        media_pk = str(_object_value(media, "media_pk", "pk", "id") or "").strip()
+        media_code = str(_object_value(media, "media_code", "code") or "").strip()
+        if (media_pk and media_pk in target_media_ids) or (media_code and media_code in target_media_codes):
+            story_id = str(_object_value(story, "pk", "id") or "").strip()
+            return {
+                "repost_id": f"story:{provider_user_id}:{story_id or media_pk or media_code}",
+                "story_id": story_id or None,
+                "media_id": media_pk or None,
+                "media_code": media_code or None,
+                "actor_id": provider_user_id,
+                "actor_username": provider_username,
+                "source": INSTAGRAM_LIVE_COLLECTION_SOURCE,
+            }
+    return None
+
+
+def _instagram_user_stories(client: Any, provider_user_id: str) -> list[Any]:
+    if not hasattr(client, "user_stories"):
+        return []
+    return list(_call_instagram_private(lambda: client.user_stories(provider_user_id)) or [])
+
+
 def _resolve_bluesky_uri(handle: str, rkey: str) -> tuple[str | None, str | None]:
     normalized_handle = str(handle or "").strip()
     normalized_rkey = str(rkey or "").strip()
@@ -2183,6 +2238,55 @@ def refresh_instagram_channel_state(
                     observed_likes.append((entrant, like_summary))
                 session.flush()
                 _sync_instagram_live_like_events(session, channel, observed_likes)
+
+                target_media_ids = set(_instagram_media_identifier_candidates(client, channel))
+                if live_media_id:
+                    target_media_ids.add(str(live_media_id))
+                target_media_codes = _instagram_target_media_codes(channel)
+                observed_reposts: list[tuple[GiveawayEntrant, dict[str, Any]]] = []
+                for provider_user_id, state in list(state_by_user.items()):
+                    provider_username = str(state.get("provider_username") or "").strip() or None
+                    entrant = next(
+                        (
+                            item
+                            for item in channel.entrants
+                            if item.provider_user_id == provider_user_id
+                        ),
+                        None,
+                    )
+                    if entrant is not None:
+                        provider_username = entrant.provider_username or provider_username
+                    try:
+                        stories = _instagram_user_stories(client, provider_user_id)
+                    except Exception:
+                        continue
+                    for story in stories:
+                        repost_summary = _instagram_story_share_summary(
+                            story,
+                            target_media_ids=target_media_ids,
+                            target_media_codes=target_media_codes,
+                            provider_user_id=provider_user_id,
+                            provider_username=provider_username,
+                        )
+                        if repost_summary is None:
+                            continue
+                        entrant = entrant or get_or_create_channel_entrant(
+                            channel,
+                            provider_user_id=provider_user_id,
+                            provider_username=provider_username,
+                            display_label=provider_username or provider_user_id,
+                        )
+                        state["reposts"] = _append_unique_evidence_item(
+                            list(state.get("reposts") or []),
+                            repost_summary,
+                            key_fields=("repost_id",),
+                        )
+                        state["repost_present"] = True
+                        entrant.signal_state_json = dict(entrant.signal_state_json or {})
+                        observed_reposts.append((entrant, repost_summary))
+                        break
+                session.flush()
+                _sync_instagram_live_repost_events(session, channel, observed_reposts)
                 channel.last_error = None
             except Exception as exc:
                 channel.last_error = f"Instagram live activity collection failed: {exc}"
@@ -2495,6 +2599,75 @@ def _sync_instagram_live_like_events(
                 entrant=entrant,
                 provider_event_id=provider_event_id,
                 event_type="instagram_like",
+                source=INSTAGRAM_LIVE_COLLECTION_SOURCE,
+                payload=payload,
+            )
+            continue
+        existing.entrant_id = entrant.id
+        existing_payload = dict(existing.payload_json or {})
+        payload["first_seen_at"] = existing_payload.get("first_seen_at") or existing.created_at.isoformat()
+        existing.payload_json = payload
+        existing.active = True
+
+    for key, existing in existing_by_key.items():
+        if key in observed_keys:
+            continue
+        payload = dict(existing.payload_json or {})
+        payload["last_seen_at"] = seen_at
+        existing.payload_json = payload
+        existing.active = False
+
+
+def _sync_instagram_live_repost_events(
+    session: Session,
+    channel: GiveawayChannel,
+    observed_reposts: list[tuple[GiveawayEntrant, dict[str, Any]]],
+) -> None:
+    existing_events = list(
+        session.scalars(
+            select(GiveawayEvidenceEvent).where(
+                GiveawayEvidenceEvent.channel_id == channel.id,
+                GiveawayEvidenceEvent.event_type == "instagram_repost",
+                GiveawayEvidenceEvent.source == INSTAGRAM_LIVE_COLLECTION_SOURCE,
+            )
+        )
+    )
+    existing_by_key = {str(event.provider_event_id or ""): event for event in existing_events}
+    observed_keys: set[str] = set()
+    seen_at = utcnow().isoformat()
+
+    for entrant, summary in observed_reposts:
+        provider_event_id = str(summary.get("repost_id") or "").strip()
+        if not provider_event_id:
+            continue
+        observed_keys.add(provider_event_id)
+        payload = {
+            "change": {
+                "field": "shares",
+                "value": {
+                    "media_id": summary.get("media_id") or channel.target_post_external_id,
+                    "media_code": summary.get("media_code"),
+                    "id": provider_event_id,
+                    "story_id": summary.get("story_id"),
+                    "from": {
+                        "id": entrant.provider_user_id,
+                        "username": entrant.provider_username,
+                    },
+                },
+            },
+            "source": INSTAGRAM_LIVE_COLLECTION_SOURCE,
+            "last_seen_at": seen_at,
+        }
+        existing = existing_by_key.get(provider_event_id)
+        if existing is None:
+            payload["first_seen_at"] = seen_at
+            _record_evidence_event(
+                session,
+                channel.campaign,
+                channel,
+                entrant=entrant,
+                provider_event_id=provider_event_id,
+                event_type="instagram_repost",
                 source=INSTAGRAM_LIVE_COLLECTION_SOURCE,
                 payload=payload,
             )
