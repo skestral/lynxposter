@@ -18,7 +18,7 @@ def cleanup_stale_media_files(session: Session, *, run_id: str | None = None) ->
     }
     result = prune_unreferenced_managed_media_files(
         referenced_paths,
-        retention_days=settings.media_orphan_retention_days,
+        retention_seconds=settings.media_orphan_retention_seconds,
     )
     if run_id and (result["deleted"] or result["errors"]):
         log_run_event(
@@ -35,7 +35,7 @@ def cleanup_stale_media_files(session: Session, *, run_id: str | None = None) ->
                 "scanned_files": result["scanned"],
                 "deleted_files": result["deleted"],
                 "error_count": result["errors"],
-                "retention_days": settings.media_orphan_retention_days,
+                "retention_seconds": settings.media_orphan_retention_seconds,
             },
         )
     return result

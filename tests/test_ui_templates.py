@@ -987,6 +987,7 @@ def test_settings_template_renders_instagram_webhook_setup_guidance():
             instagram_webhook_verify_token="verify-me",
             instagram_app_secret="secret",
             scheduler_automation_interval_seconds=300,
+            media_orphan_retention_seconds=900,
             webhook_logging_enabled=False,
             webhook_logging_endpoint="",
             webhook_logging_bearer_token="",
@@ -1036,6 +1037,8 @@ def test_settings_template_renders_instagram_webhook_setup_guidance():
     assert "Recommended Subscriptions" in html
     assert "comments, mentions, messages" in html
     assert "Instagram likes and follows are only checked during manual, due, or end-of-giveaway private scans" in html
+    assert 'name="media_orphan_retention_seconds"' in html
+    assert '<option value="900" selected>15 minutes</option>' in html
     assert "Tunnel Helper" in html
     assert "cloudflared tunnel --url http://127.0.0.1:8000" in html
     assert "ngrok http 8000" in html

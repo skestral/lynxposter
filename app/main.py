@@ -502,6 +502,7 @@ async def _read_app_settings_payload(request: Request) -> dict[str, Any]:
         "instagram_webhook_verify_token": form.get("instagram_webhook_verify_token", ""),
         "instagram_app_secret": form.get("instagram_app_secret", ""),
         "instagram_private_scan_interval_hours": int(form.get("instagram_private_scan_interval_hours", 168)),
+        "media_orphan_retention_seconds": int(form.get("media_orphan_retention_seconds", 86400)),
     }
 
 

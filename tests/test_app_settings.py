@@ -41,6 +41,8 @@ APP_SETTING_KEYS = [
     "INSTAGRAM_WEBHOOK_VERIFY_TOKEN",
     "INSTAGRAM_APP_SECRET",
     "INSTAGRAM_PRIVATE_SCAN_INTERVAL_HOURS",
+    "MEDIA_ORPHAN_RETENTION_SECONDS",
+    "MEDIA_ORPHAN_RETENTION_DAYS",
 ]
 
 
@@ -117,6 +119,7 @@ def test_update_app_settings_writes_env_and_refreshes_runtime(tmp_path):
                 instagram_webhook_verify_token="verify-me",
                 instagram_app_secret="instagram-secret",
                 instagram_private_scan_interval_hours=12,
+                media_orphan_retention_seconds=900,
             )
         )
 
@@ -131,10 +134,12 @@ def test_update_app_settings_writes_env_and_refreshes_runtime(tmp_path):
         assert "INSTAGRAM_WEBHOOKS_ENABLED=true" in text
         assert "INSTAGRAM_WEBHOOK_VERIFY_TOKEN=verify-me" in text
         assert "INSTAGRAM_PRIVATE_SCAN_INTERVAL_HOURS=12" in text
+        assert "MEDIA_ORPHAN_RETENTION_SECONDS=900" in text
         assert updated.instance_name == "Test Node"
         assert updated.app_base_url == "https://lynxposter.example.com"
         assert updated.scheduler_automation_interval_seconds == 600
         assert updated.instagram_private_scan_interval_hours == 12
+        assert updated.media_orphan_retention_seconds == 900
 
         current = get_settings()
         assert current.instance_name == "Test Node"
@@ -149,6 +154,22 @@ def test_update_app_settings_writes_env_and_refreshes_runtime(tmp_path):
         assert current.instagram_webhooks_enabled is True
         assert current.instagram_webhook_verify_token == "verify-me"
         assert current.instagram_private_scan_interval_hours == 12
+        assert current.media_orphan_retention_seconds == 900
+    finally:
+        _restore_env(previous)
+
+
+def test_media_orphan_retention_seconds_falls_back_to_legacy_days(tmp_path):
+    env_path = tmp_path / ".env"
+    env_path.write_text("MEDIA_ORPHAN_RETENTION_DAYS=30\n", encoding="utf-8")
+    previous = {key: os.environ.get(key) for key in APP_SETTING_KEYS}
+    try:
+        for key in APP_SETTING_KEYS:
+            os.environ.pop(key, None)
+        os.environ["APP_ENV_FILE"] = str(env_path)
+        reload_settings()
+
+        assert get_settings().media_orphan_retention_seconds == 86400
     finally:
         _restore_env(previous)
 

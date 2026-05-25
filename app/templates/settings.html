@@ -245,6 +245,26 @@
                                     <div class="lp-static-field">{{ "Running" if scheduler_status.scheduler_started else "Stopped" }}{% if not scheduler_status.automation_enabled %} | Paused{% endif %}</div>
                                     <div class="form-text">Next run: {{ scheduler_status.next_run_at|datetime_display if scheduler_status.next_run_at else "Not scheduled" }}</div>
                                 </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Orphaned Media Retention</label>
+                                    <select class="form-select" name="media_orphan_retention_seconds">
+                                        {% set retention_seconds = app_settings.media_orphan_retention_seconds %}
+                                        {% set retention_options = [
+                                            (60, "1 minute"),
+                                            (300, "5 minutes"),
+                                            (900, "15 minutes"),
+                                            (1800, "30 minutes"),
+                                            (3600, "1 hour"),
+                                            (21600, "6 hours"),
+                                            (43200, "12 hours"),
+                                            (86400, "1 day")
+                                        ] %}
+                                        {% for value, label in retention_options %}
+                                            <option value="{{ value }}" {% if retention_seconds == value %}selected{% endif %}>{{ label }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <div class="form-text">Unreferenced files in uploads and imported media are removed after this window.</div>
+                                </div>
                             </div>
                         </div>
                     </div>

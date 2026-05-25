@@ -73,14 +73,16 @@ def public_instagram_media_url(attachment_id: str, storage_path: str | Path, *, 
 def prune_unreferenced_managed_media_files(
     referenced_paths: set[str],
     *,
-    retention_days: int,
+    retention_days: int | None = None,
+    retention_seconds: int | None = None,
     now: datetime | None = None,
 ) -> dict[str, int]:
     ensure_storage_dirs()
-    if retention_days <= 0:
+    resolved_retention_seconds = retention_seconds if retention_seconds is not None else (retention_days or 0) * 86400
+    if resolved_retention_seconds <= 0:
         return {"scanned": 0, "deleted": 0, "errors": 0}
 
-    cutoff = (now or datetime.now(timezone.utc)) - timedelta(days=retention_days)
+    cutoff = (now or datetime.now(timezone.utc)) - timedelta(seconds=resolved_retention_seconds)
     deleted = 0
     errors = 0
     scanned = 0

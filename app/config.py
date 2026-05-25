@@ -95,6 +95,17 @@ def _env_str(name: str, default: str = "") -> str:
     return value if value else default
 
 
+def _clamp_int(value: int, *, minimum: int, maximum: int) -> int:
+    return max(minimum, min(maximum, value))
+
+
+def _media_orphan_retention_seconds() -> int:
+    if os.getenv("MEDIA_ORPHAN_RETENTION_SECONDS") is not None:
+        return _clamp_int(_env_int("MEDIA_ORPHAN_RETENTION_SECONDS", 86400), minimum=60, maximum=86400)
+    legacy_days = _env_int("MEDIA_ORPHAN_RETENTION_DAYS", 1)
+    return _clamp_int(legacy_days * 86400, minimum=60, maximum=86400)
+
+
 @dataclass(frozen=True)
 class Settings:
     project_root: Path
@@ -135,6 +146,7 @@ class Settings:
     instagram_app_secret: str
     instagram_private_scan_interval_hours: int
     scheduler_automation_interval_seconds: int
+    media_orphan_retention_seconds: int
     media_orphan_retention_days: int
     app_port: int
 
@@ -154,6 +166,7 @@ def get_settings() -> Settings:
     imported_media_dir = app_data_dir / "imported_media"
     logs_dir = app_data_dir / "logs"
     backups_dir = app_data_dir / "backups"
+    media_orphan_retention_seconds = _media_orphan_retention_seconds()
 
     return Settings(
         project_root=project_root,
@@ -203,7 +216,8 @@ def get_settings() -> Settings:
         instagram_app_secret=_env_str("INSTAGRAM_APP_SECRET", ""),
         instagram_private_scan_interval_hours=_env_int("INSTAGRAM_PRIVATE_SCAN_INTERVAL_HOURS", 168),
         scheduler_automation_interval_seconds=_env_int("SCHEDULER_AUTORUN_INTERVAL_SECONDS", 300),
-        media_orphan_retention_days=_env_int("MEDIA_ORPHAN_RETENTION_DAYS", 30),
+        media_orphan_retention_seconds=media_orphan_retention_seconds,
+        media_orphan_retention_days=max(1, media_orphan_retention_seconds // 86400),
         app_port=_env_int("APP_PORT", 8000),
     )
 

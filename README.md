@@ -61,7 +61,7 @@ The app serves on `http://127.0.0.1:8000/`.
 - Instagram giveaway webhooks use `INSTAGRAM_WEBHOOKS_ENABLED`, `INSTAGRAM_WEBHOOK_VERIFY_TOKEN`, and `INSTAGRAM_APP_SECRET`, and the Settings page shows the callback URL at `/webhooks/instagram`.
 - Instagram giveaway private scans are rate-limited by `INSTAGRAM_PRIVATE_SCAN_INTERVAL_HOURS`, which defaults to `168` for weekly checks. The 5-minute autorun cycle uses only official Graph/webhook data until a giveaway ends. Set the interval to `0` for manual and end-of-giveaway checks only.
 - The optional Private Verification Session ID or username/password fields are used only for explicit giveaway private scans and the login diagnostic button. Keep that interval conservative if the account has seen automation warnings.
-- Unreferenced media files are removed by the existing storage cleanup after `MEDIA_ORPHAN_RETENTION_DAYS`.
+- Unreferenced media files are removed by storage cleanup after `MEDIA_ORPHAN_RETENTION_SECONDS`; the Settings page offers retention choices from 1 minute through 1 day. Older `MEDIA_ORPHAN_RETENTION_DAYS` values are still read as a fallback.
 
 ### Testing Instagram webhooks with a tunnel
 
@@ -104,6 +104,7 @@ The Settings page currently lets you:
 - Change the instance name
 - Set the public base URL used by authentication callbacks
 - Adjust the scheduler autorun interval
+- Set the orphaned media cleanup retention window
 - Configure OIDC login for Authelia or another OpenID Connect provider
 - Save notification settings for Home Assistant or other JSON webhook receivers
 - Save a separate Discord notification webhook
