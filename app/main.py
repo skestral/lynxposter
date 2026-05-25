@@ -715,9 +715,16 @@ def public_instagram_media(attachment_id: str, filename: str):
         return FileResponse(
             path=file_path,
             media_type=attachment.mime_type or None,
-            filename=expected_filename,
             headers={"Cache-Control": "public, max-age=3600"},
         )
+
+
+@app.get("/robots.txt", include_in_schema=False)
+def robots_txt() -> PlainTextResponse:
+    return PlainTextResponse(
+        "User-agent: *\nAllow: /media/instagram/\nAllow: /media/attachments/\n",
+        media_type="text/plain",
+    )
 
 
 @app.get("/auth/login")
