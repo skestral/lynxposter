@@ -4,6 +4,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 import re
 import secrets
+import time
 from typing import Any, Callable
 
 import requests
@@ -81,6 +82,7 @@ COMMENT_EVIDENCE_SOURCE_LIVE = "close_time_live"
 INSTAGRAM_WEBHOOK_CAPTURE_SOURCE = "webhook_capture"
 INSTAGRAM_MESSAGE_SHARE_CAPTURE_SOURCE = "message_share_capture"
 INSTAGRAM_LIVE_COLLECTION_SOURCE = "live_collection"
+BLUESKY_COLLECTION_MAX_ATTEMPTS = 3
 INSTAGRAM_ACTIVITY_EVENT_TYPES = (
     "instagram_comment",
     "instagram_story_mention",
@@ -2089,6 +2091,28 @@ def refresh_instagram_channel_state(
     publish_live_update(LIVE_UPDATE_TOPIC_DASHBOARD, LIVE_UPDATE_TOPIC_LOGS)
 
 
+def _is_bluesky_collection_timeout(exc: Exception) -> bool:
+    class_name = exc.__class__.__name__.lower()
+    return isinstance(exc, TimeoutError) or "timeout" in class_name
+
+
+def _call_bluesky_collection(fetch: Callable[[dict[str, Any]], Any], params: dict[str, Any]) -> dict[str, Any]:
+    last_error: Exception | None = None
+    for attempt in range(BLUESKY_COLLECTION_MAX_ATTEMPTS):
+        try:
+            response = fetch(params)
+            payload = response.model_dump()
+            return payload if isinstance(payload, dict) else {}
+        except Exception as exc:
+            last_error = exc
+            if not _is_bluesky_collection_timeout(exc) or attempt == BLUESKY_COLLECTION_MAX_ATTEMPTS - 1:
+                raise
+            time.sleep(1 + attempt)
+    if last_error is not None:
+        raise last_error
+    return {}
+
+
 def _collect_all_pages(fetch_page: Callable[..., Any], *, key: str, uri: str, cid: str | None = None) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     cursor: str | None = None
@@ -2098,8 +2122,7 @@ def _collect_all_pages(fetch_page: Callable[..., Any], *, key: str, uri: str, ci
             params["cid"] = cid
         if cursor:
             params["cursor"] = cursor
-        response = fetch_page(params)
-        payload = response.model_dump()
+        payload = _call_bluesky_collection(fetch_page, params)
         items.extend(list(payload.get(key) or []))
         cursor = payload.get("cursor")
         if not cursor:
@@ -2384,7 +2407,10 @@ def collect_bluesky_channel_state(session: Session, channel: GiveawayChannel, *,
     likes = _collect_all_pages(client.app.bsky.feed.get_likes, key="likes", uri=channel.target_post_uri, cid=channel.target_post_cid)
     reposts = _collect_all_pages(client.app.bsky.feed.get_reposted_by, key="repostedBy", uri=channel.target_post_uri, cid=channel.target_post_cid)
     quotes = _collect_all_pages(client.app.bsky.feed.get_quotes, key="posts", uri=channel.target_post_uri, cid=channel.target_post_cid)
-    thread = client.app.bsky.feed.get_post_thread({"uri": channel.target_post_uri, "depth": 10}).model_dump()
+    thread = _call_bluesky_collection(
+        client.app.bsky.feed.get_post_thread,
+        {"uri": channel.target_post_uri, "depth": 10},
+    )
     if not channel.target_post_cid:
         channel.target_post_cid = str(thread.get("thread", {}).get("post", {}).get("cid") or "").strip() or None
     replies = _walk_thread_replies(dict(thread.get("thread") or {}), target_uri=channel.target_post_uri)
@@ -2452,7 +2478,10 @@ def collect_bluesky_channel_state(session: Session, channel: GiveawayChannel, *,
     other_dids = list(entrants.keys())
     for index in range(0, len(other_dids), 30):
         batch = other_dids[index : index + 30]
-        relationships = client.app.bsky.graph.get_relationships({"actor": owner_did or handle, "others": batch}).model_dump()
+        relationships = _call_bluesky_collection(
+            client.app.bsky.graph.get_relationships,
+            {"actor": owner_did or handle, "others": batch},
+        )
         for item in relationships.get("relationships") or []:
             did = str(item.get("did") or "").strip()
             if did in entrants:

@@ -1530,6 +1530,65 @@ def test_collect_bluesky_channel_state_captures_reply_quote_like_repost_and_foll
     assert entrant.signal_state_json["reply_or_quote_mention_count"] >= 1
 
 
+def test_collect_bluesky_channel_state_retries_transient_timeouts(session, monkeypatch):
+    persona = _create_persona(session, slug="giveaway-bluesky-timeout-retry")
+    bluesky = _create_account(session, persona, service="bluesky", label="Bluesky")
+    post = create_scheduled_post(
+        session,
+        _generic_giveaway_payload(
+            persona.id,
+            [bluesky.id],
+            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            channels=[
+                {
+                    "service": "bluesky",
+                    "account_id": bluesky.id,
+                    "rules": {
+                        "kind": "all",
+                        "children": [{"kind": "atom", "atom": "like_present", "params": {}}],
+                    },
+                }
+            ],
+        ),
+        [],
+    )
+    channel = post.giveaway_campaign.channels[0]
+    channel.target_post_uri = "at://did:plc:owner/app.bsky.feed.post/post-1"
+    channel.target_post_cid = "cid-1"
+    session.flush()
+    calls = {"likes": 0}
+
+    class InvokeTimeoutError(Exception):
+        pass
+
+    def flaky_get_likes(params):
+        calls["likes"] += 1
+        if calls["likes"] == 1:
+            raise InvokeTimeoutError("timed out waiting for Bluesky")
+        return _DumpableResponse({"likes": [{"actor": {"did": "did:plc:user-1", "handle": "bsky.one"}}]})
+
+    class _FakeBlueskyClient:
+        def __init__(self):
+            feed = SimpleNamespace(
+                get_likes=flaky_get_likes,
+                get_reposted_by=lambda params: _DumpableResponse({"repostedBy": []}),
+                get_quotes=lambda params: _DumpableResponse({"posts": []}),
+                get_post_thread=lambda params: _DumpableResponse({"thread": {"post": {"cid": "cid-1"}, "replies": []}}),
+            )
+            graph = SimpleNamespace(get_relationships=lambda params: _DumpableResponse({"relationships": []}))
+            self.app = SimpleNamespace(bsky=SimpleNamespace(feed=feed, graph=graph))
+
+    monkeypatch.setattr("app.services.giveaway_engine._get_bluesky_client", lambda credentials: _FakeBlueskyClient())
+    monkeypatch.setattr("app.services.giveaway_engine.time.sleep", lambda seconds: None)
+
+    collect_bluesky_channel_state(session, channel, run_id="run-bsky-timeout-retry")
+
+    assert calls["likes"] == 2
+    assert channel.last_error is None
+    assert len(channel.entrants) == 1
+    assert channel.entrants[0].signal_state_json["like_present"] is True
+
+
 def test_giveaway_lifecycle_records_bluesky_collection_failures(session, monkeypatch):
     persona = _create_persona(session, slug="giveaway-bluesky-collection-failure")
     bluesky = _create_account(session, persona, service="bluesky", label="Bluesky")
