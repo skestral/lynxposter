@@ -68,6 +68,8 @@ def test_instagram_service_definition_exposes_destination_credentials():
     assert fields["api_key"].input_type == "password"
     assert fields["api_key"].label == "Graph Access Token"
     assert fields["instagram_user_id"].label == "Instagram Professional Account ID"
+    assert fields["graph_api_host"].input_type == "select"
+    assert fields["graph_api_host"].options == (("auto", "Auto"), ("instagram", "Instagram"), ("facebook", "Facebook"))
     assert fields["instagrapi_sessionid"].label == "Private Verification Session ID"
     assert fields["instagrapi_sessionid"].input_type == "password"
     assert "end-of-giveaway private verification" in fields["instagrapi_sessionid"].help_text
@@ -128,6 +130,10 @@ def test_persona_detail_template_renders_telegram_controls_and_secret_toggles():
     assert "Channel ID" in html
     assert 'data-field-name="instagram_user_id"' in html
     assert "Instagram Professional Account ID" in html
+    assert '<select\n        class="form-select"\n        data-scope="credentials"\n        data-field-name="graph_api_host"' in html
+    assert '<option value="auto" selected>Auto</option>' in html
+    assert '<option value="instagram" >Instagram</option>' in html
+    assert '<option value="facebook" >Facebook</option>' in html
     assert 'data-field-name="instagrapi_sessionid"' in html
     assert 'data-field-name="instagrapi_password"' in html
     assert "Private Verification Session ID" in html
@@ -173,6 +179,7 @@ def test_persona_detail_template_renders_instagram_token_tracking_controls():
                     credentials_json={
                         "api_key": "secret",
                         "instagram_user_id": "17841400000000000",
+                        "graph_api_host": "instagram",
                         "instagrapi_username": "larkyn.lynx",
                         "instagrapi_sessionid": "12345%3Aabcdef1234567890abcdef1234567890",
                     },
@@ -206,6 +213,7 @@ def test_persona_detail_template_renders_instagram_token_tracking_controls():
     assert "instagram-token-refresh-button" in html
     assert "Check Login" in html
     assert "Private verification fields are optional" in html
+    assert '<option value="instagram" selected>Instagram</option>' in html
     assert "Last connection hiccup" in html
     assert "Instagram login failed. Challenge required." in html
 

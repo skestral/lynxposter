@@ -5,7 +5,17 @@
     {% if service %}data-service="{{ service }}" style="display:none;"{% endif %}
 >
     <label class="form-label">{{ field.label }}</label>
-    {% if field.input_type == "password" %}
+    {% if field.input_type == "select" %}
+    <select
+        class="form-select"
+        data-scope="{{ scope }}"
+        data-field-name="{{ field.name }}"
+    >
+        {% for option_value, option_label in field.options %}
+        <option value="{{ option_value }}" {% if (value or 'auto') == option_value %}selected{% endif %}>{{ option_label }}</option>
+        {% endfor %}
+    </select>
+    {% elif field.input_type == "password" %}
     <div class="input-group">
         <input
             class="form-control secret-toggle-input"

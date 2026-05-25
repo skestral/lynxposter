@@ -21,6 +21,7 @@ class AccountFieldDefinition:
     input_type: str = "text"
     help_text: str = ""
     fallback_keys: tuple[str, ...] = field(default_factory=tuple)
+    options: tuple[tuple[str, str], ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -112,7 +113,13 @@ SERVICE_REGISTRY: dict[str, ServiceDefinition] = {
             AccountFieldDefinition(
                 "graph_api_host",
                 "Graph API Host",
+                input_type="select",
                 help_text="Optional. Leave blank or use auto. Use instagram for tokens from Meta's Instagram Use Cases flow, or facebook for Page access tokens.",
+                options=(
+                    ("auto", "Auto"),
+                    ("instagram", "Instagram"),
+                    ("facebook", "Facebook"),
+                ),
             ),
             AccountFieldDefinition(
                 "instagrapi_sessionid",
