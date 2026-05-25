@@ -2272,8 +2272,9 @@ def refresh_instagram_channel_state(
                 client = _authenticated_publish_client(_account_credentials(channel.account))
                 live_comments, live_media_id = _instagram_media_comments(client, channel)
                 observed_comments: list[tuple[GiveawayEntrant, dict[str, Any], dict[str, Any]]] = []
-                for state in state_by_user.values():
-                    state["comments"] = []
+                if force_private_scan:
+                    for state in state_by_user.values():
+                        state["comments"] = []
                 for comment in live_comments or []:
                     user = getattr(comment, "user", None)
                     provider_user_id = str(getattr(user, "pk", "") or "").strip()
@@ -2314,10 +2315,11 @@ def refresh_instagram_channel_state(
 
                 live_likers, live_media_id = _instagram_media_likers(client, channel)
                 observed_likes: list[tuple[GiveawayEntrant, dict[str, Any]]] = []
-                for state in state_by_user.values():
-                    state["likes"] = []
-                    state["like_present"] = False
-                    state["like_collection_checked"] = True
+                if force_private_scan:
+                    for state in state_by_user.values():
+                        state["likes"] = []
+                        state["like_present"] = False
+                        state["like_collection_checked"] = True
                 for liker in live_likers or []:
                     provider_user_id, provider_username = _instagram_user_identity(liker)
                     if not provider_user_id:

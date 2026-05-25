@@ -734,6 +734,78 @@ def test_manual_instagram_scan_ignores_private_scan_interval(session, monkeypatc
     assert entrant.eligibility_status == ENTRY_STATUS_ELIGIBLE
 
 
+def test_due_instagram_scan_preserves_manual_private_scan_evidence(session, monkeypatch):
+    persona = _create_persona(session, slug="giveaway-due-scan-preserves-manual")
+    instagram = _create_account(session, persona, service="instagram", label="Instagram")
+    post = create_scheduled_post(
+        session,
+        _generic_giveaway_payload(
+            persona.id,
+            [instagram.id],
+            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            channels=[
+                {
+                    "service": "instagram",
+                    "account_id": instagram.id,
+                    "rules": {
+                        "kind": "all",
+                        "children": [{"kind": "atom", "atom": "like_present", "params": {}}],
+                    },
+                }
+            ],
+        ),
+        [],
+    )
+    _mark_posted(post, instagram.id, external_id="ig-media-preserve")
+    channel = post.giveaway_campaign.channels[0]
+    channel.last_private_collected_at = datetime.now(timezone.utc) - timedelta(days=8)
+    entrant = GiveawayEntrant(
+        provider_user_id="ig-user-manual",
+        provider_username="manual.liker",
+        display_label="manual.liker",
+        signal_state_json={
+            "likes": [
+                {
+                    "like_id": "like:ig-user-manual:ig-media-preserve",
+                    "media_id": "ig-media-preserve",
+                    "actor_id": "ig-user-manual",
+                    "source": "live_collection",
+                }
+            ],
+            "like_present": True,
+            "like_collection_checked": True,
+        },
+    )
+    channel.entrants.append(entrant)
+    session.flush()
+
+    class _FakeInstagramClient:
+        def media_comments(self, media_id, amount=0):
+            assert media_id == "ig-media-preserve"
+            return []
+
+        def media_likers(self, media_id):
+            assert media_id == "ig-media-preserve"
+            return []
+
+        def user_stories(self, user_id):
+            return []
+
+    monkeypatch.setattr("app.services.giveaway_engine._instagram_destination_dependency_issue", lambda: None)
+    monkeypatch.setattr("app.services.giveaway_engine._authenticated_publish_client", lambda credentials: _FakeInstagramClient())
+
+    process_giveaway_lifecycle(
+        session,
+        AlertDispatcher(),
+        run_id="run-due-preserve-manual",
+        allow_instagram_private_scan=True,
+    )
+
+    assert entrant.signal_state_json["like_present"] is True
+    assert entrant.signal_state_json["likes"][0]["like_id"] == "like:ig-user-manual:ig-media-preserve"
+    assert entrant.eligibility_status == ENTRY_STATUS_ELIGIBLE
+
+
 def test_manual_instagram_scan_captures_story_repost_for_existing_entrant(session, monkeypatch):
     persona = _create_persona(session, slug="giveaway-manual-private-repost")
     instagram = _create_account(session, persona, service="instagram", label="Instagram")
