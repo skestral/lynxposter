@@ -133,6 +133,54 @@ def test_instagram_first_scan_sets_baseline_without_importing_history(session, m
     assert result.next_state["last_seen_at"].startswith("2026-04-14T00:00:00")
 
 
+def test_instagram_source_poll_uses_business_graph_endpoint_when_user_id_is_configured(session, monkeypatch):
+    persona = _create_persona(session, slug="instagram-business-graph")
+    account = _create_account(
+        session,
+        persona,
+        service="instagram",
+        label="Instagram",
+        source_enabled=True,
+        destination_enabled=True,
+        credentials_json={"api_key": "secret-token", "instagram_user_id": "17841400000000000"},
+    )
+    calls: list[tuple[str, dict]] = []
+
+    class FakeResponse:
+        text = ""
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "data": [
+                    {
+                        "id": "media-1",
+                        "caption": "Hello",
+                        "media_url": "https://example.com/1.jpg",
+                        "permalink": "https://instagram.example/p/1",
+                        "timestamp": "2026-04-12T12:00:00+00:00",
+                        "media_type": "IMAGE",
+                    }
+                ]
+            }
+
+    def fake_get(url, **kwargs):
+        calls.append((url, dict(kwargs.get("params") or {})))
+        return FakeResponse()
+
+    monkeypatch.setattr("app.adapters.instagram.requests.get", fake_get)
+    monkeypatch.setattr("app.adapters.instagram.now_utc", lambda: datetime(2026, 4, 14, 12, 0, tzinfo=timezone.utc))
+
+    result = InstagramSourceAdapter().poll(session, persona, account, AccountSyncState(source_account_id=account.id, state_json={}))
+
+    assert result.posts == []
+    assert calls[0][0] == "https://graph.facebook.com/v25.0/17841400000000000/media"
+    assert calls[0][1]["access_token"] == "secret-token"
+    assert "access_token" not in calls[0][0]
+
+
 def test_telegram_first_scan_sets_baseline_without_importing_history(session, monkeypatch):
     persona = _create_persona(session, slug="telegram-baseline")
     account = _create_account(

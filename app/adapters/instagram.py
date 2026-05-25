@@ -138,6 +138,35 @@ def _raise_graph_error(response: requests.Response, *, action: str) -> None:
     raise RuntimeError(f"Instagram Graph {action} failed: {message}")
 
 
+def _raise_instagram_source_error(response: requests.Response, *, action: str) -> None:
+    try:
+        response.raise_for_status()
+    except requests.HTTPError as exc:
+        try:
+            payload = response.json()
+        except ValueError:
+            payload = {}
+        error_payload = payload.get("error") if isinstance(payload, dict) else None
+        if isinstance(error_payload, dict):
+            message = error_payload.get("message") or error_payload.get("error_user_msg") or str(error_payload)
+        else:
+            message = response.text or str(exc)
+        raise RuntimeError(f"Instagram Graph {action} failed: {message}") from exc
+
+
+def _instagram_source_media_endpoint(config: dict[str, Any]) -> tuple[str, str]:
+    instagram_user_id = _configured_instagram_user_id(config)
+    if instagram_user_id:
+        return f"{INSTAGRAM_PUBLISH_API_BASE_URL}/{instagram_user_id}/media", "business_media"
+    return f"{INSTAGRAM_GRAPH_API_BASE_URL}/me/media", "login_media"
+
+
+def _instagram_source_children_endpoint(config: dict[str, Any], media_id: str) -> tuple[str, str]:
+    instagram_user_id = _configured_instagram_user_id(config)
+    base_url = INSTAGRAM_PUBLISH_API_BASE_URL if instagram_user_id else INSTAGRAM_GRAPH_API_BASE_URL
+    return f"{base_url}/{media_id}/children", "media_children"
+
+
 def _post_graph(path: str, data: dict[str, Any]) -> dict[str, Any]:
     response = requests.post(f"{INSTAGRAM_PUBLISH_API_BASE_URL}/{path.lstrip('/')}", data=data, timeout=60)
     _raise_graph_error(response, action=path)
@@ -371,9 +400,16 @@ class InstagramSourceAdapter(SourceAdapter):
         if sync_state and sync_state.state_json.get("last_seen_at"):
             since = datetime.fromisoformat(str(sync_state.state_json["last_seen_at"]))
 
-        url = f"{INSTAGRAM_GRAPH_API_BASE_URL}/me/media?fields=id,caption,media_url,permalink,timestamp,media_type,children&access_token={api_key}"
-        response = requests.get(url, timeout=30)
-        response.raise_for_status()
+        media_url, action = _instagram_source_media_endpoint(config)
+        response = requests.get(
+            media_url,
+            params={
+                "fields": "id,caption,media_url,permalink,timestamp,media_type,children",
+                "access_token": api_key,
+            },
+            timeout=30,
+        )
+        _raise_instagram_source_error(response, action=action)
         data = response.json().get("data", [])
 
         if initial_sync and not allow_initial_backfill:
@@ -398,11 +434,13 @@ class InstagramSourceAdapter(SourceAdapter):
             newest_seen = max(newest_seen, created_at)
             attachments = []
             if media["media_type"] == "CAROUSEL_ALBUM":
-                children_url = (
-                    f"{INSTAGRAM_GRAPH_API_BASE_URL}/{media['id']}/children?fields=media_url&access_token={api_key}"
+                children_url, children_action = _instagram_source_children_endpoint(config, media["id"])
+                children_response = requests.get(
+                    children_url,
+                    params={"fields": "media_url", "access_token": api_key},
+                    timeout=30,
                 )
-                children_response = requests.get(children_url, timeout=30)
-                children_response.raise_for_status()
+                _raise_instagram_source_error(children_response, action=children_action)
                 for index, child in enumerate(children_response.json().get("data", [])):
                     media_url = child.get("media_url")
                     if not media_url:
