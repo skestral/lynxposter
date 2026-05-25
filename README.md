@@ -111,6 +111,20 @@ The Settings page currently lets you:
 - Send a test notification after saving
 - Review the active config and data paths
 
+## Versioning
+
+LynxPoster reads the visible app version from `VERSION`. To increment the patch version automatically with each normal commit, enable the repo hooks once per checkout:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+After that, committing staged changes bumps `VERSION` and includes the bump in the same commit. To intentionally skip the bump for one commit:
+
+```bash
+LYNXPOSTER_SKIP_VERSION_BUMP=1 git commit -m "Update docs"
+```
+
 ## Authentication Modes
 
 - When `AUTH_OIDC_ENABLED=false`, LynxPoster uses a local user selector at `http://127.0.0.1:8000/auth/select`.
