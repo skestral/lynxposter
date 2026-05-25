@@ -581,6 +581,73 @@ def test_refresh_instagram_channel_state_collects_live_likes(session, monkeypatc
     assert like_event.active is True
 
 
+def test_refresh_instagram_channel_state_uses_permalink_when_graph_media_id_is_unavailable(session, monkeypatch):
+    persona = _create_persona(session, slug="giveaway-instagram-media-pk-fallback")
+    instagram = _create_account(session, persona, service="instagram", label="Instagram")
+    post = create_scheduled_post(
+        session,
+        _generic_giveaway_payload(
+            persona.id,
+            [instagram.id],
+            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            channels=[
+                {
+                    "service": "instagram",
+                    "account_id": instagram.id,
+                    "rules": {
+                        "kind": "all",
+                        "children": [{"kind": "atom", "atom": "like_present", "params": {}}],
+                    },
+                }
+            ],
+        ),
+        [],
+    )
+    _mark_posted(
+        post,
+        instagram.id,
+        external_id="17841463479494132",
+        external_url="https://www.instagram.com/p/DYVeqi8jwhg/",
+    )
+    channel = post.giveaway_campaign.channels[0]
+    channel.target_post_external_id = "17841463479494132"
+    channel.target_post_url = "https://www.instagram.com/p/DYVeqi8jwhg/"
+    entrant = GiveawayEntrant(
+        provider_user_id="2045697446345302",
+        provider_username="pawgetsound.studio",
+        display_label="pawgetsound.studio",
+        signal_state_json={},
+    )
+    channel.entrants.append(entrant)
+    session.flush()
+
+    class _FakeInstagramClient:
+        def media_pk_from_url(self, url):
+            assert url == "https://www.instagram.com/p/DYVeqi8jwhg/"
+            return "private-media-pk"
+
+        def media_comments(self, media_id, amount=0):
+            if media_id == "17841463479494132":
+                raise RuntimeError("Media not found or unavailable")
+            assert media_id == "private-media-pk"
+            return []
+
+        def media_likers(self, media_id):
+            if media_id == "17841463479494132":
+                raise RuntimeError("Media not found or unavailable")
+            assert media_id == "private-media-pk"
+            return [SimpleNamespace(pk="2045697446345302", username="pawgetsound.studio")]
+
+    monkeypatch.setattr("app.services.giveaway_engine._instagram_destination_dependency_issue", lambda: None)
+    monkeypatch.setattr("app.services.giveaway_engine._authenticated_publish_client", lambda credentials: _FakeInstagramClient())
+
+    refresh_instagram_channel_state(session, channel, force_private_scan=True)
+
+    assert channel.last_error is None
+    assert entrant.signal_state_json["like_present"] is True
+    assert entrant.signal_state_json["likes"][0]["media_id"] == "private-media-pk"
+
+
 def test_giveaway_lifecycle_skips_recent_instagram_private_scan(session, monkeypatch):
     persona = _create_persona(session, slug="giveaway-private-scan-throttle")
     instagram = _create_account(session, persona, service="instagram", label="Instagram")
@@ -693,7 +760,6 @@ def test_giveaway_lifecycle_defers_instagram_follow_verification_without_private
     channel = post.giveaway_campaign.channels[0]
     channel.entrants.append(
         GiveawayEntrant(
-            channel=channel,
             provider_user_id="ig-user-follow",
             provider_username="follower.one",
             display_label="follower.one",
@@ -713,6 +779,60 @@ def test_giveaway_lifecycle_defers_instagram_follow_verification_without_private
     entrant = session.query(GiveawayEntrant).filter_by(channel_id=channel.id, provider_user_id="ig-user-follow").one()
     assert entrant.eligibility_status == ENTRY_STATUS_PROVISIONAL
     assert "waiting for a manual" in entrant.inconclusive_reasons_json[0]
+
+
+def test_instagram_follow_verification_retries_transient_private_api_errors(session, monkeypatch):
+    persona = _create_persona(session, slug="giveaway-follow-retry")
+    instagram = _create_account(session, persona, service="instagram", label="Instagram")
+    post = create_scheduled_post(
+        session,
+        _generic_giveaway_payload(
+            persona.id,
+            [instagram.id],
+            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            channels=[
+                {
+                    "service": "instagram",
+                    "account_id": instagram.id,
+                    "rules": {
+                        "kind": "all",
+                        "children": [{"kind": "atom", "atom": "follow_present", "params": {}}],
+                    },
+                }
+            ],
+        ),
+        [],
+    )
+    _mark_posted(post, instagram.id, external_id="ig-media-follow-retry")
+    channel = post.giveaway_campaign.channels[0]
+    channel.entrants.append(
+        GiveawayEntrant(
+            provider_user_id="ig-user-follow",
+            provider_username="follower.one",
+            display_label="follower.one",
+            signal_state_json={},
+        )
+    )
+    session.flush()
+    calls = {"friendship": 0}
+
+    class _FakeInstagramClient:
+        def user_friendship_v1(self, user_id):
+            calls["friendship"] += 1
+            if calls["friendship"] == 1:
+                raise RuntimeError("ResponseError('too many 500 error responses')")
+            return SimpleNamespace(followed_by=True)
+
+    monkeypatch.setattr("app.services.giveaway_engine._instagram_destination_dependency_issue", lambda: None)
+    monkeypatch.setattr("app.services.giveaway_engine._authenticated_publish_client", lambda credentials: _FakeInstagramClient())
+    monkeypatch.setattr("app.services.giveaway_engine.time.sleep", lambda seconds: None)
+
+    evaluate_channel_entrants(channel, allow_instagram_private_verification=True)
+
+    entrant = session.query(GiveawayEntrant).filter_by(channel_id=channel.id, provider_user_id="ig-user-follow").one()
+    assert calls["friendship"] == 2
+    assert entrant.eligibility_status == ENTRY_STATUS_ELIGIBLE
+    assert entrant.inconclusive_reasons_json == []
 
 
 def test_giveaway_lifecycle_updates_qualification_checks_after_collection(session, monkeypatch):

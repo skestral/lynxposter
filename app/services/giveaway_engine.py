@@ -82,6 +82,7 @@ COMMENT_EVIDENCE_SOURCE_LIVE = "close_time_live"
 INSTAGRAM_WEBHOOK_CAPTURE_SOURCE = "webhook_capture"
 INSTAGRAM_MESSAGE_SHARE_CAPTURE_SOURCE = "message_share_capture"
 INSTAGRAM_LIVE_COLLECTION_SOURCE = "live_collection"
+INSTAGRAM_PRIVATE_MAX_ATTEMPTS = 3
 BLUESKY_COLLECTION_MAX_ATTEMPTS = 3
 INSTAGRAM_ACTIVITY_EVENT_TYPES = (
     "instagram_comment",
@@ -481,6 +482,93 @@ def _channel_delivery_job(channel: GiveawayChannel) -> DeliveryJob | None:
 
 def _account_credentials(account: Account | None) -> dict[str, Any]:
     return dict(account.credentials_json or {}) if account else {}
+
+
+def _is_instagram_private_transient_error(exc: Exception) -> bool:
+    text = str(exc).lower()
+    class_name = exc.__class__.__name__.lower()
+    return (
+        isinstance(exc, TimeoutError)
+        or "timeout" in class_name
+        or "timeout" in text
+        or "connectionpool" in text
+        or "too many 500" in text
+        or "500 error" in text
+        or "temporarily unavailable" in text
+    )
+
+
+def _is_instagram_media_unavailable_error(exc: Exception) -> bool:
+    text = str(exc).lower()
+    return "media not found" in text or "media unavailable" in text or "not found or unavailable" in text
+
+
+def _call_instagram_private(fetch: Callable[[], Any]) -> Any:
+    last_error: Exception | None = None
+    for attempt in range(INSTAGRAM_PRIVATE_MAX_ATTEMPTS):
+        try:
+            return fetch()
+        except Exception as exc:
+            last_error = exc
+            if not _is_instagram_private_transient_error(exc) or attempt == INSTAGRAM_PRIVATE_MAX_ATTEMPTS - 1:
+                raise
+            time.sleep(1 + attempt)
+    if last_error is not None:
+        raise last_error
+    return None
+
+
+def _instagram_media_identifier_candidates(client: Any, channel: GiveawayChannel) -> list[str]:
+    candidates: list[str] = []
+    media_id = str(channel.target_post_external_id or "").strip()
+    if media_id:
+        candidates.append(media_id)
+    media_url = str(channel.target_post_url or "").strip()
+    if media_url and hasattr(client, "media_pk_from_url"):
+        try:
+            media_pk = _call_instagram_private(lambda: client.media_pk_from_url(media_url))
+        except Exception:
+            media_pk = None
+        normalized_media_pk = str(media_pk or "").strip()
+        if normalized_media_pk and normalized_media_pk not in candidates:
+            candidates.append(normalized_media_pk)
+    return candidates
+
+
+def _instagram_media_likers(client: Any, channel: GiveawayChannel) -> tuple[list[Any], str]:
+    media_ids = _instagram_media_identifier_candidates(client, channel)
+    if not media_ids:
+        raise RuntimeError("Instagram media ID is not available for like verification.")
+    last_error: Exception | None = None
+    for media_id in media_ids:
+        try:
+            return list(_call_instagram_private(lambda media_id=media_id: client.media_likers(media_id)) or []), media_id
+        except Exception as exc:
+            last_error = exc
+            if _is_instagram_media_unavailable_error(exc):
+                continue
+            raise
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("Instagram media ID is not available for like verification.")
+
+
+def _instagram_media_comments(client: Any, channel: GiveawayChannel) -> tuple[list[Any], str]:
+    media_ids = _instagram_media_identifier_candidates(client, channel)
+    if not media_ids:
+        raise RuntimeError("Instagram media ID is not available for giveaway verification.")
+    last_error: Exception | None = None
+    for media_id in media_ids:
+        try:
+            return list(_call_instagram_private(lambda media_id=media_id: client.media_comments(media_id, amount=0)) or []), media_id
+        except Exception as exc:
+            last_error = exc
+            if _is_instagram_media_unavailable_error(exc):
+                continue
+            raise
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("Instagram media ID is not available for giveaway verification.")
 
 
 def _resolve_bluesky_uri(handle: str, rkey: str) -> tuple[str | None, str | None]:
@@ -926,10 +1014,8 @@ def _instagram_verify_like(channel: GiveawayChannel, entrant: GiveawayEntrant) -
         return None, dependency_issue
     try:
         client = _authenticated_publish_client(_account_credentials(channel.account))
-        media_id = str(channel.target_post_external_id or "").strip()
-        if not media_id:
-            return None, "Instagram media ID is not available for like verification."
-        liker_ids = {str(getattr(user, "pk", "") or "").strip() for user in client.media_likers(media_id)}
+        likers, _media_id = _instagram_media_likers(client, channel)
+        liker_ids = {str(getattr(user, "pk", "") or "").strip() for user in likers}
         return entrant.provider_user_id in liker_ids, None
     except Exception as exc:
         return None, f"Like verification could not be completed: {exc}"
@@ -941,7 +1027,7 @@ def _instagram_verify_follow(channel: GiveawayChannel, entrant: GiveawayEntrant)
         return None, dependency_issue
     try:
         client = _authenticated_publish_client(_account_credentials(channel.account))
-        relationship = client.user_friendship_v1(entrant.provider_user_id)
+        relationship = _call_instagram_private(lambda: client.user_friendship_v1(entrant.provider_user_id))
         return bool(getattr(relationship, "followed_by", False)), None
     except Exception as exc:
         return None, f"Follow verification could not be completed: {exc}"
@@ -1999,12 +2085,12 @@ def refresh_instagram_channel_state(
         channel.last_private_collected_at = private_scan_started_at
         channel.last_collected_at = private_scan_started_at
         dependency_issue = _instagram_destination_dependency_issue()
-        if dependency_issue or not str(channel.target_post_external_id or "").strip():
-            channel.last_error = dependency_issue or "Instagram media ID is not available for giveaway verification."
+        if dependency_issue:
+            channel.last_error = dependency_issue
         else:
             try:
                 client = _authenticated_publish_client(_account_credentials(channel.account))
-                live_comments = client.media_comments(channel.target_post_external_id, amount=0)
+                live_comments, live_media_id = _instagram_media_comments(client, channel)
                 observed_comments: list[tuple[GiveawayEntrant, dict[str, Any], dict[str, Any]]] = []
                 for state in state_by_user.values():
                     state["comments"] = []
@@ -2045,7 +2131,7 @@ def refresh_instagram_channel_state(
                 session.flush()
                 _sync_instagram_live_comment_events(session, channel, observed_comments)
 
-                live_likers = client.media_likers(channel.target_post_external_id)
+                live_likers, live_media_id = _instagram_media_likers(client, channel)
                 observed_likes: list[tuple[GiveawayEntrant, dict[str, Any]]] = []
                 for state in state_by_user.values():
                     state["likes"] = []
@@ -2064,8 +2150,8 @@ def refresh_instagram_channel_state(
                         display_label=provider_username or provider_user_id,
                     )
                     like_summary = {
-                        "like_id": f"like:{provider_user_id}:{channel.target_post_external_id}",
-                        "media_id": channel.target_post_external_id,
+                        "like_id": f"like:{provider_user_id}:{live_media_id}",
+                        "media_id": live_media_id,
                         "actor_id": provider_user_id,
                         "actor_username": provider_username,
                         "source": INSTAGRAM_LIVE_COLLECTION_SOURCE,
