@@ -145,7 +145,7 @@
                                 <div class="col-md-6">
                                     <label class="form-label">Recommended Subscriptions</label>
                                     <div class="lp-static-field">{{ instagram_webhook_required_fields|join(", ") }}</div>
-                                    <div class="form-text">Comments, mentions, and messages can arrive live. Instagram likes are pulled during giveaway collection because Meta does not deliver a public like webhook.</div>
+                                    <div class="form-text">Comments, mentions, and messages can arrive live. Instagram likes and follows are only checked during manual, due, or end-of-giveaway private scans.</div>
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label">Private Giveaway Scan Interval (hours)</label>
@@ -157,7 +157,7 @@
                                         max="168"
                                         value="{{ app_settings.instagram_private_scan_interval_hours }}"
                                     >
-                                    <div class="form-text">Defaults to once per day. Set to 0 for manual Instagram private scans only.</div>
+                                    <div class="form-text">Defaults to once per week. Autorun uses only official Graph/webhook data until a giveaway ends. Set to 0 for manual and end-of-giveaway checks only.</div>
                                 </div>
                                 <div class="col-12">
                                     <div class="d-flex gap-2 flex-wrap">

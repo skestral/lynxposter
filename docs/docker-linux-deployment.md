@@ -158,6 +158,7 @@ If you use host bind mounts on Linux, make sure the mounted directory is writabl
 | `INSTAGRAM_WEBHOOKS_ENABLED` | `false` | Enable Instagram webhook routes |
 | `INSTAGRAM_WEBHOOK_VERIFY_TOKEN` | unset | Meta webhook verify token |
 | `INSTAGRAM_APP_SECRET` | unset | Meta app secret for signature validation |
+| `INSTAGRAM_PRIVATE_SCAN_INTERVAL_HOURS` | `168` | Minimum interval for manual-cycle private giveaway scans; set `0` for manual and end-of-giveaway checks only |
 
 Instagram Graph publishing also needs `APP_BASE_URL` set to the public HTTPS origin for the app. Meta fetches post media from `APP_BASE_URL + /media/instagram/<attachment-id>/<filename>`, which is public by design and serves files from managed media storage without creating extra staging copies.
 

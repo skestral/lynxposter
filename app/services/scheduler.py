@@ -132,7 +132,12 @@ class CrossposterScheduler:
                 enqueue_due_scheduled_posts(session, run_id=run_id)
                 reconcile_pending_posts(session, run_id=run_id)
                 process_delivery_queue(session, self.alerts, run_id=run_id)
-                process_instagram_giveaway_lifecycle(session, self.alerts, run_id=run_id)
+                process_instagram_giveaway_lifecycle(
+                    session,
+                    self.alerts,
+                    run_id=run_id,
+                    allow_instagram_private_scan=(trigger != "autorun"),
+                )
                 check_instagram_token_expiry(session, self.alerts, run_id=run_id)
                 cleanup_stale_media_files(session, run_id=run_id)
             self._log_scheduler_event(

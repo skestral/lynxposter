@@ -2304,8 +2304,14 @@ def process_instagram_giveaway_lifecycle(
     alerts: AlertDispatcher,
     *,
     run_id: str,
+    allow_instagram_private_scan: bool = False,
 ) -> str:
-    return process_giveaway_lifecycle(session, alerts, run_id=run_id)
+    return process_giveaway_lifecycle(
+        session,
+        alerts,
+        run_id=run_id,
+        allow_instagram_private_scan=allow_instagram_private_scan,
+    )
 
 
 def confirm_giveaway_winner(

@@ -69,7 +69,7 @@ class AppSettingsUpdate(BaseModel):
     instagram_webhooks_enabled: bool = False
     instagram_webhook_verify_token: str = ""
     instagram_app_secret: str = ""
-    instagram_private_scan_interval_hours: int = Field(default=24, ge=0, le=168)
+    instagram_private_scan_interval_hours: int = Field(default=168, ge=0, le=168)
 
     @field_validator("auth_oidc_scope", mode="before")
     @classmethod

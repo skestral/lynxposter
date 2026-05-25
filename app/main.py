@@ -279,7 +279,7 @@ def _process_send_now_delivery(post_id: str, run_id: str, alerts: AlertDispatche
         with db_session() as session:
             post = get_post(session, post_id)
             if post and post.post_type == POST_TYPE_GIVEAWAY:
-                process_giveaway_lifecycle(session, alerts, run_id=run_id, post_id=post_id)
+                process_giveaway_lifecycle(session, alerts, run_id=run_id, post_id=post_id, allow_instagram_private_scan=False)
         publish_live_update(
             LIVE_UPDATE_TOPIC_SCHEDULED_POSTS,
             LIVE_UPDATE_TOPIC_DASHBOARD,
@@ -526,7 +526,7 @@ async def _read_app_settings_payload(request: Request) -> dict[str, Any]:
         "instagram_webhooks_enabled": str(form.get("instagram_webhooks_enabled", "false")).lower() in {"1", "true", "on", "yes"},
         "instagram_webhook_verify_token": form.get("instagram_webhook_verify_token", ""),
         "instagram_app_secret": form.get("instagram_app_secret", ""),
-        "instagram_private_scan_interval_hours": int(form.get("instagram_private_scan_interval_hours", 24)),
+        "instagram_private_scan_interval_hours": int(form.get("instagram_private_scan_interval_hours", 168)),
     }
 
 

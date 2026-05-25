@@ -544,8 +544,8 @@ def test_send_now_api_processes_giveaway_delivery_in_background(api_stack, monke
         delivery_calls.append((run_id, post_id))
         return run_id or "run-send-now"
 
-    def fake_process_giveaway_lifecycle(session, alerts, *, run_id, post_id=None):
-        lifecycle_calls.append((run_id, post_id))
+    def fake_process_giveaway_lifecycle(session, alerts, *, run_id, post_id=None, allow_instagram_private_scan=False):
+        lifecycle_calls.append((run_id, post_id, allow_instagram_private_scan))
         return run_id
 
     monkeypatch.setattr("app.main.process_delivery_queue", fake_process_delivery_queue)
@@ -597,7 +597,7 @@ def test_send_now_api_processes_giveaway_delivery_in_background(api_stack, monke
     assert len(lifecycle_calls) == 1
     assert delivery_calls[0][0]
     assert delivery_calls[0][1] == post_id
-    assert lifecycle_calls[0] == delivery_calls[0]
+    assert lifecycle_calls[0] == (delivery_calls[0][0], delivery_calls[0][1], False)
 
 
 def test_send_now_api_returns_success_when_background_delivery_fails(api_stack, monkeypatch):

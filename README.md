@@ -57,7 +57,7 @@ The app serves on `http://127.0.0.1:8000/`.
 - Instagram outbound publishing uses the official Instagram Graph content publishing flow. Configure a Graph access token plus the Instagram Professional Account ID, and set `APP_BASE_URL` to the externally reachable HTTPS URL for this app.
 - During Graph publishing, Meta fetches scheduled media from `https://<your-public-url>/media/instagram/<attachment-id>/<filename>`. That route is intentionally public and unauthenticated; it serves existing files from `app_data/uploads/` and `app_data/imported_media/` without creating long-lived staging copies.
 - Instagram giveaway webhooks use `INSTAGRAM_WEBHOOKS_ENABLED`, `INSTAGRAM_WEBHOOK_VERIFY_TOKEN`, and `INSTAGRAM_APP_SECRET`, and the Settings page shows the callback URL at `/webhooks/instagram`.
-- Instagram giveaway private scans are rate-limited by `INSTAGRAM_PRIVATE_SCAN_INTERVAL_HOURS`, which defaults to `24`. Set it to `0` for manual scans only.
+- Instagram giveaway private scans are rate-limited by `INSTAGRAM_PRIVATE_SCAN_INTERVAL_HOURS`, which defaults to `168` for weekly checks. The 5-minute autorun cycle uses only official Graph/webhook data until a giveaway ends. Set the interval to `0` for manual and end-of-giveaway checks only.
 - The remaining private Instagram client usage is limited to explicit giveaway private scans and the login diagnostic button. Keep that interval conservative if the account has seen automation warnings.
 - Unreferenced media files are removed by the existing storage cleanup after `MEDIA_ORPHAN_RETENTION_DAYS`.
 

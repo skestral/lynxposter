@@ -1013,7 +1013,7 @@ def test_settings_template_renders_instagram_webhook_setup_guidance():
     assert "Verify Token" in html
     assert "Recommended Subscriptions" in html
     assert "comments, mentions, messages" in html
-    assert "Instagram likes are pulled during giveaway collection" in html
+    assert "Instagram likes and follows are only checked during manual, due, or end-of-giveaway private scans" in html
     assert "Tunnel Helper" in html
     assert "cloudflared tunnel --url http://127.0.0.1:8000" in html
     assert "ngrok http 8000" in html

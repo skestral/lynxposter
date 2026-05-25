@@ -23,6 +23,7 @@ from app.services.alerts import AlertDispatcher
 from app.services.auth import Principal
 from app.services.giveaway_engine import (
     ENTRY_STATUS_ELIGIBLE,
+    ENTRY_STATUS_PROVISIONAL,
     GIVEAWAY_STATUS_COLLECTING,
     GIVEAWAY_STATUS_REVIEW_REQUIRED,
     GIVEAWAY_STATUS_WINNER_SELECTED,
@@ -662,6 +663,54 @@ def test_manual_instagram_scan_ignores_private_scan_interval(session, monkeypatc
     assert entrant.eligibility_status == ENTRY_STATUS_ELIGIBLE
 
 
+def test_giveaway_lifecycle_defers_instagram_follow_verification_without_private_scan(session, monkeypatch):
+    persona = _create_persona(session, slug="giveaway-follow-private-guard")
+    instagram = _create_account(session, persona, service="instagram", label="Instagram")
+    post = create_scheduled_post(
+        session,
+        _generic_giveaway_payload(
+            persona.id,
+            [instagram.id],
+            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            channels=[
+                {
+                    "service": "instagram",
+                    "account_id": instagram.id,
+                    "rules": {
+                        "kind": "all",
+                        "children": [{"kind": "atom", "atom": "follow_present", "params": {}}],
+                    },
+                }
+            ],
+        ),
+        [],
+    )
+    _mark_posted(post, instagram.id, external_id="ig-media-follow")
+    channel = post.giveaway_campaign.channels[0]
+    channel.entrants.append(
+        GiveawayEntrant(
+            channel=channel,
+            provider_user_id="ig-user-follow",
+            provider_username="follower.one",
+            display_label="follower.one",
+            signal_state_json={},
+        )
+    )
+    session.flush()
+
+    def _fail_private_client(credentials):
+        raise AssertionError("Autorun giveaway evaluation should not use private Instagram follow checks.")
+
+    monkeypatch.setattr("app.services.giveaway_engine._instagram_destination_dependency_issue", lambda: None)
+    monkeypatch.setattr("app.services.giveaway_engine._authenticated_publish_client", _fail_private_client)
+
+    process_giveaway_lifecycle(session, AlertDispatcher(), run_id="run-follow-private-guard")
+
+    entrant = session.query(GiveawayEntrant).filter_by(channel_id=channel.id, provider_user_id="ig-user-follow").one()
+    assert entrant.eligibility_status == ENTRY_STATUS_PROVISIONAL
+    assert "waiting for a manual" in entrant.inconclusive_reasons_json[0]
+
+
 def test_giveaway_lifecycle_updates_qualification_checks_after_collection(session, monkeypatch):
     persona = _create_persona(session, slug="giveaway-live-checks")
     instagram = _create_account(session, persona, service="instagram", label="Instagram")
@@ -702,7 +751,7 @@ def test_giveaway_lifecycle_updates_qualification_checks_after_collection(sessio
     monkeypatch.setattr("app.services.giveaway_engine._instagram_destination_dependency_issue", lambda: None)
     monkeypatch.setattr("app.services.giveaway_engine._authenticated_publish_client", lambda credentials: _FakeInstagramClient())
 
-    process_giveaway_lifecycle(session, AlertDispatcher(), run_id="run-live-checks")
+    process_giveaway_lifecycle(session, AlertDispatcher(), run_id="run-live-checks", allow_instagram_private_scan=True)
 
     channel = post.giveaway_campaign.channels[0]
     entrant = session.query(GiveawayEntrant).filter_by(channel_id=channel.id, provider_user_id="ig-user-like").one()
@@ -1132,7 +1181,7 @@ def test_giveaway_lifecycle_collects_ready_channels_before_all_platforms_publish
     session.flush()
     calls: list[str] = []
 
-    def collect_instagram(session, channel):
+    def collect_instagram(session, channel, **kwargs):
         calls.append(channel.service)
 
     def collect_bluesky(session, channel, run_id):
@@ -1232,7 +1281,7 @@ def test_process_giveaway_lifecycle_creates_separate_winners_for_mixed_channels(
     )
 
     monkeypatch.setattr("app.services.giveaway_engine.hydrate_channel_targets", lambda campaign: None)
-    monkeypatch.setattr("app.services.giveaway_engine.refresh_instagram_channel_state", lambda session, channel: None)
+    monkeypatch.setattr("app.services.giveaway_engine.refresh_instagram_channel_state", lambda session, channel, **kwargs: None)
     monkeypatch.setattr("app.services.giveaway_engine.collect_bluesky_channel_state", lambda session, channel, run_id: None)
 
     process_giveaway_lifecycle(session, AlertDispatcher(), run_id="run-mixed")

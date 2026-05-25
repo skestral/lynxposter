@@ -945,7 +945,14 @@ def _instagram_verify_follow(channel: GiveawayChannel, entrant: GiveawayEntrant)
         return None, f"Follow verification could not be completed: {exc}"
 
 
-def _evaluate_instagram_atom(channel: GiveawayChannel, entrant: GiveawayEntrant, atom: str, params: dict[str, Any]) -> tuple[bool | None, str | None]:
+def _evaluate_instagram_atom(
+    channel: GiveawayChannel,
+    entrant: GiveawayEntrant,
+    atom: str,
+    params: dict[str, Any],
+    *,
+    allow_private_verification: bool = False,
+) -> tuple[bool | None, str | None]:
     state = dict(entrant.signal_state_json or {})
     comments = list(state.get("comments") or [])
     comment_text = _combined_comment_text(comments)
@@ -967,12 +974,20 @@ def _evaluate_instagram_atom(channel: GiveawayChannel, entrant: GiveawayEntrant,
             return True, None
         if state.get("like_collection_checked") is True:
             return False, None
+        if not allow_private_verification:
+            return None, "Instagram like verification is waiting for a manual, due, or end-of-giveaway private check."
         return _instagram_verify_like(channel, entrant)
     if atom == "repost_present":
         if state.get("repost_present") is True:
             return True, None
         return False, "No Instagram repost or share evidence was captured."
     if atom == "follow_present":
+        if state.get("follow_present") is True:
+            return True, None
+        if state.get("follow_collection_checked") is True:
+            return False, None
+        if not allow_private_verification:
+            return None, "Instagram follow verification is waiting for a manual, due, or end-of-giveaway private check."
         return _instagram_verify_follow(channel, entrant)
     return False, f"Unsupported Instagram atom: {atom}"
 
@@ -1612,7 +1627,7 @@ def _evaluate_rule_node(
     return False, [f"Unsupported giveaway rule kind: {kind}"], detail
 
 
-def evaluate_channel_entrants(channel: GiveawayChannel) -> None:
+def evaluate_channel_entrants(channel: GiveawayChannel, *, allow_instagram_private_verification: bool = False) -> None:
     rule = dict(channel.rules_json or {})
     for entrant in channel.entrants:
         entrant.rule_match_details_json = {}
@@ -1622,7 +1637,13 @@ def evaluate_channel_entrants(channel: GiveawayChannel) -> None:
 
         def resolve_atom(atom: str, params: dict[str, Any]) -> tuple[bool | None, str | None]:
             if channel.service == "instagram":
-                return _evaluate_instagram_atom(channel, entrant, atom, params)
+                return _evaluate_instagram_atom(
+                    channel,
+                    entrant,
+                    atom,
+                    params,
+                    allow_private_verification=allow_instagram_private_verification,
+                )
             return _evaluate_bluesky_atom(channel, entrant, atom, params)
 
         result, reasons, detail = _evaluate_rule_node(rule, resolve_atom)
@@ -1671,6 +1692,7 @@ def finalize_giveaway_campaign(
     *,
     run_id: str,
     force_instagram_private_scan: bool = False,
+    allow_instagram_private_scan: bool = True,
 ) -> GiveawayCampaign:
     hydrate_channel_targets(campaign)
     for channel in campaign.channels:
@@ -1680,8 +1702,8 @@ def finalize_giveaway_campaign(
             if force_instagram_private_scan:
                 refresh_instagram_channel_state(session, channel, force_private_scan=True)
             else:
-                refresh_instagram_channel_state(session, channel)
-        evaluate_channel_entrants(channel)
+                refresh_instagram_channel_state(session, channel, allow_due_private_scan=allow_instagram_private_scan)
+        evaluate_channel_entrants(channel, allow_instagram_private_verification=force_instagram_private_scan or allow_instagram_private_scan)
 
     # Ensure entrant primary keys exist before we freeze candidate ordering.
     session.flush()
@@ -1808,7 +1830,7 @@ def scan_instagram_giveaway_channels(
         if channel.status == GIVEAWAY_STATUS_SCHEDULED:
             channel.status = GIVEAWAY_STATUS_COLLECTING
         refresh_instagram_channel_state(session, channel, force_private_scan=True)
-        evaluate_channel_entrants(channel)
+        evaluate_channel_entrants(channel, allow_instagram_private_verification=True)
 
     campaign.last_evaluated_at = utcnow()
     channel_errors = [str(channel.last_error) for channel in ready_channels if channel.last_error]
@@ -1838,6 +1860,7 @@ def process_giveaway_lifecycle(
     *,
     run_id: str,
     post_id: str | None = None,
+    allow_instagram_private_scan: bool = False,
 ) -> str:
     now = utcnow()
     stmt = list_giveaway_campaigns_stmt().where(
@@ -1888,11 +1911,11 @@ def process_giveaway_lifecycle(
                             event_type="giveaway_collection_failed",
                         )
                 elif channel.service == "instagram":
-                    refresh_instagram_channel_state(session, channel)
-                evaluate_channel_entrants(channel)
+                    refresh_instagram_channel_state(session, channel, allow_due_private_scan=allow_instagram_private_scan)
+                evaluate_channel_entrants(channel, allow_instagram_private_verification=allow_instagram_private_scan)
         if normalize_datetime(campaign.giveaway_end_at) and normalize_datetime(campaign.giveaway_end_at) <= now and campaign.status in {GIVEAWAY_STATUS_COLLECTING, GIVEAWAY_STATUS_SCHEDULED}:
             try:
-                finalize_giveaway_campaign(session, campaign, alerts, run_id=run_id)
+                finalize_giveaway_campaign(session, campaign, alerts, run_id=run_id, force_instagram_private_scan=True)
             except Exception as exc:
                 campaign.status = GIVEAWAY_STATUS_FAILED
                 campaign.last_error = str(exc)
@@ -1961,13 +1984,14 @@ def refresh_instagram_channel_state(
     channel: GiveawayChannel,
     *,
     force_private_scan: bool = False,
+    allow_due_private_scan: bool = True,
 ) -> None:
     sync_instagram_webhook_events_for_channel(session, channel)
     state_by_user: dict[str, dict[str, Any]] = {}
     for entrant in channel.entrants:
         state_by_user[entrant.provider_user_id] = _normalized_instagram_signal_state(dict(entrant.signal_state_json or {}))
 
-    should_run_private_scan = force_private_scan or instagram_private_scan_is_due(channel)
+    should_run_private_scan = force_private_scan or (allow_due_private_scan and instagram_private_scan_is_due(channel))
     if should_run_private_scan:
         private_scan_started_at = utcnow()
         channel.last_private_collected_at = private_scan_started_at
