@@ -222,13 +222,24 @@ def instagram_rule_tree_from_legacy(raw_config: dict[str, Any] | None) -> dict[s
         children.append({"kind": "atom", "atom": "like_present", "params": {}})
     if bool(config.get("require_follow")):
         children.append({"kind": "atom", "atom": "follow_present", "params": {}})
+    if bool(config.get("require_repost")):
+        children.append({"kind": "atom", "atom": "repost_present", "params": {}})
     return {"kind": "all", "children": children}
 
 
 def giveaway_config_input_from_json(config_json: dict[str, Any] | None) -> GiveawayConfigInput:
     payload = dict(config_json or {})
     if payload.get("channels") is None and any(
-        key in payload for key in ("min_friend_mentions", "required_keywords", "required_hashtags", "require_story_mention", "require_like", "require_follow")
+        key in payload
+        for key in (
+            "min_friend_mentions",
+            "required_keywords",
+            "required_hashtags",
+            "require_story_mention",
+            "require_like",
+            "require_follow",
+            "require_repost",
+        )
     ):
         payload = {
             "giveaway_end_at": payload.get("giveaway_end_at"),

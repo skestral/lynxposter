@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime, timezone
+from pathlib import Path
 from types import SimpleNamespace
 
 from starlette.requests import Request
@@ -49,6 +50,19 @@ def _account_read(account_id: str, service: str, label: str) -> AccountRead:
         created_at=timestamp,
         updated_at=timestamp,
     )
+
+
+def test_giveaway_builder_defaults_to_instagram_and_bluesky_engagement_rules():
+    script = Path("app/static/giveaway_builder.js").read_text(encoding="utf-8")
+
+    assert '["instagram", "bluesky"]' in script
+    assert '{kind: "atom", atom: "comment_present", params: {}}' in script
+    assert '{kind: "atom", atom: "friend_mention_count_gte", params: {count: 1}}' in script
+    assert '{kind: "atom", atom: "reply_or_quote_present", params: {}}' in script
+    assert '{kind: "atom", atom: "reply_or_quote_mention_count_gte", params: {count: 1}}' in script
+    assert script.count('{kind: "atom", atom: "like_present", params: {}}') >= 2
+    assert script.count('{kind: "atom", atom: "follow_present", params: {}}') >= 2
+    assert script.count('{kind: "atom", atom: "repost_present", params: {}}') >= 2
 
 
 def test_telegram_service_definition_exposes_destination_credentials():

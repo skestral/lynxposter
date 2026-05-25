@@ -80,6 +80,7 @@
           {kind: "atom", atom: "reply_or_quote_mention_count_gte", params: {count: 1}},
           {kind: "atom", atom: "like_present", params: {}},
           {kind: "atom", atom: "follow_present", params: {}},
+          {kind: "atom", atom: "repost_present", params: {}},
         ],
       });
     }
@@ -88,7 +89,9 @@
       children: [
         {kind: "atom", atom: "comment_present", params: {}},
         {kind: "atom", atom: "friend_mention_count_gte", params: {count: 1}},
-        {kind: "atom", atom: "story_mention_present", params: {}},
+        {kind: "atom", atom: "like_present", params: {}},
+        {kind: "atom", atom: "follow_present", params: {}},
+        {kind: "atom", atom: "repost_present", params: {}},
       ],
     });
   }
@@ -389,6 +392,13 @@
         .filter((channel) => (accounts[channel.service] || []).length > 0);
     }
 
+    function defaultChannels() {
+      const accounts = currentAccounts();
+      return ["instagram", "bluesky"]
+        .filter((service) => (accounts[service] || []).length > 0)
+        .map((service) => normalizeChannel(accounts, {service, rules: defaultRuleTree(service)}));
+    }
+
     function addChannel(service) {
       const accounts = currentAccounts();
       if (!accounts[service]?.length) return;
@@ -606,6 +616,10 @@
       rules: withIds(channel.rules || defaultRuleTree(channel.service)),
     }));
     normalizeState();
+    if (!state.channels.length) {
+      state.channels = defaultChannels();
+      normalizeState();
+    }
     render();
     return api;
   }

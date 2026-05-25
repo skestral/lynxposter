@@ -946,9 +946,10 @@ plannerMoveForm.addEventListener("submit", async (event) => {
         min_friend_mentions: 1,
         required_keywords: [],
         required_hashtags: [],
-        require_story_mention: true,
-        require_like: false,
-        require_follow: false,
+        require_story_mention: false,
+        require_like: true,
+        require_follow: true,
+        require_repost: true,
       }),
       giveaway_end_at: plannerMoveGiveawayEnd.value,
     };

@@ -232,6 +232,7 @@ class GiveawayConfigInput(BaseModel):
             "require_story_mention",
             "require_like",
             "require_follow",
+            "require_repost",
         }
         if not legacy_keys.intersection(value.keys()):
             return value
@@ -269,6 +270,8 @@ class GiveawayConfigInput(BaseModel):
             children.append({"kind": "atom", "atom": "like_present", "params": {}})
         if bool(value.get("require_follow")):
             children.append({"kind": "atom", "atom": "follow_present", "params": {}})
+        if bool(value.get("require_repost")):
+            children.append({"kind": "atom", "atom": "repost_present", "params": {}})
         return {
             "giveaway_end_at": value.get("giveaway_end_at"),
             "pool_mode": value.get("pool_mode") or "combined",
@@ -397,6 +400,7 @@ class InstagramGiveawayConfigInput(BaseModel):
     require_story_mention: bool = False
     require_like: bool = False
     require_follow: bool = False
+    require_repost: bool = False
 
 
 class InstagramGiveawayEntryRead(BaseModel):
