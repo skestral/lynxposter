@@ -146,7 +146,12 @@ SERVICE_REGISTRY: dict[str, ServiceDefinition] = {
             AccountFieldDefinition(
                 "video_media_type",
                 "Single Video Type",
+                input_type="select",
                 help_text="Use REELS by default. STORIES is also accepted for story publishing.",
+                options=(
+                    ("REELS", "Reel"),
+                    ("STORIES", "Story"),
+                ),
             ),
         ),
     ),

@@ -76,6 +76,8 @@ def test_instagram_service_definition_exposes_destination_credentials():
     assert fields["instagrapi_password"].label == "Private Verification Password"
     publish_fields = {field.name: field for field in definition.publish_setting_fields}
     assert publish_fields["video_media_type"].label == "Single Video Type"
+    assert publish_fields["video_media_type"].input_type == "select"
+    assert publish_fields["video_media_type"].options == (("REELS", "Reel"), ("STORIES", "Story"))
 
 
 def test_mastodon_and_twitter_service_definitions_expose_language_publish_fields():
@@ -189,7 +191,7 @@ def test_persona_detail_template_renders_instagram_token_tracking_controls():
                 ),
                 "account_read": SimpleNamespace(source_supported=True, destination_supported=True, configured=True),
                 "definition": definition,
-                "publish_field_values": {},
+                "publish_field_values": {"video_media_type": "STORIES"},
                 "instagram_token_status": {
                     "token_present": True,
                     "tracking_enabled": True,
@@ -214,6 +216,9 @@ def test_persona_detail_template_renders_instagram_token_tracking_controls():
     assert "Check Login" in html
     assert "Private verification fields are optional" in html
     assert '<option value="instagram" selected>Instagram</option>' in html
+    assert 'data-scope="publish"\n        data-field-name="video_media_type"' in html
+    assert '<option value="REELS" >Reel</option>' in html
+    assert '<option value="STORIES" selected>Story</option>' in html
     assert "Last connection hiccup" in html
     assert "Instagram login failed. Challenge required." in html
 
