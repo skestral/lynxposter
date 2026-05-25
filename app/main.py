@@ -9,7 +9,7 @@ from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse, Response
 from jinja2 import pass_context
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.datastructures import UploadFile as StarletteUploadFile
@@ -688,8 +688,7 @@ def _public_attachment_path(attachment: MediaAttachment) -> Path | None:
     return file_path
 
 
-@app.get("/media/attachments/{attachment_id}")
-def public_attachment(attachment_id: str):
+def _public_attachment_response(attachment_id: str, *, head: bool = False):
     with db_session() as session:
         attachment = session.get(MediaAttachment, attachment_id)
         if attachment is None:
@@ -697,11 +696,27 @@ def public_attachment(attachment_id: str):
         file_path = _public_attachment_path(attachment)
         if file_path is None:
             raise HTTPException(status_code=404, detail="Attachment file not found.")
-        return FileResponse(path=file_path, media_type=attachment.mime_type or None)
+        media_type = attachment.mime_type or None
+        if head:
+            return Response(
+                status_code=200,
+                media_type=media_type,
+                headers={"Content-Length": str(file_path.stat().st_size)},
+            )
+        return FileResponse(path=file_path, media_type=media_type)
 
 
-@app.get("/media/instagram/{attachment_id}/{filename}")
-def public_instagram_media(attachment_id: str, filename: str):
+@app.get("/media/attachments/{attachment_id}")
+def public_attachment(attachment_id: str):
+    return _public_attachment_response(attachment_id)
+
+
+@app.head("/media/attachments/{attachment_id}", include_in_schema=False)
+def public_attachment_head(attachment_id: str):
+    return _public_attachment_response(attachment_id, head=True)
+
+
+def _public_instagram_media_response(attachment_id: str, filename: str, *, head: bool = False):
     with db_session() as session:
         attachment = session.get(MediaAttachment, attachment_id)
         if attachment is None:
@@ -712,11 +727,26 @@ def public_instagram_media(attachment_id: str, filename: str):
         file_path = _public_attachment_path(attachment)
         if file_path is None:
             raise HTTPException(status_code=404, detail="Attachment file not found.")
+        headers = {"Cache-Control": "public, max-age=3600"}
+        media_type = attachment.mime_type or None
+        if head:
+            headers["Content-Length"] = str(file_path.stat().st_size)
+            return Response(status_code=200, media_type=media_type, headers=headers)
         return FileResponse(
             path=file_path,
-            media_type=attachment.mime_type or None,
-            headers={"Cache-Control": "public, max-age=3600"},
+            media_type=media_type,
+            headers=headers,
         )
+
+
+@app.get("/media/instagram/{attachment_id}/{filename}")
+def public_instagram_media(attachment_id: str, filename: str):
+    return _public_instagram_media_response(attachment_id, filename)
+
+
+@app.head("/media/instagram/{attachment_id}/{filename}", include_in_schema=False)
+def public_instagram_media_head(attachment_id: str, filename: str):
+    return _public_instagram_media_response(attachment_id, filename, head=True)
 
 
 @app.get("/robots.txt", include_in_schema=False)

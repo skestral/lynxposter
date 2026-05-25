@@ -88,6 +88,8 @@ def test_instagram_media_route_serves_plain_public_image(monkeypatch, tmp_path):
 
         with TestClient(app) as client:
             response = client.get(f"/media/instagram/{attachment_id}/{filename}")
+            head_response = client.head(f"/media/instagram/{attachment_id}/{filename}")
+            attachment_head_response = client.head(f"/media/attachments/{attachment_id}")
             robots = client.get("/robots.txt")
 
         assert response.status_code == 200
@@ -95,6 +97,15 @@ def test_instagram_media_route_serves_plain_public_image(monkeypatch, tmp_path):
         assert response.headers["cache-control"] == "public, max-age=3600"
         assert "content-disposition" not in response.headers
         assert response.content == b"\xff\xd8\xffjpeg"
+        assert head_response.status_code == 200
+        assert head_response.headers["content-type"].startswith("image/jpeg")
+        assert head_response.headers["content-length"] == str(image_path.stat().st_size)
+        assert head_response.headers["cache-control"] == "public, max-age=3600"
+        assert "content-disposition" not in head_response.headers
+        assert head_response.content == b""
+        assert attachment_head_response.status_code == 200
+        assert attachment_head_response.headers["content-type"].startswith("image/jpeg")
+        assert attachment_head_response.headers["content-length"] == str(image_path.stat().st_size)
         assert robots.status_code == 200
         assert "Allow: /media/instagram/" in robots.text
     finally:
