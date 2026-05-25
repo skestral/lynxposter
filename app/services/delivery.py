@@ -21,6 +21,7 @@ from app.services.posts import (
     sync_delivery_jobs,
     upsert_polled_post,
 )
+from app.services.storage import normalize_media_file
 from app.utils import to_json_compatible
 
 
@@ -251,6 +252,21 @@ def _delivery_queue_priority(job: DeliveryJob) -> tuple[int, object]:
     return (0, job.queued_at or now_utc())
 
 
+def _normalize_post_attachments(post: CanonicalPost) -> None:
+    for attachment in post.attachments or []:
+        try:
+            normalized_path, mime_type, size_bytes, checksum = normalize_media_file(
+                attachment.storage_path,
+                attachment.mime_type,
+            )
+        except OSError:
+            continue
+        attachment.storage_path = str(normalized_path)
+        attachment.mime_type = mime_type
+        attachment.size_bytes = size_bytes
+        attachment.checksum = checksum
+
+
 def process_delivery_queue(
     session: Session,
     alerts: AlertDispatcher,
@@ -327,6 +343,8 @@ def process_delivery_queue(
             continue
         if target_account.service == "discord" and discord_should_wait_for_preferred_links(post, persona, target_account):
             continue
+
+        _normalize_post_attachments(post)
 
         try:
             adapter = get_destination_adapter_for_account(target_account)

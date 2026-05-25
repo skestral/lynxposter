@@ -1004,3 +1004,62 @@ def test_discord_publish_uses_payload_json_for_multipart_requests(session, monke
     assert "files[0]" in captured["files"]
     assert post.delivery_jobs[0].status == "posted"
     assert post.delivery_jobs[0].external_id == "discord-media-123"
+
+
+def test_discord_publish_skips_unknown_binary_attachments(session, monkeypatch, tmp_path):
+    persona = _create_persona(session)
+    discord = _create_account(session, persona, service="discord", label="Discord", source_enabled=False, destination_enabled=True)
+
+    binary_path = tmp_path / "blob.bin"
+    binary_path.write_bytes(b"not a social image")
+
+    post = create_scheduled_post(
+        session,
+        ScheduledPostCreate.model_validate(
+            {
+                "persona_id": persona.id,
+                "body": "Imported Bluesky post",
+                "status": "queued",
+                "target_account_ids": [discord.id],
+                "publish_overrides_json": {},
+                "metadata_json": {"link": "https://bsky.app/profile/example/post/1"},
+                "scheduled_for": None,
+            }
+        ),
+        [
+            MediaItem(
+                storage_path=binary_path,
+                mime_type="application/octet-stream",
+                alt_text="",
+                size_bytes=binary_path.stat().st_size,
+                checksum="blob-1",
+                sort_order=0,
+            ),
+        ],
+    )
+
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        content = b'{"id":"discord-link-only"}'
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"id": "discord-link-only"}
+
+    def fake_post(url, *, params=None, json=None, data=None, files=None, timeout=30):
+        captured["json"] = json
+        captured["data"] = data
+        captured["files"] = files
+        return FakeResponse()
+
+    monkeypatch.setattr("app.adapters.discord.requests.post", fake_post)
+
+    process_delivery_queue(session, AlertDispatcher(), run_id="run-discord-skip-bin")
+
+    assert captured["json"] == {"content": "Imported Bluesky post\nSource: https://bsky.app/profile/example/post/1"}
+    assert captured["data"] is None
+    assert captured["files"] is None
+    assert post.delivery_jobs[0].status == "posted"

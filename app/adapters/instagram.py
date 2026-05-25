@@ -18,7 +18,8 @@ from app.config import get_settings
 from app.domain import CanonicalPostPayload, ExternalPostRefPayload, PollResult, PublishPreview, PublishResult, ValidationIssue
 from app.models import Account, AccountSyncState, CanonicalPost, MediaAttachment, Persona
 from app.services.instagram_private_api import apply_instagram_private_settings, get_instagram_private_settings
-from app.services.storage import download_media, public_instagram_media_url
+from app.services.storage import delete_managed_media_file, download_media, normalize_media_file, public_instagram_media_url
+from app.utils import detect_mime_type, stable_checksum
 
 INSTAGRAM_API_VERSION = "v25.0"
 INSTAGRAM_GRAPH_API_BASE_URL = f"https://graph.instagram.com/{INSTAGRAM_API_VERSION}"
@@ -319,6 +320,36 @@ def _prepared_upload_paths(attachments: list[Any], *, temp_dir: str) -> list[Pat
     return prepared
 
 
+def _prepare_graph_attachment(attachment: Any) -> None:
+    source_path = Path(str(attachment.storage_path))
+    if not source_path.exists():
+        return
+
+    try:
+        normalized_path, mime_type, size_bytes, checksum = normalize_media_file(source_path, getattr(attachment, "mime_type", None))
+    except OSError:
+        return
+
+    source_path = normalized_path
+    attachment.storage_path = str(normalized_path)
+    attachment.mime_type = mime_type
+    attachment.size_bytes = size_bytes
+    attachment.checksum = checksum
+
+    if mime_type in INSTAGRAM_GRAPH_IMAGE_MIME_TYPES or mime_type in INSTAGRAM_GRAPH_VIDEO_MIME_TYPES:
+        return
+    if mime_type not in INSTAGRAM_SUPPORTED_IMAGE_MIME_TYPES:
+        return
+
+    target_path = source_path.with_name(f"{source_path.stem}-instagram-{stable_checksum(source_path)[:12]}.jpg")
+    _flatten_image_to_jpeg(source_path, target_path)
+    delete_managed_media_file(source_path)
+    attachment.storage_path = str(target_path)
+    attachment.mime_type = detect_mime_type(target_path)
+    attachment.size_bytes = target_path.stat().st_size
+    attachment.checksum = stable_checksum(target_path)
+
+
 def _authenticated_publish_client(config: dict[str, Any]) -> Any:
     dependency_issue = _instagram_destination_dependency_issue()
     if dependency_issue:
@@ -534,6 +565,7 @@ class InstagramDestinationAdapter(DestinationAdapter):
             issues.append(ValidationIssue(service="instagram", field="media", message="Instagram carousel posts support up to 10 attachments."))
 
         for attachment in attachments:
+            _prepare_graph_attachment(attachment)
             mime_type = str(attachment.mime_type or "").lower()
             if mime_type in INSTAGRAM_GRAPH_IMAGE_MIME_TYPES:
                 continue
@@ -629,6 +661,8 @@ class InstagramDestinationAdapter(DestinationAdapter):
             raise ConfigurationError("Instagram publishing requires at least one image or video attachment.")
         if len(attachments) > 10:
             raise ConfigurationError("Instagram carousel posts support up to 10 attachments.")
+        for attachment in attachments:
+            _prepare_graph_attachment(attachment)
 
         caption = service_body(post, account)
         access_token = _configured_graph_access_token(config)

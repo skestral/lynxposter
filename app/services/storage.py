@@ -18,6 +18,15 @@ from app.utils import detect_mime_type, stable_checksum
 settings = get_settings()
 _MAX_FILENAME_STEM_LENGTH = 96
 _INVALID_FILENAME_CHARS = re.compile(r"[^A-Za-z0-9._-]+")
+_PREFERRED_MIME_EXTENSIONS = {
+    "image/jpeg": ".jpg",
+    "image/jpg": ".jpg",
+    "image/pjpeg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+    "image/gif": ".gif",
+    "video/mp4": ".mp4",
+}
 
 
 def ensure_storage_dirs() -> None:
@@ -132,6 +141,35 @@ def _unique_path(directory: Path, original_name: str) -> Path:
     return directory / f"{name}-{uuid4().hex}{suffix}"
 
 
+def preferred_extension_for_mime(mime_type: str | None) -> str | None:
+    return _PREFERRED_MIME_EXTENSIONS.get(str(mime_type or "").split(";", 1)[0].strip().lower())
+
+
+def _path_with_preferred_extension(path: Path, mime_type: str) -> Path:
+    preferred_suffix = preferred_extension_for_mime(mime_type)
+    if not preferred_suffix or path.suffix.lower() == preferred_suffix:
+        return path
+    safe_name = _normalized_filename(f"{path.stem}{preferred_suffix}", default_name=f"media{preferred_suffix}")
+    return path.with_name(f"{Path(safe_name).stem}-{uuid4().hex}{preferred_suffix}")
+
+
+def normalize_media_file(path: Path, mime_type: str | None = None) -> tuple[Path, str, int, str]:
+    resolved_path = Path(path)
+    detected_mime_type = detect_mime_type(resolved_path)
+    provided_mime_type = str(mime_type or "").split(";", 1)[0].strip().lower()
+    if detected_mime_type != "application/octet-stream":
+        normalized_mime_type = detected_mime_type
+    elif provided_mime_type not in {"", "application/octet-stream", "binary/octet-stream"}:
+        normalized_mime_type = provided_mime_type
+    else:
+        normalized_mime_type = detected_mime_type
+    target_path = _path_with_preferred_extension(resolved_path, normalized_mime_type)
+    if target_path != resolved_path:
+        resolved_path.rename(target_path)
+        resolved_path = target_path
+    return resolved_path, normalized_mime_type, resolved_path.stat().st_size, stable_checksum(resolved_path)
+
+
 async def store_upload(upload: UploadFile, alt_text: str = "", sort_order: int = 0) -> MediaItem:
     ensure_storage_dirs()
     target = _unique_path(settings.uploads_dir, upload.filename or "upload.bin")
@@ -142,13 +180,13 @@ async def store_upload(upload: UploadFile, alt_text: str = "", sort_order: int =
                 break
             handle.write(chunk)
     size_bytes = target.stat().st_size
-    mime_type = upload.content_type or detect_mime_type(target)
+    target, mime_type, size_bytes, checksum = normalize_media_file(target, upload.content_type or None)
     return MediaItem(
         storage_path=target,
         mime_type=mime_type,
         alt_text=alt_text,
         size_bytes=size_bytes,
-        checksum=stable_checksum(target),
+        checksum=checksum,
         sort_order=sort_order,
     )
 
@@ -161,13 +199,13 @@ def download_media(url: str, filename_hint: str, alt_text: str = "", sort_order:
     with target.open("wb") as handle:
         shutil.copyfileobj(response.raw, handle)
     size_bytes = target.stat().st_size
-    mime_type = response.headers.get("content-type") or detect_mime_type(target)
+    target, mime_type, size_bytes, checksum = normalize_media_file(target, response.headers.get("content-type") or None)
     return MediaItem(
         storage_path=target,
         mime_type=mime_type,
         alt_text=alt_text,
         size_bytes=size_bytes,
-        checksum=stable_checksum(target),
+        checksum=checksum,
         sort_order=sort_order,
     )
 

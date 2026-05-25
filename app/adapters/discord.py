@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import requests
 from sqlalchemy.orm import Session
@@ -81,6 +82,15 @@ def render_discord_content(post: CanonicalPost, persona: Persona, account: Accou
     return content
 
 
+def _discord_uploadable_attachments(post: CanonicalPost) -> list[Any]:
+    uploadable_prefixes = ("image/", "video/", "audio/")
+    return [
+        attachment
+        for attachment in sorted(post.attachments, key=lambda item: item.sort_order)
+        if str(attachment.mime_type or "").lower().startswith(uploadable_prefixes)
+    ]
+
+
 class DiscordDestinationAdapter(DestinationAdapter):
     service = "discord"
 
@@ -107,7 +117,7 @@ class DiscordDestinationAdapter(DestinationAdapter):
                     "mime_type": attachment.mime_type,
                     "alt_text": attachment.alt_text,
                 }
-                for attachment in sorted(post.attachments, key=lambda item: item.sort_order)
+                for attachment in _discord_uploadable_attachments(post)
             ],
         }
         return PublishPreview(
@@ -138,7 +148,7 @@ class DiscordDestinationAdapter(DestinationAdapter):
         files = {}
         handles = []
         try:
-            for index, attachment in enumerate(sorted(post.attachments, key=lambda item: item.sort_order)):
+            for index, attachment in enumerate(_discord_uploadable_attachments(post)):
                 handle = Path(attachment.storage_path).open("rb")
                 handles.append(handle)
                 files[f"files[{index}]"] = (Path(attachment.storage_path).name, handle, attachment.mime_type)

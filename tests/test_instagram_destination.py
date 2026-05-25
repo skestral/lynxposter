@@ -154,6 +154,37 @@ def test_instagram_destination_validate_requires_https_public_base_url(session, 
     assert any("externally reachable HTTPS URL" in message for message in messages)
 
 
+def test_instagram_destination_validate_converts_imported_images_to_jpeg(session, monkeypatch, tmp_path):
+    monkeypatch.setenv("APP_BASE_URL", "https://lynxposter.example.com")
+    reload_settings()
+    persona = _create_persona(session, slug="instagram-imported-image")
+    account = _create_instagram_account(session, persona)
+    image_path = tmp_path / "bsky-blob.bin"
+    _create_image(image_path, image_format="PNG")
+    post = create_scheduled_post(
+        session,
+        ScheduledPostCreate.model_validate(
+            {
+                "persona_id": persona.id,
+                "body": "Hello Instagram",
+                "status": "draft",
+                "target_account_ids": [account.id],
+                "publish_overrides_json": {},
+                "metadata_json": {},
+                "scheduled_for": None,
+            }
+        ),
+        [MediaItem(storage_path=image_path, mime_type="image/png", size_bytes=image_path.stat().st_size, checksum="img-1", sort_order=0)],
+    )
+    session.refresh(post)
+
+    issues = InstagramDestinationAdapter().validate(post, persona, account)
+
+    assert issues == []
+    assert post.attachments[0].mime_type == "image/jpeg"
+    assert post.attachments[0].storage_path.endswith(".jpg")
+
+
 def test_validate_instagram_account_login_captures_sessionid_and_settings(monkeypatch):
     _FakeInstagrapiClient.instances.clear()
     monkeypatch.setattr("app.adapters.instagram._load_instagram_dependencies", lambda: (_FakeInstagrapiClient, Image, Exception))

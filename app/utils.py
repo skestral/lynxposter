@@ -27,6 +27,21 @@ def stable_checksum(path: Path) -> str:
 
 
 def detect_mime_type(path: Path) -> str:
+    try:
+        with path.open("rb") as handle:
+            header = handle.read(16)
+    except OSError:
+        header = b""
+    if header.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if header.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if header.startswith(b"RIFF") and header[8:12] == b"WEBP":
+        return "image/webp"
+    if header.startswith(b"GIF87a") or header.startswith(b"GIF89a"):
+        return "image/gif"
+    if len(header) >= 12 and header[4:8] == b"ftyp":
+        return "video/mp4"
     mime_type, _ = mimetypes.guess_type(path.name)
     return mime_type or "application/octet-stream"
 

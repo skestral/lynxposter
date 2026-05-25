@@ -14,9 +14,9 @@ from app.services.storage import (
 
 
 class _FakeResponse:
-    def __init__(self):
-        self.raw = BytesIO(b"jpeg-bytes")
-        self.headers = {"content-type": "image/jpeg"}
+    def __init__(self, body: bytes = b"\xff\xd8\xffjpeg-bytes", content_type: str = "image/jpeg"):
+        self.raw = BytesIO(body)
+        self.headers = {"content-type": content_type}
 
     def raise_for_status(self):
         return None
@@ -46,6 +46,19 @@ def test_download_media_uses_sanitized_filename(monkeypatch, tmp_path):
     assert media.storage_path.parent == tmp_path
     assert "?" not in media.storage_path.name
     assert media.storage_path.name.endswith(".jpg")
+
+
+def test_download_media_repairs_blob_filename_from_detected_mime(monkeypatch, tmp_path):
+    monkeypatch.setattr("app.services.storage.settings", replace(settings, imported_media_dir=tmp_path))
+    monkeypatch.setattr(
+        "app.services.storage.requests.get",
+        lambda *args, **kwargs: _FakeResponse(content_type="application/octet-stream"),
+    )
+
+    media = download_media("https://bsky.example/blob/bafkrei123", "bafkrei123")
+
+    assert media.mime_type == "image/jpeg"
+    assert media.storage_path.suffix == ".jpg"
 
 
 def test_delete_managed_media_file_ignores_paths_outside_managed_roots(monkeypatch, tmp_path):
