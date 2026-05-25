@@ -23,7 +23,7 @@ from app.models import (
     RunEvent,
 )
 from app.services.auth import Principal
-from app.main import _dismiss_dashboard_alerts, _visible_dashboard_alerts
+from app.main import _visible_dashboard_alerts
 
 
 def _request_with_session() -> Request:
@@ -101,39 +101,21 @@ def _create_account(session, persona: Persona, *, service: str, label: str, hand
     return account
 
 
-def test_dashboard_alert_clear_only_hides_alerts_from_dashboard(session):
+def test_dashboard_alerts_are_limited_to_recent_items(session):
     persona = _create_persona(session)
-    first = _create_alert(session, persona, run_id="run-1", message="First alert")
-    second = _create_alert(session, persona, run_id="run-2", message="Second alert")
+    alerts = [_create_alert(session, persona, run_id=f"run-{index}", message=f"Alert {index}") for index in range(12)]
     request = _request_with_session()
 
-    visible_before = _visible_dashboard_alerts(request, [second, first])
-    dismissed_count = _dismiss_dashboard_alerts(request, visible_before)
-    visible_after = _visible_dashboard_alerts(request, [second, first])
+    visible = _visible_dashboard_alerts(request, list(reversed(alerts)))
 
-    assert [alert.id for alert in visible_before] == [second.id, first.id]
-    assert dismissed_count == 2
-    assert visible_after == []
-    assert session.get(AlertEvent, first.id) is not None
-    assert session.get(AlertEvent, second.id) is not None
+    assert len(visible) == 10
+    assert visible[0].message == "Alert 11"
+    assert visible[-1].message == "Alert 2"
 
 
-def test_dashboard_alert_clear_does_not_hide_newer_alerts(session):
-    persona = _create_persona(session)
-    older = _create_alert(session, persona, run_id="run-older", message="Older alert")
-    request = _request_with_session()
-
-    _dismiss_dashboard_alerts(request, [older])
-
-    newer = _create_alert(session, persona, run_id="run-newer", message="Newer alert")
-    visible = _visible_dashboard_alerts(request, [newer, older])
-
-    assert [alert.id for alert in visible] == [newer.id]
-
-
-def test_dashboard_route_renders_persona_names_for_alerts_and_run_events(monkeypatch, tmp_path):
+def _install_dashboard_test_app(monkeypatch, tmp_path):
     engine = create_engine(
-        f"sqlite:///{tmp_path / 'dashboard.db'}",
+        f"sqlite:///{tmp_path / 'dashboard-{id(tmp_path)}.db'}",
         future=True,
         connect_args={"check_same_thread": False},
     )
@@ -166,6 +148,33 @@ def test_dashboard_route_renders_persona_names_for_alerts_and_run_events(monkeyp
             is_authenticated=True,
         ),
     )
+    return engine, SessionLocal
+
+
+def test_dashboard_alert_clear_route_deletes_alerts(monkeypatch, tmp_path):
+    engine, SessionLocal = _install_dashboard_test_app(monkeypatch, tmp_path)
+
+    try:
+        with SessionLocal() as session:
+            persona = _create_persona(session, name="Savannah", slug="savannah-dashboard-clear")
+            alert = _create_alert(session, persona, run_id="run-alert", message="Dashboard alert")
+            alert_id = alert.id
+            session.commit()
+
+        with TestClient(app) as client:
+            response = client.post("/dashboard/alerts/clear", follow_redirects=True)
+
+        assert response.status_code == 200
+        assert "Cleared 1 dashboard alert" in response.text
+        with SessionLocal() as session:
+            assert session.get(AlertEvent, alert_id) is None
+    finally:
+        Base.metadata.drop_all(engine)
+        engine.dispose()
+
+
+def test_dashboard_route_renders_persona_names_for_alerts_and_run_events(monkeypatch, tmp_path):
+    engine, SessionLocal = _install_dashboard_test_app(monkeypatch, tmp_path)
 
     try:
         with SessionLocal() as session:

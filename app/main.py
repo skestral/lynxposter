@@ -220,10 +220,6 @@ templates.env.globals["app_version"] = get_app_version
 templates.env.globals["live_update_poll_interval_ms"] = LIVE_UPDATE_POLL_INTERVAL_MS
 templates.env.globals["auth_enabled"] = auth_enabled
 
-_DASHBOARD_DISMISSED_ALERT_IDS_KEY = "dashboard_dismissed_alert_ids"
-_MAX_DASHBOARD_DISMISSED_ALERT_IDS = 200
-
-
 def _template_context(request: Request, **context: Any) -> dict[str, Any]:
     return {
         "current_principal": get_request_principal(request),
@@ -316,29 +312,8 @@ def _process_send_now_delivery(post_id: str, run_id: str, alerts: AlertDispatche
         )
 
 
-def _dashboard_dismissed_alert_ids(request: Request) -> set[str]:
-    raw_ids = request.session.get(_DASHBOARD_DISMISSED_ALERT_IDS_KEY, [])
-    if not isinstance(raw_ids, list):
-        return set()
-    return {str(item).strip() for item in raw_ids if str(item).strip()}
-
-
-def _store_dashboard_dismissed_alert_ids(request: Request, alert_ids: list[str]) -> None:
-    unique_ids = list(dict.fromkeys(alert_ids))
-    request.session[_DASHBOARD_DISMISSED_ALERT_IDS_KEY] = unique_ids[-_MAX_DASHBOARD_DISMISSED_ALERT_IDS:]
-
-
 def _visible_dashboard_alerts(request: Request, alerts: list[Any], *, limit: int = 10) -> list[Any]:
-    dismissed_ids = _dashboard_dismissed_alert_ids(request)
-    return [alert for alert in alerts if getattr(alert, "id", None) not in dismissed_ids][:limit]
-
-
-def _dismiss_dashboard_alerts(request: Request, alerts: list[Any]) -> int:
-    existing_ids = list(request.session.get(_DASHBOARD_DISMISSED_ALERT_IDS_KEY, []))
-    dismissed_ids = [alert_id for alert_id in existing_ids if str(alert_id).strip()]
-    new_ids = [str(alert.id) for alert in alerts if getattr(alert, "id", None)]
-    _store_dashboard_dismissed_alert_ids(request, dismissed_ids + new_ids)
-    return len(new_ids)
+    return alerts[:limit]
 
 
 def _coerce_int_query_param(value: str | None, default: int = 0) -> int:
@@ -914,9 +889,9 @@ async def clear_dashboard_alerts(request: Request) -> RedirectResponse:
     principal = guarded
     with db_session() as session:
         owner_user_id = _owner_user_id_for_principal(principal)
-        current_alerts = _visible_dashboard_alerts(request, list_alert_events(session, limit=100, owner_user_id=owner_user_id))
-    dismissed_count = _dismiss_dashboard_alerts(request, current_alerts)
-    return RedirectResponse(url=f"/?alerts_cleared={dismissed_count}", status_code=303)
+        cleared_count = clear_alert_events(session, owner_user_id=owner_user_id)
+    publish_live_update(LIVE_UPDATE_TOPIC_DASHBOARD, LIVE_UPDATE_TOPIC_ALERT_EVENTS)
+    return RedirectResponse(url=f"/?alerts_cleared={cleared_count}", status_code=303)
 
 
 @app.get("/profiles/page")
