@@ -161,7 +161,14 @@ def _instagram_public_media_url(attachment: MediaAttachment) -> str:
     return public_instagram_media_url(attachment.id, attachment.storage_path, base_url=get_settings().app_base_url)
 
 
-def _raise_graph_error(response: requests.Response, *, action: str) -> None:
+def _attachment_media_url_for_log(attachment: MediaAttachment) -> str:
+    try:
+        return _instagram_public_media_url(attachment)
+    except Exception:
+        return "unavailable"
+
+
+def _raise_graph_error(response: requests.Response, *, action: str, media_url: str | None = None) -> None:
     try:
         payload = response.json()
     except ValueError:
@@ -173,6 +180,8 @@ def _raise_graph_error(response: requests.Response, *, action: str) -> None:
         message = error_payload.get("message") or error_payload.get("error_user_msg") or str(error_payload)
     else:
         message = str(payload)
+    if media_url:
+        message = f"{message} Media URL: {media_url}"
     raise RuntimeError(f"Instagram Graph {action} failed: {message}")
 
 
@@ -209,7 +218,8 @@ def _instagram_source_children_endpoint(config: dict[str, Any], media_id: str) -
 
 def _post_graph(path: str, data: dict[str, Any], *, base_url: str = INSTAGRAM_PUBLISH_API_BASE_URL) -> dict[str, Any]:
     response = requests.post(f"{base_url}/{path.lstrip('/')}", data=data, timeout=60)
-    _raise_graph_error(response, action=path)
+    media_url = str(data.get("image_url") or data.get("video_url") or "").strip() or None
+    _raise_graph_error(response, action=path, media_url=media_url)
     payload = response.json()
     return payload if isinstance(payload, dict) else {}
 
@@ -576,7 +586,10 @@ class InstagramDestinationAdapter(DestinationAdapter):
                     ValidationIssue(
                         service="instagram",
                         field="media",
-                        message=f"{attachment.storage_path} must be JPEG for Instagram Graph publishing.",
+                        message=(
+                            f"{attachment.storage_path} must be JPEG for Instagram Graph publishing. "
+                            f"Media URL: {_attachment_media_url_for_log(attachment)}"
+                        ),
                     )
                 )
                 continue
@@ -585,7 +598,10 @@ class InstagramDestinationAdapter(DestinationAdapter):
                     ValidationIssue(
                         service="instagram",
                         field="media",
-                        message=f"{attachment.storage_path} must be MP4 for Instagram publishing.",
+                        message=(
+                            f"{attachment.storage_path} must be MP4 for Instagram publishing. "
+                            f"Media URL: {_attachment_media_url_for_log(attachment)}"
+                        ),
                     )
                 )
                 continue
@@ -593,7 +609,10 @@ class InstagramDestinationAdapter(DestinationAdapter):
                 ValidationIssue(
                     service="instagram",
                     field="media",
-                    message=f"{attachment.storage_path} is not a supported Instagram image or MP4 video attachment.",
+                    message=(
+                        f"{attachment.storage_path} is not a supported Instagram image or MP4 video attachment. "
+                        f"Media URL: {_attachment_media_url_for_log(attachment)}"
+                    ),
                 )
             )
         return issues
@@ -691,7 +710,10 @@ class InstagramDestinationAdapter(DestinationAdapter):
                     "caption": caption,
                 }
             else:
-                raise ConfigurationError(f"{attachment.storage_path} is not a supported Instagram Graph image or MP4 video attachment.")
+                raise ConfigurationError(
+                    f"{attachment.storage_path} is not a supported Instagram Graph image or MP4 video attachment. "
+                    f"Media URL: {_attachment_media_url_for_log(attachment)}"
+                )
             container_id, container_raw = _graph_create_container(
                 instagram_user_id=instagram_user_id,
                 access_token=access_token,
@@ -715,7 +737,10 @@ class InstagramDestinationAdapter(DestinationAdapter):
                         "is_carousel_item": "true",
                     }
                 else:
-                    raise ConfigurationError(f"{attachment.storage_path} is not a supported Instagram Graph image or MP4 video attachment.")
+                    raise ConfigurationError(
+                        f"{attachment.storage_path} is not a supported Instagram Graph image or MP4 video attachment. "
+                        f"Media URL: {_attachment_media_url_for_log(attachment)}"
+                    )
                 child_id, child_raw = _graph_create_container(
                     instagram_user_id=instagram_user_id,
                     access_token=access_token,

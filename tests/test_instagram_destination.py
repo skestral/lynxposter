@@ -4,6 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import requests
 from PIL import Image
 
 from app.adapters.instagram import InstagramDestinationAdapter, validate_instagram_account_login
@@ -274,6 +275,55 @@ def test_instagram_destination_publish_single_image_uses_graph(session, monkeypa
     assert result.external_id == "media-1"
     assert result.external_url == "https://www.instagram.com/p/ABC123/"
     assert [call[0] for call in calls] == ["post", "post", "get"]
+
+
+def test_instagram_destination_publish_error_includes_media_url(session, monkeypatch, tmp_path):
+    monkeypatch.setenv("APP_BASE_URL", "https://lynxposter.example.com")
+    reload_settings()
+    persona = _create_persona(session, slug="instagram-error-url")
+    account = _create_instagram_account(session, persona)
+    image_path = tmp_path / "photo.jpg"
+    _create_image(image_path, image_format="JPEG")
+
+    post = create_scheduled_post(
+        session,
+        ScheduledPostCreate.model_validate(
+            {
+                "persona_id": persona.id,
+                "body": "Hello Instagram",
+                "status": "draft",
+                "target_account_ids": [account.id],
+                "publish_overrides_json": {},
+                "metadata_json": {},
+                "scheduled_for": None,
+            }
+        ),
+        [MediaItem(storage_path=image_path, mime_type="image/jpeg", size_bytes=4, checksum="img-1", sort_order=0)],
+    )
+    session.refresh(post)
+
+    class FakeResponse:
+        ok = False
+        text = ""
+
+        def json(self):
+            return {"error": {"message": "Only photo or video can be accepted as media type."}}
+
+        def raise_for_status(self):
+            raise requests.HTTPError("bad request")
+
+    def fake_post(url, data=None, timeout=0):
+        return FakeResponse()
+
+    monkeypatch.setattr("app.adapters.instagram.requests.post", fake_post)
+
+    with pytest.raises(RuntimeError) as exc_info:
+        InstagramDestinationAdapter().publish(session, post, persona, account)
+
+    message = str(exc_info.value)
+    assert "Only photo or video can be accepted as media type." in message
+    assert "Media URL: https://lynxposter.example.com/media/instagram/" in message
+    assert "access_token" not in message
 
 
 def test_instagram_destination_publish_uses_instagram_graph_for_instagram_login_token(session, monkeypatch, tmp_path):
