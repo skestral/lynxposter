@@ -496,6 +496,196 @@ def test_end_giveaway_api_collects_and_selects_winner(api_stack, monkeypatch):
         assert saved.giveaway_campaign.frozen_at is not None
 
 
+def test_recalculate_giveaway_api_applies_updated_rules(api_stack):
+    api_client, SessionLocal = api_stack
+    giveaway_end_at = datetime(2026, 5, 16, 20, 0, tzinfo=timezone.utc)
+    with SessionLocal() as session:
+        persona = _create_persona(session, slug="scheduled-post-api-recalculate-giveaway")
+        bluesky = _create_destination_account(session, persona, service="bluesky", label="Bluesky")
+        post = create_scheduled_post(
+            session,
+            ScheduledPostCreate.model_validate(
+                {
+                    "persona_id": persona.id,
+                    "body": "Recalculate this giveaway",
+                    "post_type": "giveaway",
+                    "status": "draft",
+                    "target_account_ids": [bluesky.id],
+                    "publish_overrides_json": {},
+                    "metadata_json": {},
+                    "scheduled_for": None,
+                    "giveaway": {
+                        "giveaway_end_at": giveaway_end_at,
+                        "pool_mode": "combined",
+                        "channels": [
+                            {
+                                "service": "bluesky",
+                                "account_id": bluesky.id,
+                                "rules": {
+                                    "kind": "all",
+                                    "children": [
+                                        {"kind": "atom", "atom": "reply_or_quote_present", "params": {}},
+                                    ],
+                                },
+                            }
+                        ],
+                    },
+                }
+            ),
+            [],
+        )
+        channel = post.giveaway_campaign.channels[0]
+        channel.entrants.append(
+            GiveawayEntrant(
+                channel=channel,
+                provider_user_id="did:plc:entrant",
+                provider_username="entrant.test",
+                display_label="entrant.test",
+                signal_state_json={
+                    "reply_present": True,
+                    "quote_present": False,
+                    "like_present": False,
+                    "repost_present": False,
+                    "follow_present": None,
+                    "reply_posts": [{"uri": "at://did:plc:entrant/app.bsky.feed.post/reply", "text": "Count me in"}],
+                    "quote_posts": [],
+                    "reply_or_quote_mention_count": 0,
+                },
+            )
+        )
+        session.commit()
+        post_id = post.id
+        bluesky_id = bluesky.id
+
+    updated_giveaway = {
+        "giveaway_end_at": giveaway_end_at.isoformat(),
+        "pool_mode": "combined",
+        "channels": [
+            {
+                "service": "bluesky",
+                "account_id": bluesky_id,
+                "rules": {
+                    "kind": "all",
+                    "children": [
+                        {"kind": "atom", "atom": "like_present", "params": {}},
+                    ],
+                },
+            }
+        ],
+    }
+
+    update_response = api_client.put(
+        f"/scheduled-posts/{post_id}",
+        json={"post_type": "giveaway", "giveaway": updated_giveaway},
+    )
+    assert update_response.status_code == 200
+
+    response = api_client.post(f"/scheduled-posts/{post_id}/giveaway/recalculate")
+
+    assert response.status_code == 200
+    entrant = response.json()["channels"][0]["entrants"][0]
+    checks = {check["atom"]: check for check in entrant["checks"]}
+    assert entrant["eligibility_status"] == "disqualified"
+    assert checks["like_present"]["status"] == "failed"
+
+
+def test_rerun_giveaway_api_selects_new_winner_from_current_evidence(api_stack, monkeypatch):
+    api_client, SessionLocal = api_stack
+    giveaway_end_at = datetime(2026, 5, 16, 20, 0, tzinfo=timezone.utc)
+
+    def reverse_entries(entries):
+        return list(reversed(entries))
+
+    monkeypatch.setattr("app.services.giveaway_engine._randomize_entries", reverse_entries)
+
+    with SessionLocal() as session:
+        persona = _create_persona(session, slug="scheduled-post-api-rerun-giveaway")
+        bluesky = _create_destination_account(session, persona, service="bluesky", label="Bluesky")
+        post = create_scheduled_post(
+            session,
+            ScheduledPostCreate.model_validate(
+                {
+                    "persona_id": persona.id,
+                    "body": "Rerun this giveaway",
+                    "post_type": "giveaway",
+                    "status": "draft",
+                    "target_account_ids": [bluesky.id],
+                    "publish_overrides_json": {},
+                    "metadata_json": {},
+                    "scheduled_for": None,
+                    "giveaway": {
+                        "giveaway_end_at": giveaway_end_at,
+                        "pool_mode": "combined",
+                        "channels": [
+                            {
+                                "service": "bluesky",
+                                "account_id": bluesky.id,
+                                "rules": {
+                                    "kind": "all",
+                                    "children": [
+                                        {"kind": "atom", "atom": "reply_or_quote_present", "params": {}},
+                                    ],
+                                },
+                            }
+                        ],
+                    },
+                }
+            ),
+            [],
+        )
+        channel = post.giveaway_campaign.channels[0]
+        entrant_one = GiveawayEntrant(
+            channel=channel,
+            provider_user_id="did:plc:first",
+            provider_username="first.test",
+            display_label="first.test",
+            signal_state_json={
+                "reply_present": True,
+                "quote_present": False,
+                "like_present": False,
+                "repost_present": False,
+                "follow_present": None,
+                "reply_posts": [{"uri": "at://did:plc:first/app.bsky.feed.post/reply", "text": "First"}],
+                "quote_posts": [],
+                "reply_or_quote_mention_count": 0,
+            },
+        )
+        entrant_two = GiveawayEntrant(
+            channel=channel,
+            provider_user_id="did:plc:second",
+            provider_username="second.test",
+            display_label="second.test",
+            signal_state_json={
+                "reply_present": True,
+                "quote_present": False,
+                "like_present": False,
+                "repost_present": False,
+                "follow_present": None,
+                "reply_posts": [{"uri": "at://did:plc:second/app.bsky.feed.post/reply", "text": "Second"}],
+                "quote_posts": [],
+                "reply_or_quote_mention_count": 0,
+            },
+        )
+        channel.entrants.extend([entrant_one, entrant_two])
+        session.flush()
+        pool = post.giveaway_campaign.pools[0]
+        pool.status = "winner_selected"
+        pool.candidate_entry_ids_json = [entrant_one.id, entrant_two.id]
+        pool.final_winner_entry = entrant_one
+        post.giveaway_campaign.status = "winner_selected"
+        post.giveaway_campaign.frozen_at = datetime.now(timezone.utc)
+        session.commit()
+        post_id = post.id
+
+    response = api_client.post(f"/scheduled-posts/{post_id}/giveaway/rerun-raffle")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "winner_selected"
+    assert payload["pools"][0]["candidate_count"] == 2
+    assert payload["pools"][0]["final_winner"]["provider_username"] == "second.test"
+
+
 def test_scheduled_post_api_exposes_delivery_outcome_breakdown(api_stack):
     api_client, SessionLocal = api_stack
     with SessionLocal() as session:

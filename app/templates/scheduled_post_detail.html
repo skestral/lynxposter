@@ -75,6 +75,9 @@
                                             <option value="draft" {% if post.status == "draft" %}selected{% endif %}>Draft</option>
                                             <option value="scheduled" {% if post.status == "scheduled" %}selected{% endif %}>Scheduled</option>
                                             <option value="queued" {% if post.status == "queued" %}selected{% endif %}>Queued</option>
+                                            {% if post.status not in ["draft", "scheduled", "queued"] %}
+                                            <option value="{{ post.status }}" selected>{{ post.status|replace('_', ' ')|title }}</option>
+                                            {% endif %}
                                         </select>
                                     </div>
                                     <div class="col-md-6">
@@ -196,6 +199,12 @@
                         <button class="btn btn-primary" type="submit">Save Post Plan</button>
                         {% if post.can_delete|default(false, true) %}
                         <button class="btn btn-outline-danger" type="button" id="delete-post-button">Delete Post</button>
+                        {% endif %}
+                        {% if post.giveaway %}
+                        <button class="btn btn-outline-secondary" type="button" id="recalculate-giveaway-button">Recalculate Entries</button>
+                        {% endif %}
+                        {% if post.giveaway and post.giveaway.status in ["winner_selected", "winner_confirmed", "review_required", "failed"] %}
+                        <button class="btn btn-outline-warning" type="button" id="rerun-giveaway-button">Rerun Raffle</button>
                         {% endif %}
                         {% if post.giveaway and post.giveaway.status in ["scheduled", "collecting"] %}
                         <button class="btn btn-outline-warning" type="button" id="end-giveaway-button">End Giveaway</button>
@@ -437,6 +446,8 @@ const savedAttachmentList = document.getElementById("saved-attachment-list");
 const savedAttachmentEmpty = document.getElementById("saved-attachment-empty");
 const savedMediaCount = document.getElementById("saved-media-count");
 const deletePostButton = document.getElementById("delete-post-button");
+const recalculateGiveawayButton = document.getElementById("recalculate-giveaway-button");
+const rerunGiveawayButton = document.getElementById("rerun-giveaway-button");
 const endGiveawayButton = document.getElementById("end-giveaway-button");
 const instagramScanButton = document.getElementById("instagram-scan-button");
 const postTypeSelect = document.getElementById("post-type-select");
@@ -889,6 +900,46 @@ document.querySelectorAll(".giveaway-review-action").forEach((button) => {
     window.location.reload();
   });
 });
+
+if (recalculateGiveawayButton) {
+  recalculateGiveawayButton.addEventListener("click", async () => {
+    const confirmed = window.confirm("Recalculate giveaway entries with the current rules and captured activity?");
+    if (!confirmed) return;
+    recalculateGiveawayButton.disabled = true;
+    recalculateGiveawayButton.textContent = "Recalculating...";
+    try {
+      const response = await fetch(`/scheduled-posts/${postId}/giveaway/recalculate`, {method: "POST"});
+      if (!response.ok) {
+        alert(await window.readApiMessage(response));
+        return;
+      }
+      window.location.reload();
+    } finally {
+      recalculateGiveawayButton.disabled = false;
+      recalculateGiveawayButton.textContent = "Recalculate Entries";
+    }
+  });
+}
+
+if (rerunGiveawayButton) {
+  rerunGiveawayButton.addEventListener("click", async () => {
+    const confirmed = window.confirm("Rerun this raffle from the current captured activity? This can change the selected winner.");
+    if (!confirmed) return;
+    rerunGiveawayButton.disabled = true;
+    rerunGiveawayButton.textContent = "Rerunning...";
+    try {
+      const response = await fetch(`/scheduled-posts/${postId}/giveaway/rerun-raffle`, {method: "POST"});
+      if (!response.ok) {
+        alert(await window.readApiMessage(response));
+        return;
+      }
+      window.location.reload();
+    } finally {
+      rerunGiveawayButton.disabled = false;
+      rerunGiveawayButton.textContent = "Rerun Raffle";
+    }
+  });
+}
 
 if (endGiveawayButton) {
   endGiveawayButton.addEventListener("click", async () => {

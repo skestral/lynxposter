@@ -1947,34 +1947,8 @@ def _campaign_status_from_pools(campaign: GiveawayCampaign) -> str:
     return GIVEAWAY_STATUS_COLLECTING
 
 
-def finalize_giveaway_campaign(
-    session: Session,
-    campaign: GiveawayCampaign,
-    alerts: AlertDispatcher,
-    *,
-    run_id: str,
-    force_instagram_private_scan: bool = False,
-    allow_instagram_private_scan: bool = True,
-) -> GiveawayCampaign:
-    hydrate_channel_targets(campaign)
-    for channel in campaign.channels:
-        private_scan_ran = False
-        if channel.service == "bluesky":
-            collect_bluesky_channel_state(session, channel, run_id=run_id)
-        elif channel.service == "instagram":
-            if force_instagram_private_scan:
-                private_scan_ran = refresh_instagram_channel_state(session, channel, force_private_scan=True)
-            else:
-                private_scan_ran = refresh_instagram_channel_state(session, channel, allow_due_private_scan=allow_instagram_private_scan)
-        evaluate_channel_entrants(channel, allow_instagram_private_verification=force_instagram_private_scan or private_scan_ran)
-
-    # Ensure entrant primary keys exist before we freeze candidate ordering.
-    session.flush()
-    campaign.frozen_at = utcnow()
-    campaign.last_evaluated_at = utcnow()
-    campaign.last_error = None
+def _select_giveaway_pool_winners(campaign: GiveawayCampaign) -> None:
     _sync_campaign_pools(campaign)
-
     for pool in campaign.pools:
         entries = _pool_entries(campaign, pool)
         eligible = [entrant for entrant in entries if entrant.eligibility_status == ENTRY_STATUS_ELIGIBLE]
@@ -2000,6 +1974,107 @@ def finalize_giveaway_campaign(
             pool.final_winner_entry = winner
 
     campaign.status = _campaign_status_from_pools(campaign)
+    campaign.last_error = "No qualifying giveaway entrants were found." if campaign.status == GIVEAWAY_STATUS_FAILED else None
+
+
+def recalculate_giveaway_entries(
+    session: Session,
+    campaign: GiveawayCampaign,
+    *,
+    run_id: str,
+) -> GiveawayCampaign:
+    hydrate_channel_targets(campaign)
+    for channel in campaign.channels:
+        if channel.service == "instagram":
+            sync_instagram_webhook_events_for_channel(session, channel)
+        evaluate_channel_entrants(channel, allow_instagram_private_verification=False)
+
+    channel_errors = [str(channel.last_error) for channel in campaign.channels if channel.last_error]
+    campaign.last_error = "; ".join(channel_errors) if channel_errors else None
+    campaign.last_evaluated_at = utcnow()
+    for pool in campaign.pools:
+        pool.last_evaluated_at = utcnow()
+
+    log_run_event(
+        session,
+        run_id=run_id,
+        persona_id=campaign.post.persona_id,
+        persona_name=campaign.post.persona.name if campaign.post.persona else None,
+        service="giveaway",
+        operation="giveaway",
+        message=f"Recalculated giveaway entries for post {campaign.post_id}.",
+        post_id=campaign.post_id,
+        metadata={"campaign_id": campaign.id},
+    )
+    session.flush()
+    return campaign
+
+
+def rerun_giveaway_raffle(
+    session: Session,
+    campaign: GiveawayCampaign,
+    alerts: AlertDispatcher,
+    *,
+    run_id: str,
+) -> GiveawayCampaign:
+    recalculate_giveaway_entries(session, campaign, run_id=run_id)
+    session.flush()
+    campaign.frozen_at = utcnow()
+    campaign.last_evaluated_at = utcnow()
+    _select_giveaway_pool_winners(campaign)
+    if campaign.status == GIVEAWAY_STATUS_FAILED and campaign.last_error:
+        alerts.emit_hard_failure(
+            session,
+            run_id=run_id,
+            persona=campaign.post.persona,
+            service="giveaway",
+            post=campaign.post,
+            operation="giveaway",
+            message=campaign.last_error,
+            error_class="NoQualifyingEntrants",
+            event_type="giveaway_failed",
+        )
+    log_run_event(
+        session,
+        run_id=run_id,
+        persona_id=campaign.post.persona_id,
+        persona_name=campaign.post.persona.name if campaign.post.persona else None,
+        service="giveaway",
+        operation="giveaway",
+        message=f"Reran giveaway raffle for post {campaign.post_id}.",
+        post_id=campaign.post_id,
+        metadata={"campaign_id": campaign.id, "status": campaign.status},
+    )
+    session.flush()
+    return campaign
+
+
+def finalize_giveaway_campaign(
+    session: Session,
+    campaign: GiveawayCampaign,
+    alerts: AlertDispatcher,
+    *,
+    run_id: str,
+    force_instagram_private_scan: bool = False,
+    allow_instagram_private_scan: bool = True,
+) -> GiveawayCampaign:
+    hydrate_channel_targets(campaign)
+    for channel in campaign.channels:
+        private_scan_ran = False
+        if channel.service == "bluesky":
+            collect_bluesky_channel_state(session, channel, run_id=run_id)
+        elif channel.service == "instagram":
+            if force_instagram_private_scan:
+                private_scan_ran = refresh_instagram_channel_state(session, channel, force_private_scan=True)
+            else:
+                private_scan_ran = refresh_instagram_channel_state(session, channel, allow_due_private_scan=allow_instagram_private_scan)
+        evaluate_channel_entrants(channel, allow_instagram_private_verification=force_instagram_private_scan or private_scan_ran)
+
+    # Ensure entrant primary keys exist before we freeze candidate ordering.
+    session.flush()
+    campaign.frozen_at = utcnow()
+    campaign.last_evaluated_at = utcnow()
+    _select_giveaway_pool_winners(campaign)
     if campaign.status == GIVEAWAY_STATUS_FAILED:
         campaign.last_error = "No qualifying giveaway entrants were found."
         alerts.emit_hard_failure(
