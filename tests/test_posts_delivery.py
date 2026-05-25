@@ -2,17 +2,19 @@ from __future__ import annotations
 
 import sys
 from datetime import datetime, timezone
+from dataclasses import replace
 from types import SimpleNamespace
 
 from app.adapters.bluesky import BlueskyDestinationAdapter
 from app.adapters.mastodon import MastodonDestinationAdapter
 from app.adapters.tumblr import TumblrDestinationAdapter
 from app.domain import CanonicalPostPayload, ExternalPostRefPayload, MediaItem, PublishResult
-from app.models import AccountPostRef, AccountRoute, AlertEvent, CanonicalPost, DeliveryJob, RunEvent
+from app.models import AccountPostRef, AccountRoute, AlertEvent, CanonicalPost, DeliveryJob, MediaAttachment, RunEvent
 from app.schemas import ScheduledPostCreate
 from app.services.alerts import AlertDispatcher
 from app.services.delivery import process_delivery_queue
 from app.services.personas import create_account, create_persona, get_persona, replace_routes
+from app.services.storage import settings as storage_settings
 from app.services.posts import (
     create_scheduled_post,
     scheduled_post_delivery_breakdown,
@@ -190,6 +192,113 @@ def test_process_delivery_queue_can_be_limited_to_one_post(session, monkeypatch)
 
     assert first.delivery_jobs[0].status == "posted"
     assert second.delivery_jobs[0].status == "queued"
+
+
+def test_process_delivery_queue_removes_media_after_all_targets_post(session, monkeypatch, tmp_path):
+    persona = _create_persona(session)
+    mastodon = _create_account(session, persona, service="mastodon", label="Mastodon", source_enabled=False, destination_enabled=True)
+    discord = _create_account(session, persona, service="discord", label="Discord", source_enabled=False, destination_enabled=True)
+    uploads_dir = tmp_path / "uploads"
+    imported_dir = tmp_path / "imported"
+    uploads_dir.mkdir()
+    imported_dir.mkdir()
+    monkeypatch.setattr("app.services.storage.settings", replace(storage_settings, uploads_dir=uploads_dir, imported_media_dir=imported_dir))
+    image_path = uploads_dir / "photo.jpg"
+    image_path.write_bytes(b"jpeg")
+
+    post = create_scheduled_post(
+        session,
+        ScheduledPostCreate.model_validate(
+            {
+                "persona_id": persona.id,
+                "body": "Hello with media",
+                "status": "queued",
+                "target_account_ids": [mastodon.id, discord.id],
+                "publish_overrides_json": {},
+                "metadata_json": {},
+                "scheduled_for": None,
+            }
+        ),
+        [
+            MediaItem(
+                storage_path=image_path,
+                mime_type="image/jpeg",
+                alt_text="",
+                size_bytes=image_path.stat().st_size,
+                checksum="img-1",
+                sort_order=0,
+            ),
+        ],
+    )
+
+    class FakeDestinationAdapter:
+        def validate(self, post, persona, account):
+            return []
+
+        def publish(self, session, post, persona, account, *, context=None):
+            return PublishResult(service=account.service, external_id=f"{account.service}-1", external_url=f"https://example.com/{account.service}/1")
+
+    monkeypatch.setattr("app.services.delivery.get_destination_adapter_for_account", lambda account: FakeDestinationAdapter())
+
+    process_delivery_queue(session, AlertDispatcher(), run_id="run-clean-media")
+
+    session.refresh(post)
+    assert {job.status for job in post.delivery_jobs} == {"posted"}
+    assert session.query(MediaAttachment).filter_by(post_id=post.id).count() == 0
+    assert not image_path.exists()
+    cleanup_event = (
+        session.query(RunEvent)
+        .filter(RunEvent.run_id == "run-clean-media", RunEvent.delivery_job_id.isnot(None))
+        .order_by(RunEvent.created_at.desc())
+        .first()
+    )
+    assert (cleanup_event.metadata_json or {}).get("removed_media_count") == 1
+
+
+def test_process_delivery_queue_keeps_media_until_remaining_targets_post(session, monkeypatch, tmp_path):
+    persona = _create_persona(session)
+    mastodon = _create_account(session, persona, service="mastodon", label="Mastodon", source_enabled=False, destination_enabled=True)
+    discord = _create_account(session, persona, service="discord", label="Discord", source_enabled=False, destination_enabled=True)
+    uploads_dir = tmp_path / "uploads"
+    imported_dir = tmp_path / "imported"
+    uploads_dir.mkdir()
+    imported_dir.mkdir()
+    monkeypatch.setattr("app.services.storage.settings", replace(storage_settings, uploads_dir=uploads_dir, imported_media_dir=imported_dir))
+    image_path = uploads_dir / "photo.jpg"
+    image_path.write_bytes(b"jpeg")
+
+    post = create_scheduled_post(
+        session,
+        ScheduledPostCreate.model_validate(
+            {
+                "persona_id": persona.id,
+                "body": "Hello with media",
+                "status": "queued",
+                "target_account_ids": [mastodon.id, discord.id],
+                "publish_overrides_json": {},
+                "metadata_json": {},
+                "scheduled_for": None,
+            }
+        ),
+        [MediaItem(storage_path=image_path, mime_type="image/jpeg", size_bytes=image_path.stat().st_size, checksum="img-1", sort_order=0)],
+    )
+    discord_job = next(job for job in post.delivery_jobs if job.target_account_id == discord.id)
+    discord_job.status = "scheduled"
+    session.flush()
+
+    class FakeDestinationAdapter:
+        def validate(self, post, persona, account):
+            return []
+
+        def publish(self, session, post, persona, account, *, context=None):
+            return PublishResult(service=account.service, external_id=f"{account.service}-1", external_url=f"https://example.com/{account.service}/1")
+
+    monkeypatch.setattr("app.services.delivery.get_destination_adapter_for_account", lambda account: FakeDestinationAdapter())
+
+    process_delivery_queue(session, AlertDispatcher(), run_id="run-keep-media")
+
+    assert session.query(MediaAttachment).filter_by(post_id=post.id).count() == 1
+    assert image_path.exists()
 
 
 def test_crossposted_copy_polled_from_other_source_does_not_requeue_new_destinations(session, monkeypatch):

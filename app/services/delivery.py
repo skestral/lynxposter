@@ -18,6 +18,7 @@ from app.services.posts import (
     persona_max_retries,
     reconcile_pending_relationships,
     refresh_post_status,
+    remove_post_media_files,
     sync_delivery_jobs,
     upsert_polled_post,
 )
@@ -267,6 +268,11 @@ def _normalize_post_attachments(post: CanonicalPost) -> None:
         attachment.checksum = checksum
 
 
+def _all_delivery_jobs_posted(post: CanonicalPost) -> bool:
+    delivery_jobs = list(post.delivery_jobs or [])
+    return bool(delivery_jobs) and all(job.status == "posted" for job in delivery_jobs)
+
+
 def process_delivery_queue(
     session: Session,
     alerts: AlertDispatcher,
@@ -461,6 +467,8 @@ def process_delivery_queue(
                     )
 
             refresh_post_status(post)
+            post_preview = _log_post_preview(post)
+            removed_media_count = remove_post_media_files(session, post) if _all_delivery_jobs_posted(post) else 0
             log_run_event(
                 session,
                 run_id=run_id,
@@ -476,7 +484,8 @@ def process_delivery_queue(
                     "delivery_status": "posted",
                     "external_id": job.external_id,
                     "external_url": job.external_url,
-                    "post_preview": _log_post_preview(post),
+                    "post_preview": post_preview,
+                    "removed_media_count": removed_media_count,
                 },
             )
         except Exception as exc:

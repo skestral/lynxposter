@@ -108,6 +108,17 @@ def _delete_attachment_file_if_unshared(session: Session, attachment: MediaAttac
         delete_managed_media_file(attachment.storage_path)
 
 
+def remove_post_media_files(session: Session, post: CanonicalPost) -> int:
+    removed = 0
+    for attachment in list(post.attachments or []):
+        _delete_attachment_file_if_unshared(session, attachment)
+        session.delete(attachment)
+        removed += 1
+    if removed:
+        session.flush()
+    return removed
+
+
 def _sync_post_attachments(
     session: Session,
     post: CanonicalPost,
