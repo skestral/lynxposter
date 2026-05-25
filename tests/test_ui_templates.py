@@ -68,6 +68,10 @@ def test_instagram_service_definition_exposes_destination_credentials():
     assert fields["api_key"].input_type == "password"
     assert fields["api_key"].label == "Graph Access Token"
     assert fields["instagram_user_id"].label == "Instagram Professional Account ID"
+    assert fields["instagrapi_sessionid"].label == "Private Verification Session ID"
+    assert fields["instagrapi_sessionid"].input_type == "password"
+    assert "end-of-giveaway private verification" in fields["instagrapi_sessionid"].help_text
+    assert fields["instagrapi_password"].label == "Private Verification Password"
     publish_fields = {field.name: field for field in definition.publish_setting_fields}
     assert publish_fields["video_media_type"].label == "Single Video Type"
 
@@ -124,6 +128,10 @@ def test_persona_detail_template_renders_telegram_controls_and_secret_toggles():
     assert "Channel ID" in html
     assert 'data-field-name="instagram_user_id"' in html
     assert "Instagram Professional Account ID" in html
+    assert 'data-field-name="instagrapi_sessionid"' in html
+    assert 'data-field-name="instagrapi_password"' in html
+    assert "Private Verification Session ID" in html
+    assert "Not used for normal publishing or 5-minute autorun" in html
     assert 'id="persona-detail-tabs"' in html
 
 
@@ -197,6 +205,7 @@ def test_persona_detail_template_renders_instagram_token_tracking_controls():
     assert "Record Token Refresh" in html
     assert "instagram-token-refresh-button" in html
     assert "Check Login" in html
+    assert "Private verification fields are optional" in html
     assert "Last connection hiccup" in html
     assert "Instagram login failed. Challenge required." in html
 

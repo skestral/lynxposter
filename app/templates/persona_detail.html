@@ -318,6 +318,11 @@
                                         {% if entry.definition.credential_fields %}
                                         <div class="surface-panel">
                                             <div class="section-kicker mb-2">Credentials</div>
+                                            {% if entry.account.service == "instagram" %}
+                                            <div class="small text-secondary mb-3">
+                                                Graph credentials power publishing and polling. Private verification fields are optional and only used for manual, due, or end-of-giveaway checks when likes or follows need confirmation.
+                                            </div>
+                                            {% endif %}
                                             <div class="row g-3">
                                                 {% for field in entry.definition.credential_fields %}
                                                 {{ render_account_field(field, "credentials", entry.account.credentials_json.get(field.name, ""), "col-md-6") }}

@@ -109,6 +109,25 @@ SERVICE_REGISTRY: dict[str, ServiceDefinition] = {
                 "Instagram Professional Account ID",
                 help_text="The IG user id for the Business or Creator account connected to your Meta app.",
             ),
+            AccountFieldDefinition(
+                "instagrapi_sessionid",
+                "Private Verification Session ID",
+                input_type="password",
+                help_text=(
+                    "Optional. Used only for manual, due, or end-of-giveaway private verification when likes or follows cannot be confirmed through Graph/webhooks."
+                ),
+            ),
+            AccountFieldDefinition(
+                "instagrapi_username",
+                "Private Verification Username",
+                help_text="Optional fallback for private giveaway verification when Session ID is blank.",
+            ),
+            AccountFieldDefinition(
+                "instagrapi_password",
+                "Private Verification Password",
+                input_type="password",
+                help_text="Optional fallback used with Private Verification Username. Not used for normal publishing or 5-minute autorun.",
+            ),
         ),
         source_setting_fields=(AccountFieldDefinition("post_time_limit", "Initial Poll Lookback (hours)", input_type="number"),),
         publish_setting_fields=(
