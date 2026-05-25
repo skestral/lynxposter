@@ -9,7 +9,7 @@ from typing import Any, Callable
 
 import requests
 from sqlalchemy import Select, select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, object_session, selectinload
 
 from app.adapters.bluesky import _get_client as _get_bluesky_client
 from app.adapters.bluesky import _post_id_from_uri as _bluesky_post_id_from_uri
@@ -738,6 +738,84 @@ def _append_unique_evidence_item(items: list[dict[str, Any]], item: dict[str, An
     return [*items, candidate]
 
 
+def _merge_instagram_signal_states(primary: dict[str, Any] | None, secondary: dict[str, Any] | None) -> dict[str, Any]:
+    merged = _normalized_instagram_signal_state(dict(primary or {}))
+    other = _normalized_instagram_signal_state(dict(secondary or {}))
+    for key, fields in {
+        "comments": ("comment_id", "text"),
+        "story_mentions": ("story_id", "media_id", "text"),
+        "likes": ("like_id", "actor_id", "media_id"),
+        "reposts": ("repost_id", "actor_id", "media_id", "story_id"),
+    }.items():
+        items = list(merged.get(key) or [])
+        for item in other.get(key) or []:
+            items = _append_unique_evidence_item(items, item, key_fields=fields)
+        merged[key] = items
+    for key in ("like_present", "repost_present"):
+        merged[key] = bool(merged.get(key) or other.get(key))
+    if other.get("follow_present") is True or merged.get("follow_present") is True:
+        merged["follow_present"] = True
+    elif "follow_present" in other and "follow_present" not in merged:
+        merged["follow_present"] = other.get("follow_present")
+    if merged.get("like_collection_checked") or other.get("like_collection_checked"):
+        merged["like_collection_checked"] = True
+    if merged.get("follow_collection_checked") or other.get("follow_collection_checked"):
+        merged["follow_collection_checked"] = True
+    aliases = {
+        str(value).strip()
+        for state in (primary or {}, secondary or {})
+        for value in state.get("provider_user_id_aliases", [])
+        if str(value).strip()
+    }
+    normalized = _normalized_instagram_signal_state(merged)
+    if aliases:
+        normalized["provider_user_id_aliases"] = sorted(aliases)
+    if merged.get("follow_collection_checked") or other.get("follow_collection_checked"):
+        normalized["follow_collection_checked"] = True
+    return normalized
+
+
+def _merge_duplicate_instagram_entrants(channel: GiveawayChannel) -> None:
+    if channel.service != "instagram":
+        return
+    session = object_session(channel)
+    by_username: dict[str, GiveawayEntrant] = {}
+    for entrant in list(channel.entrants):
+        username_key = str(entrant.provider_username or "").strip().lower()
+        if not username_key:
+            continue
+        existing = by_username.get(username_key)
+        if existing is None:
+            by_username[username_key] = entrant
+            continue
+        if existing is entrant:
+            continue
+        keep, duplicate = existing, entrant
+        keep_state = dict(keep.signal_state_json or {})
+        duplicate_state = dict(duplicate.signal_state_json or {})
+        if duplicate_state.get("like_present") and not keep_state.get("like_present"):
+            keep, duplicate = duplicate, keep
+            by_username[username_key] = keep
+        merged_state = _merge_instagram_signal_states(keep.signal_state_json, duplicate.signal_state_json)
+        aliases = set(merged_state.get("provider_user_id_aliases") or [])
+        aliases.add(str(keep.provider_user_id or "").strip())
+        aliases.add(str(duplicate.provider_user_id or "").strip())
+        merged_state["provider_user_id_aliases"] = sorted(value for value in aliases if value)
+        keep.signal_state_json = merged_state
+        keep.provider_username = keep.provider_username or duplicate.provider_username
+        keep.display_label = keep.display_label or duplicate.display_label or keep.provider_username
+        if session is not None:
+            for event in list(duplicate.evidence_events):
+                event.entrant = keep
+            for event in session.scalars(select(GiveawayEvidenceEvent).where(GiveawayEvidenceEvent.entrant_id == duplicate.id)):
+                event.entrant = keep
+            duplicate.evidence_events = []
+            session.flush()
+            session.delete(duplicate)
+        elif duplicate in channel.entrants:
+            channel.entrants.remove(duplicate)
+
+
 def _rule_check_label(atom: str, params: dict[str, Any]) -> str:
     if atom == "comment_present":
         return "Comment present"
@@ -1055,9 +1133,34 @@ def get_or_create_channel_entrant(
     provider_user_id: str,
     provider_username: str | None = None,
     display_label: str | None = None,
+    prefer_provider_user_id: bool = False,
 ) -> GiveawayEntrant:
     for entrant in channel.entrants:
         if entrant.provider_user_id == provider_user_id:
+            if provider_username:
+                entrant.provider_username = provider_username
+            if display_label:
+                entrant.display_label = display_label
+            elif provider_username:
+                entrant.display_label = provider_username
+            return entrant
+    normalized_username = str(provider_username or "").strip().lower()
+    if normalized_username:
+        for entrant in channel.entrants:
+            if str(entrant.provider_username or "").strip().lower() != normalized_username:
+                continue
+            if prefer_provider_user_id:
+                state = dict(entrant.signal_state_json or {})
+                aliases = {
+                    str(value).strip()
+                    for value in state.get("provider_user_id_aliases", [])
+                    if str(value).strip()
+                }
+                aliases.add(str(entrant.provider_user_id or "").strip())
+                aliases.add(str(provider_user_id or "").strip())
+                entrant.provider_user_id = provider_user_id
+                state["provider_user_id_aliases"] = sorted(aliases)
+                entrant.signal_state_json = state
             if provider_username:
                 entrant.provider_username = provider_username
             if display_label:
@@ -1786,6 +1889,7 @@ def _evaluate_rule_node(
 
 
 def evaluate_channel_entrants(channel: GiveawayChannel, *, allow_instagram_private_verification: bool = False) -> None:
+    _merge_duplicate_instagram_entrants(channel)
     rule = dict(channel.rules_json or {})
     for entrant in channel.entrants:
         entrant.rule_match_details_json = {}
@@ -2189,6 +2293,7 @@ def refresh_instagram_channel_state(
                         provider_user_id=provider_user_id,
                         provider_username=provider_username,
                         display_label=provider_username or provider_user_id,
+                        prefer_provider_user_id=True,
                     )
                     entrant.signal_state_json = dict(entrant.signal_state_json or {})
                     observed_comments.append(
@@ -2224,6 +2329,7 @@ def refresh_instagram_channel_state(
                         provider_user_id=provider_user_id,
                         provider_username=provider_username,
                         display_label=provider_username or provider_user_id,
+                        prefer_provider_user_id=True,
                     )
                     like_summary = {
                         "like_id": f"like:{provider_user_id}:{live_media_id}",
@@ -2279,6 +2385,7 @@ def refresh_instagram_channel_state(
                             provider_user_id=provider_user_id,
                             provider_username=provider_username,
                             display_label=provider_username or provider_user_id,
+                            prefer_provider_user_id=True,
                         )
                         state["reposts"] = _append_unique_evidence_item(
                             list(state.get("reposts") or []),

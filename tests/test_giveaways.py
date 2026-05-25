@@ -811,6 +811,80 @@ def test_manual_instagram_scan_captures_story_repost_for_existing_entrant(sessio
     assert repost_event.entrant_id == entrant.id
 
 
+def test_instagram_evaluation_merges_webhook_and_private_ids_for_same_username(session):
+    persona = _create_persona(session, slug="giveaway-instagram-merge-same-username")
+    instagram = _create_account(session, persona, service="instagram", label="Instagram")
+    post = create_scheduled_post(
+        session,
+        _generic_giveaway_payload(
+            persona.id,
+            [instagram.id],
+            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            channels=[
+                {
+                    "service": "instagram",
+                    "account_id": instagram.id,
+                    "rules": {
+                        "kind": "all",
+                        "children": [
+                            {"kind": "atom", "atom": "comment_present", "params": {}},
+                            {"kind": "atom", "atom": "like_present", "params": {}},
+                        ],
+                    },
+                }
+            ],
+        ),
+        [],
+    )
+    channel = post.giveaway_campaign.channels[0]
+    webhook_entrant = GiveawayEntrant(
+        provider_user_id="2045697446345302",
+        provider_username="pawgetsound.studio",
+        display_label="pawgetsound.studio",
+        signal_state_json={
+            "comments": [{"comment_id": "comment-1", "text": "@friend hello"}],
+            "comment_count": 1,
+            "friend_mention_count": 1,
+        },
+    )
+    private_entrant = GiveawayEntrant(
+        provider_user_id="39922605849",
+        provider_username="pawgetsound.studio",
+        display_label="pawgetsound.studio",
+        signal_state_json={
+            "likes": [{"like_id": "like-1", "actor_id": "39922605849"}],
+            "like_present": True,
+        },
+    )
+    channel.entrants.extend([webhook_entrant, private_entrant])
+    session.flush()
+    session.add(
+        GiveawayEvidenceEvent(
+            campaign_id=post.giveaway_campaign.id,
+            channel_id=channel.id,
+            entrant_id=webhook_entrant.id,
+            provider_event_id="comment-1",
+            event_type="instagram_comment",
+            source="webhook",
+            payload_json={},
+        )
+    )
+    session.flush()
+
+    evaluate_channel_entrants(channel)
+    session.flush()
+
+    entrants = session.query(GiveawayEntrant).filter_by(channel_id=channel.id).all()
+    assert len(entrants) == 1
+    entrant = entrants[0]
+    assert entrant.provider_username == "pawgetsound.studio"
+    assert entrant.signal_state_json["comment_count"] == 1
+    assert entrant.signal_state_json["like_present"] is True
+    assert set(entrant.signal_state_json["provider_user_id_aliases"]) == {"2045697446345302", "39922605849"}
+    assert entrant.eligibility_status == ENTRY_STATUS_ELIGIBLE
+    assert session.query(GiveawayEvidenceEvent).filter_by(entrant_id=entrant.id).count() == 1
+
+
 def test_giveaway_lifecycle_defers_instagram_follow_verification_without_private_scan(session, monkeypatch):
     persona = _create_persona(session, slug="giveaway-follow-private-guard")
     instagram = _create_account(session, persona, service="instagram", label="Instagram")
