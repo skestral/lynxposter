@@ -1,5 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
+{% set pending_persona_access_entries = pending_persona_access_entries if pending_persona_access_entries is defined else [] %}
+{% set persona_access_permissions = persona_access_permissions if persona_access_permissions is defined else {} %}
 <div class="card hero-card section-card mb-4">
     <div class="card-body">
         <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
@@ -12,6 +14,42 @@
         </div>
     </div>
 </div>
+
+{% if pending_persona_access_entries %}
+<div class="card section-card mb-4 persona-share-inbox">
+    <div class="card-body">
+        <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 mb-3">
+            <div>
+                <div class="section-kicker mb-2">Shared With You</div>
+                <h2 class="h5 mb-1">Persona access waiting</h2>
+                <div class="text-secondary">Accept a share to add it to your workspace. No emails are sent.</div>
+            </div>
+            <span class="badge soft-badge rounded-pill px-3 py-2">{{ pending_persona_access_entries|length }} pending</span>
+        </div>
+        <div class="persona-share-list">
+            {% for access in pending_persona_access_entries %}
+            <div class="surface-panel-soft persona-share-invite" data-access-id="{{ access.id }}">
+                <div>
+                    <div class="fw-semibold">{{ access.persona.name if access.persona else "Shared persona" }}</div>
+                    <div class="small text-secondary">
+                        {{ access.permission|title }} access
+                        {% if access.created_by_user %}
+                        from {{ access.created_by_user.effective_display_name }}
+                        {% elif access.persona and access.persona.owner_user %}
+                        from {{ access.persona.owner_user.effective_display_name }}
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="d-flex gap-2 flex-wrap">
+                    <button class="btn btn-sm btn-primary persona-share-accept" type="button">Accept</button>
+                    <button class="btn btn-sm btn-outline-secondary persona-share-decline" type="button">Decline</button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
 
 <div class="row g-4">
     <div class="col-12 col-xl-5">
@@ -130,6 +168,7 @@
                         </thead>
                         <tbody>
                         {% for persona in personas %}
+                            {% set persona_access_permission = persona_access_permissions.get(persona.id, "owner") %}
                             <tr>
                                 <td>
                                     <div class="fw-semibold">{{ persona.name }}</div>
@@ -137,11 +176,18 @@
                                 </td>
                                 <td>{{ persona.accounts|length }}</td>
                                 <td>
-                                    {% if persona.is_enabled %}
-                                        <span class="badge text-bg-success">Enabled</span>
-                                    {% else %}
-                                        <span class="badge text-bg-secondary">Disabled</span>
-                                    {% endif %}
+                                    <div class="d-flex gap-2 flex-wrap">
+                                        {% if persona.is_enabled %}
+                                            <span class="badge text-bg-success">Enabled</span>
+                                        {% else %}
+                                            <span class="badge text-bg-secondary">Disabled</span>
+                                        {% endif %}
+                                        {% if persona_access_permission == "owner" %}
+                                            <span class="badge text-bg-light border">Owner</span>
+                                        {% else %}
+                                            <span class="badge text-bg-info-subtle border text-dark">Shared {{ persona_access_permission|title }}</span>
+                                        {% endif %}
+                                    </div>
                                 </td>
                                 <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="/personas/{{ persona.id }}/page">Open</a></td>
                             </tr>
@@ -193,6 +239,34 @@ document.getElementById("persona-create-form").addEventListener("submit", async 
     return;
   }
   window.location.reload();
+});
+
+document.querySelectorAll(".persona-share-accept").forEach((button) => {
+  button.addEventListener("click", async () => {
+    const row = button.closest(".persona-share-invite");
+    if (!row) return;
+    const response = await fetch(`/persona-access/inbox/${row.dataset.accessId}/accept`, {method: "POST"});
+    if (!response.ok) {
+      alert(await window.readApiMessage(response));
+      return;
+    }
+    window.location.reload();
+  });
+});
+
+document.querySelectorAll(".persona-share-decline").forEach((button) => {
+  button.addEventListener("click", async () => {
+    const row = button.closest(".persona-share-invite");
+    if (!row) return;
+    const confirmed = window.confirm("Decline this shared persona?");
+    if (!confirmed) return;
+    const response = await fetch(`/persona-access/inbox/${row.dataset.accessId}`, {method: "DELETE"});
+    if (!response.ok) {
+      alert(await window.readApiMessage(response));
+      return;
+    }
+    window.location.reload();
+  });
 });
 </script>
 {% endblock %}

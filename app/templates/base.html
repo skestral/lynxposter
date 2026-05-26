@@ -47,7 +47,12 @@
                 <div class="app-sidebar-label">Workspace</div>
                 <a class="app-sidebar-link {% if page_path.startswith('/scheduled-posts') and not page_path.startswith('/scheduled-posts/new') %}active{% endif %}" href="/scheduled-posts/page">Planner</a>
                 <a class="app-sidebar-link {% if page_path.startswith('/scheduled-posts/new') %}active{% endif %}" href="/scheduled-posts/new/page">New Post</a>
-                <a class="app-sidebar-link {% if page_path.startswith('/personas') %}active{% endif %}" href="/personas/page">Personas</a>
+                <a class="app-sidebar-link {% if page_path.startswith('/personas') %}active{% endif %}" href="/personas/page">
+                    <span>Personas</span>
+                    {% if pending_persona_share_count|default(0) %}
+                    <span class="app-nav-badge">{{ pending_persona_share_count }}</span>
+                    {% endif %}
+                </a>
                 <a class="app-sidebar-link {% if page_path.startswith('/sandbox') %}active{% endif %}" href="/sandbox/page">Preview Studio</a>
                 <a class="app-sidebar-link {% if page_path.startswith('/logs') %}active{% endif %}" href="/logs/page">Activity</a>
                 {% endif %}
@@ -126,7 +131,12 @@
                 {% if current_principal.is_user %}
                 <a class="mobile-bottom-nav-create" href="/scheduled-posts/new/page" aria-label="Create post">+</a>
                 {% endif %}
-                <a class="mobile-bottom-nav-link {% if page_path.startswith('/personas') %}active{% endif %}" href="/personas/page">People</a>
+                <a class="mobile-bottom-nav-link {% if page_path.startswith('/personas') %}active{% endif %}" href="/personas/page">
+                    <span>People</span>
+                    {% if pending_persona_share_count|default(0) %}
+                    <span class="app-nav-badge">{{ pending_persona_share_count }}</span>
+                    {% endif %}
+                </a>
                 <a class="mobile-bottom-nav-link {% if page_path.startswith('/logs') %}active{% endif %}" href="/logs/page">Logs</a>
             </nav>
             {% endif %}

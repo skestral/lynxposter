@@ -2,12 +2,16 @@ from __future__ import annotations
 
 from app.models import User
 from app.services.personas import (
+    accept_persona_access_for_user,
     account_to_read,
     create_account,
     create_persona,
     create_persona_access,
+    decline_persona_access_for_user,
     get_persona,
+    link_pending_persona_access_for_user,
     list_persona_access,
+    list_pending_persona_access_for_user,
     list_personas,
     user_can_manage_persona_access,
 )
@@ -82,6 +86,47 @@ def test_persona_access_can_store_pending_email_invites(session):
     assert access.email == "pending@example.com"
     assert access.status == "pending"
     assert list_persona_access(session, persona)[0].id == access.id
+
+
+def test_pending_persona_access_links_to_matching_user_and_waits_for_acceptance(session):
+    owner = _user(session, "owner-user", "owner@example.com")
+    persona = _persona(session, owner_user_id=owner.id)
+    access = create_persona_access(
+        session,
+        persona,
+        {"email": "Pending@Example.com", "permission": "edit"},
+        created_by_user_id=owner.id,
+    )
+    invited = _user(session, "pending-user", "pending@example.com")
+
+    assert link_pending_persona_access_for_user(session, invited) == 1
+    assert access.user_id == invited.id
+    assert access.status == "pending"
+    assert list_personas(session, owner_user_id=invited.id, access_user_id=invited.id) == []
+    assert [entry.id for entry in list_pending_persona_access_for_user(session, invited)] == [access.id]
+
+    accepted = accept_persona_access_for_user(session, access.id, invited)
+
+    assert accepted.status == "active"
+    assert accepted.user_id == invited.id
+    assert [item.id for item in list_personas(session, owner_user_id=invited.id, access_user_id=invited.id)] == [persona.id]
+
+
+def test_pending_persona_access_can_be_declined_by_matching_user(session):
+    owner = _user(session, "owner-user", "owner@example.com")
+    persona = _persona(session, owner_user_id=owner.id)
+    access = create_persona_access(
+        session,
+        persona,
+        {"email": "Pending@Example.com", "permission": "view"},
+        created_by_user_id=owner.id,
+    )
+    invited = _user(session, "pending-user", "pending@example.com")
+
+    decline_persona_access_for_user(session, access.id, invited)
+
+    assert list_persona_access(session, persona) == []
+    assert list_pending_persona_access_for_user(session, invited) == []
 
 
 def test_shared_persona_account_reads_can_hide_credentials(session):

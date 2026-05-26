@@ -108,6 +108,54 @@ def test_mastodon_and_twitter_service_definitions_expose_language_publish_fields
     assert twitter_fields["language"].fallback_keys == ("twitter_lang",)
 
 
+def test_personas_template_surfaces_pending_shared_personas():
+    html = templates.env.get_template("personas.html").render(
+        request=_request_with_principal(),
+        current_principal=SimpleNamespace(
+            is_authenticated=True,
+            is_user=True,
+            is_admin=False,
+            user_id="user-1",
+            display_name="Lynx",
+            role="user",
+            timezone="UTC",
+            ui_theme="skylight",
+            ui_mode="light",
+        ),
+        auth_enabled=False,
+        current_path="/personas/page",
+        pending_persona_share_count=1,
+        personas=[
+            SimpleNamespace(
+                id="persona-shared",
+                name="PawgetSound.Studio",
+                slug="pawgetsound",
+                accounts=[],
+                is_enabled=True,
+            )
+        ],
+        persona_access_permissions={"persona-shared": "edit"},
+        pending_persona_access_entries=[
+            SimpleNamespace(
+                id="access-1",
+                permission="view",
+                persona=SimpleNamespace(
+                    name="Larkyn Lynx",
+                    owner_user=SimpleNamespace(effective_display_name="Savannah"),
+                ),
+                created_by_user=SimpleNamespace(effective_display_name="Savannah"),
+            )
+        ],
+    )
+
+    assert "Shared With You" in html
+    assert "Persona access waiting" in html
+    assert "No emails are sent." in html
+    assert "/persona-access/inbox/${row.dataset.accessId}/accept" in html
+    assert "Shared Edit" in html
+    assert "PawgetSound.Studio" in html
+
+
 def test_persona_detail_template_renders_telegram_controls_and_secret_toggles():
     html = templates.env.get_template("persona_detail.html").render(
         request=_request_with_principal(),

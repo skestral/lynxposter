@@ -104,14 +104,19 @@ from app.services.live_updates import (
 from app.services.oidc import oidc_group_mapping_enabled, oidc_scope_includes_groups
 from app.services.personas import (
     account_to_read,
+    accept_persona_access_for_user,
     create_account,
     create_persona_access,
     create_persona,
+    count_pending_persona_access_for_user,
     delete_account,
     delete_persona_access,
+    decline_persona_access_for_user,
     get_account,
     get_persona,
+    link_pending_persona_access_for_user,
     list_persona_access,
+    list_pending_persona_access_for_user,
     list_personas,
     list_routes,
     persona_destination_accounts,
@@ -233,11 +238,23 @@ templates.env.globals["app_version"] = get_app_version
 templates.env.globals["live_update_poll_interval_ms"] = LIVE_UPDATE_POLL_INTERVAL_MS
 templates.env.globals["auth_enabled"] = auth_enabled
 
+def _pending_persona_share_count(principal: Principal) -> int:
+    if not principal.is_user or not principal.user_id:
+        return 0
+    with db_session() as session:
+        user = get_user(session, principal.user_id)
+        if user is None:
+            return 0
+        return count_pending_persona_access_for_user(session, user)
+
+
 def _template_context(request: Request, **context: Any) -> dict[str, Any]:
+    principal = get_request_principal(request)
     return {
-        "current_principal": get_request_principal(request),
+        "current_principal": principal,
         "auth_enabled": auth_enabled(),
         "current_path": request.url.path,
+        "pending_persona_share_count": _pending_persona_share_count(principal),
         **context,
     }
 
@@ -988,11 +1005,26 @@ def personas_page(request: Request) -> HTMLResponse:
         return guarded
     principal = guarded
     with db_session() as session:
+        current_user = get_user(session, principal.user_id) if principal.user_id else None
+        pending_persona_access_entries = []
+        if current_user is not None:
+            link_pending_persona_access_for_user(session, current_user)
+            pending_persona_access_entries = list_pending_persona_access_for_user(session, current_user)
         personas = list_personas(session, **_persona_access_kwargs(principal))
+        persona_access_permissions = {
+            persona.id: persona_user_permission(persona, principal.user_id, is_admin=principal.is_admin) or "view"
+            for persona in personas
+        }
         return templates.TemplateResponse(
             name="personas.html",
             request=request,
-            context=_template_context(request, personas=personas),
+            context=_template_context(
+                request,
+                personas=personas,
+                pending_persona_access_entries=pending_persona_access_entries,
+                pending_persona_share_count=len(pending_persona_access_entries),
+                persona_access_permissions=persona_access_permissions,
+            ),
         )
 
 
@@ -1655,6 +1687,38 @@ def api_delete_persona_access(persona_id: str, access_id: str, request: Request)
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return {"deleted_access_id": access_id}
+
+
+@app.post("/persona-access/inbox/{access_id}/accept")
+def api_accept_persona_access_invite(access_id: str, request: Request) -> PersonaAccessRead:
+    principal = require_api_access(request, role="user")
+    if not principal.user_id:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    with db_session() as session:
+        user = get_user(session, principal.user_id)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found.")
+        try:
+            access = accept_persona_access_for_user(session, access_id, user)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return PersonaAccessRead.model_validate(access)
+
+
+@app.delete("/persona-access/inbox/{access_id}")
+def api_decline_persona_access_invite(access_id: str, request: Request) -> dict[str, Any]:
+    principal = require_api_access(request, role="user")
+    if not principal.user_id:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    with db_session() as session:
+        user = get_user(session, principal.user_id)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found.")
+        try:
+            decline_persona_access_for_user(session, access_id, user)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return {"declined_access_id": access_id}
 
 
 @app.post("/personas/{persona_id}/accounts")

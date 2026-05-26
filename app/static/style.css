@@ -152,6 +152,7 @@ body {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    gap: 0.22rem;
     min-width: 3.25rem;
     min-height: 2.35rem;
     padding: 0 0.55rem;
@@ -159,6 +160,13 @@ body {
     font-size: 0.78rem;
     font-weight: 700;
     text-decoration: none;
+}
+
+.mobile-bottom-nav-link .app-nav-badge {
+    min-width: 1.02rem;
+    height: 1.02rem;
+    padding: 0 0.24rem;
+    font-size: 0.6rem;
 }
 
 .mobile-bottom-nav-link.active,
@@ -2379,6 +2387,8 @@ body::after,
 .app-sidebar-link {
     display: flex;
     align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
     min-height: 2.5rem;
     padding: 0.58rem 0.72rem;
     border: 1px solid transparent;
@@ -2386,6 +2396,22 @@ body::after,
     color: var(--lp-ink-soft);
     font-weight: 700;
     text-decoration: none;
+}
+
+.app-nav-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.35rem;
+    height: 1.35rem;
+    padding: 0 0.36rem;
+    border: 1px solid var(--lp-theme-outline);
+    border-radius: 999px;
+    background: var(--lp-theme-active-tint);
+    color: var(--lp-ink);
+    font-size: 0.72rem;
+    font-weight: 800;
+    line-height: 1;
 }
 
 .app-sidebar-link:hover,
@@ -3312,6 +3338,23 @@ body[data-ui-mode="dark"] .mobile-bottom-nav-create {
     visibility: hidden;
 }
 
+.persona-share-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.persona-share-invite {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.persona-share-invite > div:first-child {
+    min-width: 0;
+}
+
 .planner-view-month .planner-workspace-layout,
 .planner-view-board .planner-workspace-layout {
     display: block;
@@ -3661,6 +3704,11 @@ body[data-ui-mode="dark"] .planner-calendar-surface .scheduled-calendar-day-numb
     }
 
     .planner-range-panel {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .persona-share-invite {
         align-items: stretch;
         flex-direction: column;
     }

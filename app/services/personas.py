@@ -36,6 +36,14 @@ def _active_persona_access_clause(access_user_id: str | None, min_permission: st
     )
 
 
+def _matching_persona_access_clause(user: User):
+    clauses = [PersonaAccess.user_id == user.id]
+    normalized_email = _normalize_access_email(user.email)
+    if normalized_email:
+        clauses.append(PersonaAccess.email == normalized_email)
+    return or_(*clauses)
+
+
 def _persona_visibility_clause(
     *,
     owner_user_id: str | None = None,
@@ -60,7 +68,7 @@ def list_personas(
     access_user_id: str | None = None,
     min_permission: str = "view",
 ) -> list[Persona]:
-    stmt = select(Persona).options(selectinload(Persona.accounts)).order_by(Persona.name)
+    stmt = select(Persona).options(selectinload(Persona.accounts), selectinload(Persona.access_entries)).order_by(Persona.name)
     visibility_clause = _persona_visibility_clause(
         owner_user_id=owner_user_id,
         access_user_id=access_user_id,
@@ -137,6 +145,115 @@ def list_persona_access(session: Session, persona: Persona) -> list[PersonaAcces
         .order_by(PersonaAccess.status, PersonaAccess.email, PersonaAccess.user_id)
     )
     return list(session.scalars(stmt))
+
+
+def list_pending_persona_access_for_user(session: Session, user: User) -> list[PersonaAccess]:
+    stmt = (
+        select(PersonaAccess)
+        .where(PersonaAccess.status == "pending", _matching_persona_access_clause(user))
+        .options(
+            selectinload(PersonaAccess.persona).selectinload(Persona.owner_user),
+            selectinload(PersonaAccess.created_by_user),
+        )
+        .order_by(PersonaAccess.created_at.desc())
+    )
+    return list(session.scalars(stmt))
+
+
+def count_pending_persona_access_for_user(session: Session, user: User) -> int:
+    return len(list_pending_persona_access_for_user(session, user))
+
+
+def link_pending_persona_access_for_user(session: Session, user: User) -> int:
+    normalized_email = _normalize_access_email(user.email)
+    if not normalized_email:
+        return 0
+    pending_entries = list(
+        session.scalars(
+            select(PersonaAccess).where(
+                PersonaAccess.status == "pending",
+                PersonaAccess.email == normalized_email,
+                or_(PersonaAccess.user_id.is_(None), PersonaAccess.user_id == user.id),
+            )
+        )
+    )
+    changed = 0
+    for access in pending_entries:
+        if access.user_id == user.id:
+            continue
+        existing = session.scalar(
+            select(PersonaAccess).where(
+                PersonaAccess.persona_id == access.persona_id,
+                PersonaAccess.user_id == user.id,
+                PersonaAccess.id != access.id,
+            )
+        )
+        if existing is not None:
+            if existing.status == "active":
+                session.delete(access)
+                changed += 1
+            continue
+        access.user_id = user.id
+        changed += 1
+    if changed:
+        session.flush()
+    return changed
+
+
+def accept_persona_access_for_user(session: Session, access_id: str, user: User) -> PersonaAccess:
+    access = session.get(PersonaAccess, access_id)
+    normalized_email = _normalize_access_email(user.email)
+    matches_user = bool(
+        access
+        and (
+            access.user_id == user.id
+            or (normalized_email and _normalize_access_email(access.email) == normalized_email)
+        )
+    )
+    if access is None or not matches_user:
+        raise ValueError("Persona share invitation not found.")
+    if access.status == "active":
+        return access
+
+    existing = session.scalar(
+        select(PersonaAccess).where(
+            PersonaAccess.persona_id == access.persona_id,
+            PersonaAccess.user_id == user.id,
+            PersonaAccess.id != access.id,
+        )
+    )
+    if existing is not None:
+        existing.permission = normalize_persona_permission(existing.permission)
+        existing.status = "active"
+        if normalized_email and not existing.email:
+            existing.email = normalized_email
+        session.delete(access)
+        session.flush()
+        return existing
+
+    access.user_id = user.id
+    if normalized_email:
+        access.email = normalized_email
+    access.status = "active"
+    session.flush()
+    return access
+
+
+def decline_persona_access_for_user(session: Session, access_id: str, user: User) -> None:
+    access = session.get(PersonaAccess, access_id)
+    normalized_email = _normalize_access_email(user.email)
+    matches_user = bool(
+        access
+        and access.status == "pending"
+        and (
+            access.user_id == user.id
+            or (normalized_email and _normalize_access_email(access.email) == normalized_email)
+        )
+    )
+    if access is None or not matches_user:
+        raise ValueError("Persona share invitation not found.")
+    session.delete(access)
+    session.flush()
 
 
 def create_persona_access(
