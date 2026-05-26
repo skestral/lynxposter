@@ -3005,6 +3005,225 @@ body[data-ui-mode="dark"] .mobile-bottom-nav-create {
         var(--lp-pride-border) border-box;
 }
 
+/* Theme completion pass: catch Bootstrap controls and dark account surfaces. */
+.btn-primary,
+.btn-primary:hover,
+.btn-primary:focus-visible,
+.btn-primary:active {
+    border: 1px solid transparent !important;
+    background:
+        linear-gradient(rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.9)) padding-box,
+        var(--lp-pride-border) border-box !important;
+    color: var(--lp-ink) !important;
+}
+
+.btn-secondary,
+.btn-outline-primary,
+.btn-outline-secondary,
+.dashboard-v2-panel-link,
+.dashboard-v2-live-pill,
+.badge.text-bg-light.border {
+    border-color: rgba(117, 136, 173, 0.24) !important;
+    background: rgba(255, 255, 255, 0.76) !important;
+    color: var(--lp-ink) !important;
+}
+
+.btn-outline-primary:hover,
+.btn-outline-primary:focus-visible,
+.btn-outline-secondary:hover,
+.btn-outline-secondary:focus-visible,
+.btn-group .btn-outline-secondary.active,
+.dashboard-v2-panel-link:hover {
+    border: 1px solid transparent !important;
+    background:
+        linear-gradient(rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.9)) padding-box,
+        var(--lp-pride-border) border-box !important;
+    color: var(--lp-ink) !important;
+}
+
+.btn-outline-success,
+.btn-outline-warning,
+.btn-outline-danger {
+    background: rgba(255, 255, 255, 0.72) !important;
+}
+
+.btn-outline-success {
+    border-color: rgba(47, 169, 108, 0.32) !important;
+    color: #176544 !important;
+}
+
+.btn-outline-warning {
+    border-color: rgba(216, 138, 20, 0.34) !important;
+    color: #70460c !important;
+}
+
+.btn-outline-danger {
+    border-color: rgba(216, 74, 88, 0.34) !important;
+    color: #8d2430 !important;
+}
+
+.btn-outline-success:hover,
+.btn-outline-success:focus-visible {
+    background: rgba(47, 169, 108, 0.13) !important;
+}
+
+.btn-outline-warning:hover,
+.btn-outline-warning:focus-visible {
+    background: rgba(216, 138, 20, 0.14) !important;
+}
+
+.btn-outline-danger:hover,
+.btn-outline-danger:focus-visible {
+    background: rgba(216, 74, 88, 0.13) !important;
+}
+
+body[data-ui-mode="dark"] .app-identity-card,
+body[data-ui-mode="dark"] .app-mode-switch {
+    background: rgba(18, 25, 38, 0.84) !important;
+    border-color: rgba(136, 152, 184, 0.26) !important;
+}
+
+body[data-ui-mode="dark"] .app-mode-button {
+    color: #b8c4d8;
+}
+
+body[data-ui-mode="dark"] .app-mode-button:not(.is-active):hover,
+body[data-ui-mode="dark"] .app-mode-button:not(.is-active):focus-visible {
+    background: rgba(136, 152, 184, 0.14);
+    color: #f6f8fc;
+}
+
+body[data-ui-mode="dark"] .app-identity-name,
+body[data-ui-mode="dark"] .navbar-identity,
+body[data-ui-mode="dark"] .btn-secondary,
+body[data-ui-mode="dark"] .btn-outline-primary,
+body[data-ui-mode="dark"] .btn-outline-secondary,
+body[data-ui-mode="dark"] .dashboard-v2-panel-link,
+body[data-ui-mode="dark"] .dashboard-v2-live-pill,
+body[data-ui-mode="dark"] .badge.text-bg-light.border {
+    color: #eef3fb !important;
+}
+
+body[data-ui-mode="dark"] .app-identity-role,
+body[data-ui-mode="dark"] .text-secondary,
+body[data-ui-mode="dark"] .form-text,
+body[data-ui-mode="dark"] .dashboard-v2-muted,
+body[data-ui-mode="dark"] .dashboard-v2-list-meta,
+body[data-ui-mode="dark"] .dashboard-v2-metric-detail {
+    color: #aeb8cc !important;
+}
+
+body[data-ui-mode="dark"] .btn-primary,
+body[data-ui-mode="dark"] .btn-primary:hover,
+body[data-ui-mode="dark"] .btn-primary:focus-visible,
+body[data-ui-mode="dark"] .btn-primary:active,
+body[data-ui-mode="dark"] .btn-outline-primary:hover,
+body[data-ui-mode="dark"] .btn-outline-primary:focus-visible,
+body[data-ui-mode="dark"] .btn-outline-secondary:hover,
+body[data-ui-mode="dark"] .btn-outline-secondary:focus-visible,
+body[data-ui-mode="dark"] .btn-group .btn-outline-secondary.active,
+body[data-ui-mode="dark"] .dashboard-v2-panel-link:hover {
+    background:
+        linear-gradient(rgba(31, 41, 59, 0.94), rgba(31, 41, 59, 0.94)) padding-box,
+        var(--lp-pride-border) border-box !important;
+    color: #f6f8fc !important;
+}
+
+body[data-ui-mode="dark"] .btn-secondary,
+body[data-ui-mode="dark"] .btn-outline-primary,
+body[data-ui-mode="dark"] .btn-outline-secondary,
+body[data-ui-mode="dark"] .btn-outline-success,
+body[data-ui-mode="dark"] .btn-outline-warning,
+body[data-ui-mode="dark"] .btn-outline-danger,
+body[data-ui-mode="dark"] .dashboard-v2-panel-link,
+body[data-ui-mode="dark"] .dashboard-v2-live-pill,
+body[data-ui-mode="dark"] .badge.text-bg-light.border,
+body[data-ui-mode="dark"] .form-control,
+body[data-ui-mode="dark"] .form-select,
+body[data-ui-mode="dark"] .input-group-text,
+body[data-ui-mode="dark"] .lp-static-field {
+    background: rgba(18, 25, 38, 0.72) !important;
+    border-color: rgba(136, 152, 184, 0.24) !important;
+}
+
+body[data-ui-mode="dark"] .btn-outline-success {
+    border-color: rgba(47, 169, 108, 0.42) !important;
+    color: #dff8ec !important;
+}
+
+body[data-ui-mode="dark"] .btn-outline-warning {
+    border-color: rgba(216, 138, 20, 0.44) !important;
+    color: #ffe8bd !important;
+}
+
+body[data-ui-mode="dark"] .btn-outline-danger {
+    border-color: rgba(216, 74, 88, 0.44) !important;
+    color: #ffd8de !important;
+}
+
+body[data-ui-mode="dark"] .btn-outline-success:hover,
+body[data-ui-mode="dark"] .btn-outline-success:focus-visible {
+    background: rgba(47, 169, 108, 0.16) !important;
+}
+
+body[data-ui-mode="dark"] .btn-outline-warning:hover,
+body[data-ui-mode="dark"] .btn-outline-warning:focus-visible {
+    background: rgba(216, 138, 20, 0.17) !important;
+}
+
+body[data-ui-mode="dark"] .btn-outline-danger:hover,
+body[data-ui-mode="dark"] .btn-outline-danger:focus-visible {
+    background: rgba(216, 74, 88, 0.16) !important;
+}
+
+body[data-ui-mode="dark"] .form-control,
+body[data-ui-mode="dark"] .form-select,
+body[data-ui-mode="dark"] .input-group-text,
+body[data-ui-mode="dark"] .lp-static-field,
+body[data-ui-mode="dark"] .table {
+    color: #eef3fb !important;
+}
+
+body[data-ui-mode="dark"] .dashboard-v2-keyline,
+body[data-ui-mode="dark"] .border,
+body[data-ui-mode="dark"] .border-top,
+body[data-ui-mode="dark"] .border-bottom,
+body[data-ui-mode="dark"] .table > :not(caption) > * > * {
+    border-color: rgba(136, 152, 184, 0.2) !important;
+}
+
+body[data-ui-mode="dark"] .text-bg-success,
+body[data-ui-mode="dark"] .badge.text-bg-success {
+    background: rgba(47, 169, 108, 0.22) !important;
+    color: #dff8ec !important;
+}
+
+body[data-ui-mode="dark"] .text-bg-primary,
+body[data-ui-mode="dark"] .badge.text-bg-primary {
+    background: rgba(var(--lp-accent-rgb), 0.24) !important;
+    color: #eef3fb !important;
+}
+
+body[data-ui-mode="dark"] .text-bg-warning,
+body[data-ui-mode="dark"] .badge.text-bg-warning {
+    background: rgba(216, 138, 20, 0.24) !important;
+    color: #ffe8bd !important;
+}
+
+body[data-ui-mode="dark"] .text-bg-danger,
+body[data-ui-mode="dark"] .badge.text-bg-danger {
+    background: rgba(216, 74, 88, 0.24) !important;
+    color: #ffd8de !important;
+}
+
+body[data-ui-mode="dark"] .text-bg-secondary,
+body[data-ui-mode="dark"] .text-bg-dark,
+body[data-ui-mode="dark"] .badge.text-bg-secondary,
+body[data-ui-mode="dark"] .badge.text-bg-dark {
+    background: rgba(136, 152, 184, 0.18) !important;
+    color: #eef3fb !important;
+}
+
 /* Rounded polish pass: align controls and containers with the Figma pill shape. */
 :root {
     --lp-radius-sm: 14px;
