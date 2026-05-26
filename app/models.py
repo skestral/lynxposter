@@ -39,6 +39,11 @@ class User(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
     personas: Mapped[list["Persona"]] = relationship(back_populates="owner_user")
+    persona_accesses: Mapped[list["PersonaAccess"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        foreign_keys="PersonaAccess.user_id",
+    )
 
     @property
     def effective_display_name(self) -> str:
@@ -68,6 +73,10 @@ class Persona(Base):
     run_events: Mapped[list["RunEvent"]] = relationship(back_populates="persona")
     alert_events: Mapped[list["AlertEvent"]] = relationship(back_populates="persona")
     owner_user: Mapped["User | None"] = relationship(back_populates="personas")
+    access_entries: Mapped[list["PersonaAccess"]] = relationship(
+        back_populates="persona",
+        cascade="all, delete-orphan",
+    )
 
     @property
     def source_accounts(self) -> list["Account"]:
@@ -82,6 +91,31 @@ class Persona(Base):
             [account for account in self.accounts if account.destination_enabled],
             key=lambda item: (item.service, item.label or item.handle_or_identifier or ""),
         )
+
+
+class PersonaAccess(Base):
+    __tablename__ = "persona_access"
+    __table_args__ = (
+        UniqueConstraint("persona_id", "user_id", name="uq_persona_access_user"),
+        UniqueConstraint("persona_id", "email", name="uq_persona_access_email"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    persona_id: Mapped[str] = mapped_column(ForeignKey("personas.id"), nullable=False, index=True)
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    permission: Mapped[str] = mapped_column(String(16), default="view", nullable=False)
+    status: Mapped[str] = mapped_column(String(16), default="pending", nullable=False, index=True)
+    created_by_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    persona: Mapped["Persona"] = relationship(back_populates="access_entries")
+    user: Mapped["User | None"] = relationship(
+        back_populates="persona_accesses",
+        foreign_keys=[user_id],
+    )
+    created_by_user: Mapped["User | None"] = relationship(foreign_keys=[created_by_user_id])
 
 
 class Account(Base):

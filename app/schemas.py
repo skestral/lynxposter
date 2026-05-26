@@ -41,6 +41,37 @@ class PersonaRead(PersonaBase):
     model_config = {"from_attributes": True}
 
 
+class PersonaAccessCreate(BaseModel):
+    user_id: str | None = None
+    email: str | None = None
+    permission: Literal["view", "edit"] = "view"
+
+    @model_validator(mode="after")
+    def _validate_invitee(self) -> "PersonaAccessCreate":
+        if not (self.user_id or str(self.email or "").strip()):
+            raise ValueError("Choose a user or enter an email address to share with.")
+        return self
+
+
+class PersonaAccessUpdate(BaseModel):
+    permission: Literal["view", "edit"] | None = None
+    status: Literal["pending", "active"] | None = None
+
+
+class PersonaAccessRead(BaseModel):
+    id: str
+    persona_id: str
+    user_id: str | None = None
+    email: str | None = None
+    permission: Literal["view", "edit"]
+    status: Literal["pending", "active"]
+    created_by_user_id: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class AppSettingsUpdate(BaseModel):
     instance_name: str = ""
     app_base_url: str = ""

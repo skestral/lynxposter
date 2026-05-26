@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.adapters.base import ConfigurationError, DestinationAdapter, SourceAdapter, get_account_credentials
-from app.adapters.common import cutoff_for_initial_poll, import_existing_posts_on_first_scan, is_initial_sync, now_utc, service_body
+from app.adapters.common import cutoff_for_initial_poll, import_existing_posts_on_first_scan, is_initial_sync, now_utc, service_attachments, service_body
 from app.domain import (
     CanonicalPostPayload,
     ExternalPostRefPayload,
@@ -170,7 +170,7 @@ def _build_preview_shape(post: CanonicalPost, account: Account) -> tuple[str, st
     body = service_body(post, account)
     config = get_account_credentials(account)
     chat_id = _configured_chat_value(str(config.get("channel_id") or ""))
-    attachments = sorted(post.attachments, key=lambda item: item.sort_order)
+    attachments = service_attachments(post, account)
     notes: list[str] = ["Bot token and binary file contents are intentionally omitted from sandbox output."]
 
     if not attachments:
@@ -328,7 +328,7 @@ class TelegramDestinationAdapter(DestinationAdapter):
 
     def validate(self, post: CanonicalPost, persona: Persona, account: Account) -> list[ValidationIssue]:
         body = service_body(post, account)
-        attachments = sorted(post.attachments, key=lambda item: item.sort_order)
+        attachments = service_attachments(post, account)
         issues: list[ValidationIssue] = []
 
         if not body and not attachments:
@@ -382,7 +382,7 @@ class TelegramDestinationAdapter(DestinationAdapter):
         if not bot_token or not chat_id:
             raise ConfigurationError("Telegram bot token and channel ID are required.")
 
-        attachments = sorted(post.attachments, key=lambda item: item.sort_order)
+        attachments = service_attachments(post, account)
         body = service_body(post, account)
 
         if not attachments:

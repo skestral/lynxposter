@@ -14,7 +14,7 @@ from app.adapters.base import (
     get_account_credentials,
     get_account_publish_setting,
 )
-from app.adapters.common import cutoff_for_initial_poll, import_existing_posts_on_first_scan, is_initial_sync, now_utc, service_body
+from app.adapters.common import cutoff_for_initial_poll, import_existing_posts_on_first_scan, is_initial_sync, now_utc, service_attachments, service_body
 from app.domain import (
     CanonicalPostPayload,
     ExternalPostRefPayload,
@@ -213,15 +213,16 @@ class MastodonDestinationAdapter(DestinationAdapter):
             reply_to = (context or {}).get("quote_external_id")
         elif quote_url and reply_to:
             body = f"{body}\n{quote_url}".strip()
+        attachments = service_attachments(post, account)
         request_shape = {
             "status": body,
             "in_reply_to_id": reply_to,
             "visibility": visibility,
             "language": language,
-            "media_ids": [f"<uploaded-media-{index + 1}>" for index, _ in enumerate(sorted(post.attachments, key=lambda item: item.sort_order))],
+            "media_ids": [f"<uploaded-media-{index + 1}>" for index, _ in enumerate(attachments)],
         }
         notes = []
-        if post.attachments:
+        if attachments:
             notes.append("Media uploads are skipped in sandbox mode, so media_ids are placeholders.")
         if mapped_visibility:
             notes.append(f"Normalized legacy Mastodon visibility '{raw_visibility}' to '{visibility}'.")
@@ -245,7 +246,7 @@ class MastodonDestinationAdapter(DestinationAdapter):
     ) -> PublishResult:
         client = _get_client(get_account_credentials(account))
         media_ids = []
-        for attachment in sorted(post.attachments, key=lambda item: item.sort_order):
+        for attachment in service_attachments(post, account):
             path = Path(attachment.storage_path)
             if attachment.alt_text:
                 result = client.media_post(path, description=attachment.alt_text)

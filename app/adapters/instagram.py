@@ -13,7 +13,7 @@ import requests
 from sqlalchemy.orm import Session
 
 from app.adapters.base import ConfigurationError, DestinationAdapter, SourceAdapter, get_account_credentials
-from app.adapters.common import cutoff_for_initial_poll, import_existing_posts_on_first_scan, is_initial_sync, now_utc, service_body
+from app.adapters.common import cutoff_for_initial_poll, import_existing_posts_on_first_scan, is_initial_sync, now_utc, service_attachments, service_body
 from app.config import get_settings
 from app.domain import CanonicalPostPayload, ExternalPostRefPayload, PollResult, PublishPreview, PublishResult, ValidationIssue
 from app.models import Account, AccountSyncState, CanonicalPost, MediaAttachment, Persona
@@ -570,7 +570,7 @@ class InstagramDestinationAdapter(DestinationAdapter):
 
     def validate(self, post: CanonicalPost, persona: Persona, account: Account) -> list[ValidationIssue]:
         config = get_account_credentials(account)
-        attachments = sorted(post.attachments, key=lambda item: item.sort_order)
+        attachments = service_attachments(post, account)
 
         issues: list[ValidationIssue] = []
 
@@ -635,7 +635,7 @@ class InstagramDestinationAdapter(DestinationAdapter):
         *,
         context: dict[str, str | None] | None = None,
     ) -> PublishPreview:
-        attachments = sorted(post.attachments, key=lambda item: item.sort_order)
+        attachments = service_attachments(post, account)
         caption = service_body(post, account)
 
         if len(attachments) <= 1:
@@ -685,7 +685,7 @@ class InstagramDestinationAdapter(DestinationAdapter):
         if graph_issue:
             raise ConfigurationError(graph_issue)
 
-        attachments = sorted(post.attachments, key=lambda item: item.sort_order)
+        attachments = service_attachments(post, account)
         if not attachments:
             raise ConfigurationError("Instagram publishing requires at least one image or video attachment.")
         if len(attachments) > 10:

@@ -22,6 +22,25 @@ def service_body(post: CanonicalPost, account: Account) -> str:
     return post.body
 
 
+def sorted_attachments(post: CanonicalPost) -> list[Any]:
+    return sorted(post.attachments or [], key=lambda item: (getattr(item, "sort_order", 0), getattr(item, "id", "")))
+
+
+def service_attachments(post: CanonicalPost, account: Account) -> list[Any]:
+    attachments = sorted_attachments(post)
+    overrides = post.publish_overrides_json or {}
+    for key in (account.id, account.service):
+        override = overrides.get(key)
+        if not isinstance(override, dict) or "attachment_ids" not in override:
+            continue
+        requested_ids = [str(item or "").strip() for item in override.get("attachment_ids") or [] if str(item or "").strip()]
+        if not requested_ids:
+            return []
+        attachments_by_id = {str(getattr(attachment, "id", "")): attachment for attachment in attachments}
+        return [attachments_by_id[attachment_id] for attachment_id in requested_ids if attachment_id in attachments_by_id]
+    return attachments
+
+
 def attachment_kind(attachment: Any) -> str:
     mime_type = str(getattr(attachment, "mime_type", "") or "").lower()
     if mime_type.startswith("video/"):

@@ -19,7 +19,7 @@ from app.services.giveaway_engine import (
     migrate_legacy_instagram_giveaway,
     sync_giveaway_campaign,
 )
-from app.services.personas import get_persona, persona_destination_accounts, routed_destination_accounts
+from app.services.personas import _persona_visibility_clause, get_persona, persona_destination_accounts, routed_destination_accounts
 from app.services.storage import delete_managed_media_file
 
 NEEDS_ATTENTION_DISPLAY_STATUSES = {"partial_failure", "failure", "cancelled"}
@@ -43,7 +43,14 @@ def persona_max_retries(persona: Persona) -> int:
     return int((persona.retry_settings_json or {}).get("max_retries", 5) or 5)
 
 
-def get_post(session: Session, post_id: str, *, owner_user_id: str | None = None) -> CanonicalPost | None:
+def get_post(
+    session: Session,
+    post_id: str,
+    *,
+    owner_user_id: str | None = None,
+    access_user_id: str | None = None,
+    min_permission: str = "view",
+) -> CanonicalPost | None:
     stmt = (
         select(CanonicalPost)
         .options(
@@ -56,12 +63,23 @@ def get_post(session: Session, post_id: str, *, owner_user_id: str | None = None
         .where(CanonicalPost.id == post_id)
         .execution_options(populate_existing=True)
     )
-    if owner_user_id is not None:
-        stmt = stmt.join(Persona, Persona.id == CanonicalPost.persona_id).where(Persona.owner_user_id == owner_user_id)
+    visibility_clause = _persona_visibility_clause(
+        owner_user_id=owner_user_id,
+        access_user_id=access_user_id,
+        min_permission=min_permission,
+    )
+    if visibility_clause is not None:
+        stmt = stmt.join(Persona, Persona.id == CanonicalPost.persona_id).where(visibility_clause)
     return session.scalar(stmt)
 
 
-def list_scheduled_posts(session: Session, *, owner_user_id: str | None = None) -> list[CanonicalPost]:
+def list_scheduled_posts(
+    session: Session,
+    *,
+    owner_user_id: str | None = None,
+    access_user_id: str | None = None,
+    min_permission: str = "view",
+) -> list[CanonicalPost]:
     stmt = (
         select(CanonicalPost)
         .options(
@@ -74,8 +92,13 @@ def list_scheduled_posts(session: Session, *, owner_user_id: str | None = None) 
         .where(CanonicalPost.origin_kind == "composer")
         .order_by(desc(CanonicalPost.created_at))
     )
-    if owner_user_id is not None:
-        stmt = stmt.join(Persona, Persona.id == CanonicalPost.persona_id).where(Persona.owner_user_id == owner_user_id)
+    visibility_clause = _persona_visibility_clause(
+        owner_user_id=owner_user_id,
+        access_user_id=access_user_id,
+        min_permission=min_permission,
+    )
+    if visibility_clause is not None:
+        stmt = stmt.join(Persona, Persona.id == CanonicalPost.persona_id).where(visibility_clause)
     return list(session.scalars(stmt))
 
 
@@ -168,6 +191,21 @@ def _active_target_account_ids(post: CanonicalPost) -> list[str]:
         for job in _sorted_delivery_jobs(post)
         if job.status != "cancelled"
     ]
+
+
+def validate_publish_override_attachment_ids(post: CanonicalPost, overrides: dict[str, Any] | None) -> None:
+    if not overrides:
+        return
+    attachment_ids = {attachment.id for attachment in post.attachments or []}
+    for override in dict(overrides).values():
+        if not isinstance(override, dict) or "attachment_ids" not in override:
+            continue
+        requested_ids = [str(item or "").strip() for item in override.get("attachment_ids") or [] if str(item or "").strip()]
+        if len(requested_ids) != len(set(requested_ids)):
+            raise ValueError("Destination media override contains a duplicate attachment.")
+        unknown_ids = [attachment_id for attachment_id in requested_ids if attachment_id not in attachment_ids]
+        if unknown_ids:
+            raise ValueError("Destination media overrides can only use media already attached to this post.")
 
 
 def _sorted_delivery_jobs(post: CanonicalPost) -> list[DeliveryJob]:
@@ -376,6 +414,7 @@ def create_scheduled_post(session: Session, payload: ScheduledPostCreate, media_
     for item in media_items:
         session.add(_create_attachment(post, item))
     session.flush()
+    validate_publish_override_attachment_ids(post, post.publish_overrides_json)
 
     sync_delivery_jobs(session, post, target_accounts, _desired_job_status(post.status))
     sync_giveaway_campaign(session, post, target_accounts, payload.giveaway)
@@ -420,6 +459,7 @@ def update_scheduled_post(
         item.sort_order = next_sort_order + offset
         session.add(_create_attachment(post, item))
     session.flush()
+    validate_publish_override_attachment_ids(post, post.publish_overrides_json)
 
     target_ids = payload.target_account_ids
     if target_ids is None:

@@ -57,14 +57,13 @@
     <section class="dashboard-v2-shell" aria-labelledby="dashboard-v2-title">
         <div class="dashboard-v2-topbar">
             <div class="dashboard-v2-title-block">
-                <div class="dashboard-v2-kicker">Dashboard V2</div>
+                <div class="dashboard-v2-kicker">Operations</div>
                 <h1 id="dashboard-v2-title">Ops Health</h1>
                 <div class="dashboard-v2-subtitle">Publishing, giveaways, alerts, and platform signals in one view.</div>
             </div>
             <div class="dashboard-v2-actions">
                 <span class="dashboard-v2-live-pill" id="dashboard-v2-live-update-status">{{ status_dot('green') }}Live</span>
                 <span class="dashboard-v2-live-pill">{{ timezone_indicator() }}</span>
-                <a class="btn btn-outline-secondary btn-sm" href="/">Classic</a>
                 {% if current_principal.is_user %}
                 <a class="btn btn-primary btn-sm" href="/scheduled-posts/new/page">Create Post</a>
                 {% endif %}
@@ -277,7 +276,7 @@
                     <section class="dashboard-v2-panel">
                         <div class="dashboard-v2-panel-head">
                             <div>
-                                <div class="dashboard-v2-panel-kicker">Channels</div>
+                                <div class="dashboard-v2-panel-kicker">Giveaway Activity Monitor</div>
                                 <h2>{{ model.giveaway_metrics.get("channels", 0) }} Watched</h2>
                             </div>
                         </div>
@@ -343,6 +342,10 @@
                         </div>
                     </section>
                 </div>
+                <div class="dashboard-v2-panel mt-3">
+                    {% set activity_monitor = giveaway_activity_monitor %}
+                    {% include "_giveaway_activity_monitor.html" %}
+                </div>
             </div>
 
             <div class="tab-pane fade" id="dashboard-v2-health" role="tabpanel" aria-labelledby="dashboard-v2-health-tab" tabindex="0">
@@ -371,6 +374,16 @@
                         {% endif %}
                     </section>
                 </div>
+                {% if current_principal.is_admin and instagram_webhook_observability %}
+                <div class="dashboard-v2-panel mt-3" id="instagram-webhooks">
+                    {% set webhook_obs = instagram_webhook_observability %}
+                    {% set instagram_webhook_panel_title = "Instagram Webhooks" %}
+                    {% set instagram_webhook_panel_subtitle = "Recent official Graph webhook events and giveaway matching signals." %}
+                    {% set instagram_webhook_panel_cta_href = "/logs/page#instagram-webhooks" %}
+                    {% set instagram_webhook_panel_cta_label = "Open Logs" %}
+                    {% include "_instagram_webhook_observability.html" %}
+                </div>
+                {% endif %}
             </div>
         </div>
     </section>

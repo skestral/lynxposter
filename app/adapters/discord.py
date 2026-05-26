@@ -8,7 +8,7 @@ import requests
 from sqlalchemy.orm import Session
 
 from app.adapters.base import ConfigurationError, DestinationAdapter, get_account_credentials, get_account_publish_setting
-from app.adapters.common import service_body
+from app.adapters.common import service_attachments, service_body
 from app.domain import PublishPreview, PublishResult, ValidationIssue
 from app.models import Account, CanonicalPost, DeliveryJob, Persona
 
@@ -82,11 +82,11 @@ def render_discord_content(post: CanonicalPost, persona: Persona, account: Accou
     return content
 
 
-def _discord_uploadable_attachments(post: CanonicalPost) -> list[Any]:
+def _discord_uploadable_attachments(post: CanonicalPost, account: Account) -> list[Any]:
     uploadable_prefixes = ("image/", "video/", "audio/")
     return [
         attachment
-        for attachment in sorted(post.attachments, key=lambda item: item.sort_order)
+        for attachment in service_attachments(post, account)
         if str(attachment.mime_type or "").lower().startswith(uploadable_prefixes)
     ]
 
@@ -117,7 +117,7 @@ class DiscordDestinationAdapter(DestinationAdapter):
                     "mime_type": attachment.mime_type,
                     "alt_text": attachment.alt_text,
                 }
-                for attachment in _discord_uploadable_attachments(post)
+                for attachment in _discord_uploadable_attachments(post, account)
             ],
         }
         return PublishPreview(
@@ -148,7 +148,7 @@ class DiscordDestinationAdapter(DestinationAdapter):
         files = {}
         handles = []
         try:
-            for index, attachment in enumerate(_discord_uploadable_attachments(post)):
+            for index, attachment in enumerate(_discord_uploadable_attachments(post, account)):
                 handle = Path(attachment.storage_path).open("rb")
                 handles.append(handle)
                 files[f"files[{index}]"] = (Path(attachment.storage_path).name, handle, attachment.mime_type)

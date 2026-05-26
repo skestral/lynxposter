@@ -5,7 +5,7 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from app.adapters.base import ConfigurationError, DestinationAdapter, get_account_credentials
-from app.adapters.common import service_body
+from app.adapters.common import service_attachments, service_body
 from app.domain import PublishPreview, PublishResult, ValidationIssue
 from app.models import Account, CanonicalPost, Persona
 
@@ -16,9 +16,10 @@ class TwitterDestinationAdapter(DestinationAdapter):
     def validate(self, post: CanonicalPost, persona: Persona, account: Account) -> list[ValidationIssue]:
         issues: list[ValidationIssue] = []
         body = service_body(post, account)
+        attachments = service_attachments(post, account)
         if len(body) > 280:
             issues.append(ValidationIssue(service="twitter", field="body", message="Twitter posts are limited to 280 characters in v1."))
-        if len(post.attachments) > 4:
+        if len(attachments) > 4:
             issues.append(ValidationIssue(service="twitter", field="media", message="Twitter supports up to 4 attachments per post."))
         return issues
 
@@ -30,14 +31,15 @@ class TwitterDestinationAdapter(DestinationAdapter):
         *,
         context: dict[str, str | None] | None = None,
     ) -> PublishPreview:
+        attachments = service_attachments(post, account)
         request_shape = {
             "text": service_body(post, account),
-            "media_ids": [f"<uploaded-media-{index + 1}>" for index, _ in enumerate(sorted(post.attachments, key=lambda item: item.sort_order))],
+            "media_ids": [f"<uploaded-media-{index + 1}>" for index, _ in enumerate(attachments)],
             "in_reply_to_tweet_id": (context or {}).get("reply_external_id"),
             "quote_tweet_id": (context or {}).get("quote_external_id"),
         }
         notes = []
-        if post.attachments:
+        if attachments:
             notes.append("Media uploads are skipped in sandbox mode, so media_ids are placeholders.")
         return PublishPreview(
             service="twitter",
@@ -78,9 +80,10 @@ class TwitterDestinationAdapter(DestinationAdapter):
         api = tweepy.API(oauth)
 
         media_ids = None
-        if post.attachments:
+        attachments = service_attachments(post, account)
+        if attachments:
             media_ids = []
-            for attachment in sorted(post.attachments, key=lambda item: item.sort_order):
+            for attachment in attachments:
                 media = api.media_upload(filename=str(Path(attachment.storage_path)))
                 if attachment.alt_text:
                     api.create_media_metadata(media.media_id, attachment.alt_text[:1000])

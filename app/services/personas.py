@@ -1,34 +1,220 @@
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import exists, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.adapters import account_is_configured, get_service_definition, supports_destination, supports_source
-from app.models import Account, AccountPostRef, AccountRoute, AccountSyncState, AlertEvent, CanonicalPost, DeliveryJob, Persona, RunEvent
+from app.models import Account, AccountPostRef, AccountRoute, AccountSyncState, AlertEvent, CanonicalPost, DeliveryJob, Persona, PersonaAccess, RunEvent, User
 from app.services.instagram_private_api import apply_instagram_private_settings
 from app.schemas import AccountRead
 from app.services.instagram_tokens import apply_instagram_token_tracking, record_instagram_token_refresh
 
 _LEGACY_PERSONA_PUBLISH_KEYS = ("mastodon_lang", "twitter_lang")
+PERSONA_PERMISSION_ORDER = {"view": 1, "edit": 2}
 
 
-def list_personas(session: Session, *, owner_user_id: str | None = None) -> list[Persona]:
-    stmt = select(Persona).options(selectinload(Persona.accounts)).order_by(Persona.name)
+def normalize_persona_permission(value: str | None) -> str:
+    normalized = str(value or "view").strip().lower()
+    if normalized not in PERSONA_PERMISSION_ORDER:
+        raise ValueError("Persona access permission must be view or edit.")
+    return normalized
+
+
+def _allowed_persona_permissions(min_permission: str) -> list[str]:
+    minimum = PERSONA_PERMISSION_ORDER[normalize_persona_permission(min_permission)]
+    return [permission for permission, level in PERSONA_PERMISSION_ORDER.items() if level >= minimum]
+
+
+def _active_persona_access_clause(access_user_id: str | None, min_permission: str = "view"):
+    if access_user_id is None:
+        return None
+    return exists().where(
+        PersonaAccess.persona_id == Persona.id,
+        PersonaAccess.user_id == access_user_id,
+        PersonaAccess.status == "active",
+        PersonaAccess.permission.in_(_allowed_persona_permissions(min_permission)),
+    )
+
+
+def _persona_visibility_clause(
+    *,
+    owner_user_id: str | None = None,
+    access_user_id: str | None = None,
+    min_permission: str = "view",
+):
+    clauses = []
     if owner_user_id is not None:
-        stmt = stmt.where(Persona.owner_user_id == owner_user_id)
+        clauses.append(Persona.owner_user_id == owner_user_id)
+    access_clause = _active_persona_access_clause(access_user_id, min_permission)
+    if access_clause is not None:
+        clauses.append(access_clause)
+    if not clauses:
+        return None
+    return or_(*clauses)
+
+
+def list_personas(
+    session: Session,
+    *,
+    owner_user_id: str | None = None,
+    access_user_id: str | None = None,
+    min_permission: str = "view",
+) -> list[Persona]:
+    stmt = select(Persona).options(selectinload(Persona.accounts)).order_by(Persona.name)
+    visibility_clause = _persona_visibility_clause(
+        owner_user_id=owner_user_id,
+        access_user_id=access_user_id,
+        min_permission=min_permission,
+    )
+    if visibility_clause is not None:
+        stmt = stmt.where(visibility_clause)
     return list(session.scalars(stmt))
 
 
-def get_persona(session: Session, persona_id: str, *, owner_user_id: str | None = None) -> Persona | None:
+def get_persona(
+    session: Session,
+    persona_id: str,
+    *,
+    owner_user_id: str | None = None,
+    access_user_id: str | None = None,
+    min_permission: str = "view",
+) -> Persona | None:
     stmt = (
         select(Persona)
-        .options(selectinload(Persona.accounts))
+        .options(selectinload(Persona.accounts), selectinload(Persona.access_entries))
         .where(Persona.id == persona_id)
         .execution_options(populate_existing=True)
     )
-    if owner_user_id is not None:
-        stmt = stmt.where(Persona.owner_user_id == owner_user_id)
+    visibility_clause = _persona_visibility_clause(
+        owner_user_id=owner_user_id,
+        access_user_id=access_user_id,
+        min_permission=min_permission,
+    )
+    if visibility_clause is not None:
+        stmt = stmt.where(visibility_clause)
     return session.scalar(stmt)
+
+
+def user_can_manage_persona_access(persona: Persona, user_id: str | None, *, is_admin: bool = False) -> bool:
+    if is_admin:
+        return True
+    if user_id is None:
+        return persona.owner_user_id is None
+    return persona.owner_user_id == user_id
+
+
+def persona_user_permission(persona: Persona, user_id: str | None, *, is_admin: bool = False) -> str | None:
+    if is_admin or user_can_manage_persona_access(persona, user_id):
+        return "owner"
+    if user_id is None:
+        return None
+    for access in persona.access_entries or []:
+        if access.user_id == user_id and access.status == "active":
+            return normalize_persona_permission(access.permission)
+    return None
+
+
+def _normalize_access_email(value: str | None) -> str | None:
+    normalized = str(value or "").strip().lower()
+    return normalized or None
+
+
+def _find_user_for_access(session: Session, *, user_id: str | None = None, email: str | None = None) -> User | None:
+    if user_id:
+        user = session.get(User, user_id)
+        if user:
+            return user
+    normalized_email = _normalize_access_email(email)
+    if normalized_email:
+        return session.scalar(select(User).where(User.email == normalized_email))
+    return None
+
+
+def list_persona_access(session: Session, persona: Persona) -> list[PersonaAccess]:
+    stmt = (
+        select(PersonaAccess)
+        .where(PersonaAccess.persona_id == persona.id)
+        .order_by(PersonaAccess.status, PersonaAccess.email, PersonaAccess.user_id)
+    )
+    return list(session.scalars(stmt))
+
+
+def create_persona_access(
+    session: Session,
+    persona: Persona,
+    payload: dict,
+    *,
+    created_by_user_id: str | None = None,
+) -> PersonaAccess:
+    permission = normalize_persona_permission(payload.get("permission"))
+    requested_email = _normalize_access_email(payload.get("email"))
+    requested_user_id = str(payload.get("user_id") or "").strip() or None
+    user = _find_user_for_access(session, user_id=requested_user_id, email=requested_email)
+    user_id = user.id if user else requested_user_id
+    email = _normalize_access_email(user.email if user and user.email else requested_email)
+
+    if not user_id and not email:
+        raise ValueError("Choose a user or enter an email address to share with.")
+    if user_id and user_id == persona.owner_user_id:
+        raise ValueError("The owner already has full control of this persona.")
+
+    existing = None
+    if user_id:
+        existing = session.scalar(
+            select(PersonaAccess).where(PersonaAccess.persona_id == persona.id, PersonaAccess.user_id == user_id)
+        )
+    if existing is None and email:
+        existing = session.scalar(
+            select(PersonaAccess).where(PersonaAccess.persona_id == persona.id, PersonaAccess.email == email)
+        )
+
+    if existing is not None:
+        existing.user_id = user_id or existing.user_id
+        existing.email = email or existing.email
+        existing.permission = permission
+        existing.status = "active" if user_id else "pending"
+        session.flush()
+        return existing
+
+    access = PersonaAccess(
+        persona_id=persona.id,
+        user_id=user_id,
+        email=email,
+        permission=permission,
+        status="active" if user_id else "pending",
+        created_by_user_id=created_by_user_id,
+    )
+    session.add(access)
+    session.flush()
+    return access
+
+
+def update_persona_access(session: Session, persona: Persona, access_id: str, payload: dict) -> PersonaAccess:
+    access = session.get(PersonaAccess, access_id)
+    if access is None or access.persona_id != persona.id:
+        raise ValueError("Persona sharing entry not found.")
+    if payload.get("permission") is not None:
+        access.permission = normalize_persona_permission(payload.get("permission"))
+    if payload.get("status") is not None:
+        status = str(payload.get("status") or "").strip().lower()
+        if status not in {"pending", "active"}:
+            raise ValueError("Persona sharing status must be pending or active.")
+        if status == "active" and not access.user_id:
+            user = _find_user_for_access(session, email=access.email)
+            if user is None:
+                raise ValueError("A pending email invite can only become active after it matches a local user.")
+            access.user_id = user.id
+        access.status = status
+    session.flush()
+    return access
+
+
+def delete_persona_access(session: Session, persona: Persona, access_id: str) -> None:
+    access = session.get(PersonaAccess, access_id)
+    if access is None or access.persona_id != persona.id:
+        raise ValueError("Persona sharing entry not found.")
+    session.delete(access)
+    session.flush()
 
 
 def get_account(session: Session, account_id: str) -> Account | None:
@@ -268,7 +454,7 @@ def persona_destination_accounts(persona: Persona) -> list[Account]:
     return [account for account in sorted(persona.accounts, key=lambda item: (item.label, item.service)) if account.is_enabled and account.destination_enabled]
 
 
-def account_to_read(account: Account) -> AccountRead:
+def account_to_read(account: Account, *, include_credentials: bool = True) -> AccountRead:
     definition = get_service_definition(account.service)
     return AccountRead(
         id=account.id,
@@ -279,7 +465,7 @@ def account_to_read(account: Account) -> AccountRead:
         is_enabled=account.is_enabled,
         source_enabled=account.source_enabled,
         destination_enabled=account.destination_enabled,
-        credentials_json=dict(account.credentials_json or {}),
+        credentials_json=dict(account.credentials_json or {}) if include_credentials else {},
         source_settings_json=dict(account.source_settings_json or {}),
         publish_settings_json=dict(account.publish_settings_json or {}),
         last_health_status=account.last_health_status,

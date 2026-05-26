@@ -33,6 +33,9 @@ from app.schemas import (
     AppSettingsUpdate,
     AlertEventRead,
     PersonaCreate,
+    PersonaAccessCreate,
+    PersonaAccessRead,
+    PersonaAccessUpdate,
     PersonaRead,
     PersonaUpdate,
     RunEventRead,
@@ -102,17 +105,23 @@ from app.services.oidc import oidc_group_mapping_enabled, oidc_scope_includes_gr
 from app.services.personas import (
     account_to_read,
     create_account,
+    create_persona_access,
     create_persona,
     delete_account,
+    delete_persona_access,
     get_account,
     get_persona,
+    list_persona_access,
     list_personas,
     list_routes,
     persona_destination_accounts,
+    persona_user_permission,
     record_account_token_refresh,
     replace_routes,
+    update_persona_access,
     update_account,
     update_persona,
+    user_can_manage_persona_access,
 )
 from app.services.posts import (
     build_delivery_states,
@@ -242,6 +251,18 @@ def _owner_user_id_for_principal(principal: Principal) -> str | None:
     return principal.user_id if principal.is_user else None
 
 
+def _access_user_id_for_principal(principal: Principal) -> str | None:
+    return principal.user_id if principal.is_user and principal.user_id else None
+
+
+def _persona_access_kwargs(principal: Principal, *, min_permission: str = "view") -> dict[str, str | None]:
+    return {
+        "owner_user_id": _owner_user_id_for_principal(principal),
+        "access_user_id": _access_user_id_for_principal(principal),
+        "min_permission": min_permission,
+    }
+
+
 def _load_user_settings_subject(session, principal: Principal):
     if not principal.user_id:
         raise HTTPException(status_code=404, detail="User settings are only available when OIDC authentication is enabled.")
@@ -344,8 +365,8 @@ def _parse_json_value(raw: str | None, default: Any) -> Any:
     return json.loads(raw)
 
 
-def _serialize_account(account) -> AccountRead:
-    return account_to_read(account)
+def _serialize_account(account, *, include_credentials: bool = True) -> AccountRead:
+    return account_to_read(account, include_credentials=include_credentials)
 
 
 def _serialize_route(route: AccountRoute) -> AccountRouteRead:
@@ -414,11 +435,11 @@ def _sandbox_seed_from_post(post: CanonicalPost) -> dict[str, Any]:
     }
 
 
-def _account_template_context(account) -> dict[str, Any]:
+def _account_template_context(account, *, include_credentials: bool = True) -> dict[str, Any]:
     definition = next(defn for defn in iter_service_definitions() if defn.service == account.service)
     return {
         "account": account,
-        "account_read": _serialize_account(account),
+        "account_read": _serialize_account(account, include_credentials=include_credentials),
         "definition": definition,
         "publish_field_values": {
             field.name: get_account_publish_setting(
@@ -430,7 +451,7 @@ def _account_template_context(account) -> dict[str, Any]:
             )
             for field in definition.publish_setting_fields
         },
-        "instagram_token_status": build_instagram_token_status(account),
+        "instagram_token_status": build_instagram_token_status(account) if include_credentials else None,
     }
 
 
@@ -887,53 +908,10 @@ def dashboard(request: Request) -> HTMLResponse:
     principal = guarded
     with db_session() as session:
         owner_user_id = _owner_user_id_for_principal(principal)
+        access_user_id = _access_user_id_for_principal(principal)
         activity_filters = _dashboard_activity_filters_from_request(request)
-        personas = list_personas(session, owner_user_id=owner_user_id)
-        posts = list_scheduled_posts(session, owner_user_id=owner_user_id)[:10]
-        run_events = [serialize_run_event(event) for event in list_run_events(session, limit=60, owner_user_id=owner_user_id)]
-        alert_events = [
-            serialize_alert_event(event)
-            for event in _visible_dashboard_alerts(request, list_alert_events(session, limit=100, owner_user_id=owner_user_id))
-        ]
-        run_groups = summarize_run_events(run_events, limit_runs=6)
-        account_count = sum(len(persona.accounts) for persona in personas)
-        webhook_observability = instagram_webhook_observability(session, window_days=7, recent_limit=12, field_limit=6) if principal.is_admin else None
-        giveaway_activity_monitor = build_dashboard_giveaway_activity_monitor(
-            session,
-            owner_user_id=owner_user_id,
-            filters=activity_filters,
-        )
-        return templates.TemplateResponse(
-            name="dashboard.html",
-            request=request,
-            context=_template_context(
-                request,
-                personas=personas,
-                account_count=account_count,
-                posts=[_serialize_post(post) for post in posts],
-                persona_name_by_id={persona.id: persona.name for persona in personas},
-                run_groups=run_groups,
-                alert_events=alert_events,
-                instagram_webhook_observability=webhook_observability,
-                giveaway_activity_monitor=giveaway_activity_monitor,
-                scheduler_status=_scheduler_service(request).get_status(),
-                admin_mode=bool(auth_enabled() and principal.is_admin),
-                cleared_dashboard_alert_count=_coerce_int_query_param(request.query_params.get("alerts_cleared")),
-            ),
-        )
-
-
-@app.get("/dashboard-v2", response_class=HTMLResponse)
-def dashboard_v2(request: Request) -> HTMLResponse:
-    guarded = _page_guard(request)
-    if isinstance(guarded, RedirectResponse):
-        return guarded
-    principal = guarded
-    with db_session() as session:
-        owner_user_id = _owner_user_id_for_principal(principal)
-        activity_filters = _dashboard_activity_filters_from_request(request)
-        personas = list_personas(session, owner_user_id=owner_user_id)
-        posts = [_serialize_post(post) for post in list_scheduled_posts(session, owner_user_id=owner_user_id)]
+        personas = list_personas(session, owner_user_id=owner_user_id, access_user_id=access_user_id)
+        posts = [_serialize_post(post) for post in list_scheduled_posts(session, owner_user_id=owner_user_id, access_user_id=access_user_id)]
         run_events = [serialize_run_event(event) for event in list_run_events(session, limit=80, owner_user_id=owner_user_id)]
         alert_events = [
             serialize_alert_event(event)
@@ -977,6 +955,14 @@ def dashboard_v2(request: Request) -> HTMLResponse:
         )
 
 
+@app.get("/dashboard-v2", response_class=HTMLResponse)
+def dashboard_v2(request: Request) -> HTMLResponse:
+    target = "/"
+    if request.url.query:
+        target = f"/?{request.url.query}"
+    return RedirectResponse(url=target, status_code=307)
+
+
 @app.post("/dashboard/alerts/clear")
 async def clear_dashboard_alerts(request: Request) -> RedirectResponse:
     guarded = _page_guard(request)
@@ -1002,7 +988,7 @@ def personas_page(request: Request) -> HTMLResponse:
         return guarded
     principal = guarded
     with db_session() as session:
-        personas = list_personas(session, owner_user_id=_owner_user_id_for_principal(principal))
+        personas = list_personas(session, **_persona_access_kwargs(principal))
         return templates.TemplateResponse(
             name="personas.html",
             request=request,
@@ -1017,10 +1003,19 @@ def persona_detail_page(persona_id: str, request: Request) -> HTMLResponse:
         return guarded
     principal = guarded
     with db_session() as session:
-        persona = get_persona(session, persona_id, owner_user_id=_owner_user_id_for_principal(principal))
+        persona = get_persona(session, persona_id, **_persona_access_kwargs(principal))
         if not persona:
             raise HTTPException(status_code=404, detail="Persona not found.")
-        accounts = [_account_template_context(account) for account in sorted(persona.accounts, key=lambda item: (item.label, item.service))]
+        can_manage_credentials = user_can_manage_persona_access(
+            persona,
+            principal.user_id,
+            is_admin=principal.is_admin,
+        )
+        persona_access_entries = list_persona_access(session, persona) if can_manage_credentials else []
+        accounts = [
+            _account_template_context(account, include_credentials=can_manage_credentials)
+            for account in sorted(persona.accounts, key=lambda item: (item.label, item.service))
+        ]
         routes = list_routes(session, persona)
         source_accounts = [account for account in persona.accounts if account.source_enabled]
         destination_accounts = [account for account in persona.accounts if account.destination_enabled]
@@ -1037,6 +1032,10 @@ def persona_detail_page(persona_id: str, request: Request) -> HTMLResponse:
                 source_accounts=source_accounts,
                 destination_accounts=destination_accounts,
                 service_definitions=iter_service_definitions(),
+                persona_access_entries=persona_access_entries,
+                persona_access_permission=persona_user_permission(persona, principal.user_id, is_admin=principal.is_admin),
+                can_manage_persona_sharing=can_manage_credentials,
+                can_manage_persona_credentials=can_manage_credentials,
             ),
         )
 
@@ -1049,8 +1048,9 @@ def scheduled_posts_page(request: Request) -> HTMLResponse:
     principal = guarded
     with db_session() as session:
         owner_user_id = _owner_user_id_for_principal(principal)
-        posts = list_scheduled_posts(session, owner_user_id=owner_user_id)
-        personas = list_personas(session, owner_user_id=owner_user_id)
+        access_user_id = _access_user_id_for_principal(principal)
+        posts = list_scheduled_posts(session, owner_user_id=owner_user_id, access_user_id=access_user_id)
+        personas = list_personas(session, owner_user_id=owner_user_id, access_user_id=access_user_id)
         return templates.TemplateResponse(
             name="scheduled_posts.html",
             request=request,
@@ -1073,7 +1073,7 @@ def scheduled_post_create_page(request: Request) -> HTMLResponse:
     principal = guarded
     with db_session() as session:
         owner_user_id = _owner_user_id_for_principal(principal)
-        personas = list_personas(session, owner_user_id=owner_user_id)
+        personas = list_personas(session, owner_user_id=owner_user_id, access_user_id=_access_user_id_for_principal(principal), min_permission="edit")
         return templates.TemplateResponse(
             name="scheduled_post_create.html",
             request=request,
@@ -1094,10 +1094,11 @@ def scheduled_post_detail_page(post_id: str, request: Request) -> HTMLResponse:
     principal = guarded
     with db_session() as session:
         owner_user_id = _owner_user_id_for_principal(principal)
-        post = get_post(session, post_id, owner_user_id=owner_user_id)
+        access_user_id = _access_user_id_for_principal(principal)
+        post = get_post(session, post_id, owner_user_id=owner_user_id, access_user_id=access_user_id)
         if not post or post.origin_kind != "composer":
             raise HTTPException(status_code=404, detail="Scheduled post not found.")
-        persona = get_persona(session, post.persona_id, owner_user_id=owner_user_id)
+        persona = get_persona(session, post.persona_id, owner_user_id=owner_user_id, access_user_id=access_user_id)
         if not persona:
             raise HTTPException(status_code=404, detail="Persona not found.")
         return templates.TemplateResponse(
@@ -1223,11 +1224,12 @@ def sandbox_page(request: Request, post_id: str | None = None) -> HTMLResponse:
     principal = guarded
     with db_session() as session:
         owner_user_id = _owner_user_id_for_principal(principal)
-        personas = list_personas(session, owner_user_id=owner_user_id)
+        access_user_id = _access_user_id_for_principal(principal)
+        personas = list_personas(session, owner_user_id=owner_user_id, access_user_id=access_user_id)
         sandbox_seed: dict[str, Any] | None = None
         sandbox_source_label: str | None = None
         if post_id:
-            post = get_post(session, post_id, owner_user_id=owner_user_id)
+            post = get_post(session, post_id, owner_user_id=owner_user_id, access_user_id=access_user_id)
             if not post:
                 raise HTTPException(status_code=404, detail="Scheduled post not found.")
             sandbox_seed = _sandbox_seed_from_post(post)
@@ -1256,7 +1258,7 @@ def logs_page(request: Request) -> HTMLResponse:
     cleared_count = request.query_params.get("cleared")
     with db_session() as session:
         owner_user_id = _owner_user_id_for_principal(principal)
-        personas = list_personas(session, owner_user_id=owner_user_id)
+        personas = list_personas(session, owner_user_id=owner_user_id, access_user_id=_access_user_id_for_principal(principal))
         accounts = [_serialize_account(account) for persona in personas for account in persona.accounts]
         run_events = [serialize_run_event(event) for event in list_run_events(session, filters=filters, limit=150, owner_user_id=owner_user_id)]
         run_groups = summarize_run_events(run_events)
@@ -1520,7 +1522,7 @@ def api_run_scheduler(request: Request) -> dict[str, Any]:
 def api_personas(request: Request) -> list[PersonaRead]:
     principal = require_api_access(request, role="user")
     with db_session() as session:
-        return [PersonaRead.model_validate(persona) for persona in list_personas(session, owner_user_id=_owner_user_id_for_principal(principal))]
+        return [PersonaRead.model_validate(persona) for persona in list_personas(session, **_persona_access_kwargs(principal))]
 
 
 @app.post("/personas")
@@ -1540,7 +1542,7 @@ async def api_create_persona(request: Request) -> PersonaRead:
 def api_persona_detail(persona_id: str, request: Request) -> PersonaRead:
     principal = require_api_access(request, role="user")
     with db_session() as session:
-        persona = get_persona(session, persona_id, owner_user_id=_owner_user_id_for_principal(principal))
+        persona = get_persona(session, persona_id, **_persona_access_kwargs(principal))
         if not persona:
             raise HTTPException(status_code=404, detail="Persona not found.")
         return PersonaRead.model_validate(persona)
@@ -1552,7 +1554,7 @@ async def api_update_persona(persona_id: str, request: Request) -> PersonaRead:
     raw_payload = await _read_persona_payload(request)
     payload = PersonaUpdate.model_validate(raw_payload)
     with db_session() as session:
-        persona = get_persona(session, persona_id, owner_user_id=_owner_user_id_for_principal(principal))
+        persona = get_persona(session, persona_id, **_persona_access_kwargs(principal, min_permission="edit"))
         if not persona:
             raise HTTPException(status_code=404, detail="Persona not found.")
         updated = update_persona(session, persona, payload.model_dump(exclude_unset=True))
@@ -1563,10 +1565,81 @@ async def api_update_persona(persona_id: str, request: Request) -> PersonaRead:
 def api_persona_accounts(persona_id: str, request: Request) -> list[AccountRead]:
     principal = require_api_access(request, role="user")
     with db_session() as session:
-        persona = get_persona(session, persona_id, owner_user_id=_owner_user_id_for_principal(principal))
+        persona = get_persona(session, persona_id, **_persona_access_kwargs(principal))
         if not persona:
             raise HTTPException(status_code=404, detail="Persona not found.")
-        return [_serialize_account(account) for account in sorted(persona.accounts, key=lambda item: (item.label, item.service))]
+        include_credentials = user_can_manage_persona_access(persona, principal.user_id, is_admin=principal.is_admin)
+        return [
+            _serialize_account(account, include_credentials=include_credentials)
+            for account in sorted(persona.accounts, key=lambda item: (item.label, item.service))
+        ]
+
+
+@app.get("/personas/{persona_id}/access")
+def api_persona_access(persona_id: str, request: Request) -> list[PersonaAccessRead]:
+    principal = require_api_access(request, role="user")
+    with db_session() as session:
+        persona = get_persona(session, persona_id, **_persona_access_kwargs(principal))
+        if not persona:
+            raise HTTPException(status_code=404, detail="Persona not found.")
+        if not user_can_manage_persona_access(persona, principal.user_id, is_admin=principal.is_admin):
+            raise HTTPException(status_code=403, detail="Only the persona owner can manage sharing.")
+        return [PersonaAccessRead.model_validate(access) for access in list_persona_access(session, persona)]
+
+
+@app.post("/personas/{persona_id}/access")
+async def api_create_persona_access(persona_id: str, request: Request) -> PersonaAccessRead:
+    principal = require_api_access(request, role="user")
+    payload = PersonaAccessCreate.model_validate(await request.json())
+    with db_session() as session:
+        persona = get_persona(session, persona_id, **_persona_access_kwargs(principal))
+        if not persona:
+            raise HTTPException(status_code=404, detail="Persona not found.")
+        if not user_can_manage_persona_access(persona, principal.user_id, is_admin=principal.is_admin):
+            raise HTTPException(status_code=403, detail="Only the persona owner can manage sharing.")
+        try:
+            access = create_persona_access(
+                session,
+                persona,
+                payload.model_dump(exclude_unset=True),
+                created_by_user_id=principal.user_id,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return PersonaAccessRead.model_validate(access)
+
+
+@app.put("/personas/{persona_id}/access/{access_id}")
+async def api_update_persona_access(persona_id: str, access_id: str, request: Request) -> PersonaAccessRead:
+    principal = require_api_access(request, role="user")
+    payload = PersonaAccessUpdate.model_validate(await request.json())
+    with db_session() as session:
+        persona = get_persona(session, persona_id, **_persona_access_kwargs(principal))
+        if not persona:
+            raise HTTPException(status_code=404, detail="Persona not found.")
+        if not user_can_manage_persona_access(persona, principal.user_id, is_admin=principal.is_admin):
+            raise HTTPException(status_code=403, detail="Only the persona owner can manage sharing.")
+        try:
+            access = update_persona_access(session, persona, access_id, payload.model_dump(exclude_unset=True))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return PersonaAccessRead.model_validate(access)
+
+
+@app.delete("/personas/{persona_id}/access/{access_id}")
+def api_delete_persona_access(persona_id: str, access_id: str, request: Request) -> dict[str, Any]:
+    principal = require_api_access(request, role="user")
+    with db_session() as session:
+        persona = get_persona(session, persona_id, **_persona_access_kwargs(principal))
+        if not persona:
+            raise HTTPException(status_code=404, detail="Persona not found.")
+        if not user_can_manage_persona_access(persona, principal.user_id, is_admin=principal.is_admin):
+            raise HTTPException(status_code=403, detail="Only the persona owner can manage sharing.")
+        try:
+            delete_persona_access(session, persona, access_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return {"deleted_access_id": access_id}
 
 
 @app.post("/personas/{persona_id}/accounts")
@@ -1707,7 +1780,7 @@ def api_record_instagram_token_refresh(persona_id: str, account_id: str, request
 def api_persona_routes(persona_id: str, request: Request) -> list[AccountRouteRead]:
     principal = require_api_access(request, role="user")
     with db_session() as session:
-        persona = get_persona(session, persona_id, owner_user_id=_owner_user_id_for_principal(principal))
+        persona = get_persona(session, persona_id, **_persona_access_kwargs(principal))
         if not persona:
             raise HTTPException(status_code=404, detail="Persona not found.")
         return [_serialize_route(route) for route in list_routes(session, persona)]
@@ -1719,7 +1792,7 @@ async def api_replace_routes(persona_id: str, request: Request) -> list[AccountR
     raw_payload = await _read_routes_payload(request)
     payload = AccountRouteReplaceRequest.model_validate(raw_payload)
     with db_session() as session:
-        persona = get_persona(session, persona_id, owner_user_id=_owner_user_id_for_principal(principal))
+        persona = get_persona(session, persona_id, **_persona_access_kwargs(principal, min_permission="edit"))
         if not persona:
             raise HTTPException(status_code=404, detail="Persona not found.")
         try:
@@ -1733,7 +1806,7 @@ async def api_replace_routes(persona_id: str, request: Request) -> list[AccountR
 def api_scheduled_posts(request: Request) -> list[ScheduledPostRead]:
     principal = require_api_access(request, role="user")
     with db_session() as session:
-        return [_serialize_post(post) for post in list_scheduled_posts(session, owner_user_id=_owner_user_id_for_principal(principal))]
+        return [_serialize_post(post) for post in list_scheduled_posts(session, **_persona_access_kwargs(principal))]
 
 
 @app.post("/scheduled-posts")
@@ -1746,7 +1819,7 @@ async def api_create_scheduled_post(request: Request) -> ScheduledPostRead:
         alt_text = alt_texts[index] if index < len(alt_texts) else ""
         media_items.append(await store_upload(upload, alt_text=alt_text, sort_order=index))
     with db_session() as session:
-        persona = get_persona(session, payload.persona_id, owner_user_id=_owner_user_id_for_principal(principal))
+        persona = get_persona(session, payload.persona_id, **_persona_access_kwargs(principal, min_permission="edit"))
         if not persona:
             raise HTTPException(status_code=404, detail="Persona not found.")
         try:
@@ -1764,7 +1837,7 @@ async def api_create_scheduled_post(request: Request) -> ScheduledPostRead:
 def api_scheduled_post_detail(post_id: str, request: Request) -> ScheduledPostRead:
     principal = require_api_access(request, role="user")
     with db_session() as session:
-        post = get_post(session, post_id, owner_user_id=_owner_user_id_for_principal(principal))
+        post = get_post(session, post_id, **_persona_access_kwargs(principal))
         if not post or post.origin_kind != "composer":
             raise HTTPException(status_code=404, detail="Scheduled post not found.")
         return _serialize_post(post)
@@ -1774,7 +1847,7 @@ def api_scheduled_post_detail(post_id: str, request: Request) -> ScheduledPostRe
 def api_scheduled_post_giveaway(post_id: str, request: Request):
     principal = require_api_access(request, role="user")
     with db_session() as session:
-        post = get_post(session, post_id, owner_user_id=_owner_user_id_for_principal(principal))
+        post = get_post(session, post_id, **_persona_access_kwargs(principal))
         if not post or post.origin_kind != "composer" or post.post_type != POST_TYPE_GIVEAWAY:
             raise HTTPException(status_code=404, detail="Giveaway not found.")
         if post.giveaway_campaign is None:
@@ -1789,7 +1862,7 @@ async def api_update_scheduled_post(post_id: str, request: Request) -> Scheduled
     payload = ScheduledPostUpdate.model_validate(raw_payload)
     media_items = []
     with db_session() as session:
-        post = get_post(session, post_id, owner_user_id=_owner_user_id_for_principal(principal))
+        post = get_post(session, post_id, **_persona_access_kwargs(principal, min_permission="edit"))
         if not post or post.origin_kind != "composer":
             raise HTTPException(status_code=404, detail="Scheduled post not found.")
         next_sort_order = len(post.attachments)
@@ -1797,7 +1870,7 @@ async def api_update_scheduled_post(post_id: str, request: Request) -> Scheduled
             alt_text = alt_texts[index] if index < len(alt_texts) else ""
             media_items.append(await store_upload(upload, alt_text=alt_text, sort_order=next_sort_order + index))
     with db_session() as session:
-        post = get_post(session, post_id, owner_user_id=_owner_user_id_for_principal(principal))
+        post = get_post(session, post_id, **_persona_access_kwargs(principal, min_permission="edit"))
         if not post or post.origin_kind != "composer":
             raise HTTPException(status_code=404, detail="Scheduled post not found.")
         try:
@@ -1815,7 +1888,7 @@ async def api_update_scheduled_post(post_id: str, request: Request) -> Scheduled
 def api_delete_scheduled_post(post_id: str, request: Request) -> dict[str, Any]:
     principal = require_api_access(request, role="user")
     with db_session() as session:
-        post = get_post(session, post_id, owner_user_id=_owner_user_id_for_principal(principal))
+        post = get_post(session, post_id, **_persona_access_kwargs(principal, min_permission="edit"))
         if not post or post.origin_kind != "composer":
             raise HTTPException(status_code=404, detail="Scheduled post not found.")
         try:
@@ -1834,7 +1907,7 @@ def api_confirm_giveaway_winner(post_id: str, request: Request):
     principal = require_api_access(request, role="user")
     pool_key = request.query_params.get("pool_key") or None
     with db_session() as session:
-        post = get_post(session, post_id, owner_user_id=_owner_user_id_for_principal(principal))
+        post = get_post(session, post_id, **_persona_access_kwargs(principal, min_permission="edit"))
         if not post or post.origin_kind != "composer" or post.giveaway_campaign is None:
             raise HTTPException(status_code=404, detail="Giveaway not found.")
         try:
@@ -1854,7 +1927,7 @@ def api_advance_giveaway_winner(post_id: str, request: Request):
     principal = require_api_access(request, role="user")
     pool_key = request.query_params.get("pool_key") or None
     with db_session() as session:
-        post = get_post(session, post_id, owner_user_id=_owner_user_id_for_principal(principal))
+        post = get_post(session, post_id, **_persona_access_kwargs(principal, min_permission="edit"))
         if not post or post.origin_kind != "composer" or post.giveaway_campaign is None:
             raise HTTPException(status_code=404, detail="Giveaway not found.")
         try:
@@ -1873,7 +1946,7 @@ def api_advance_giveaway_winner(post_id: str, request: Request):
 def api_end_giveaway(post_id: str, request: Request):
     principal = require_api_access(request, role="user")
     with db_session() as session:
-        post = get_post(session, post_id, owner_user_id=_owner_user_id_for_principal(principal))
+        post = get_post(session, post_id, **_persona_access_kwargs(principal, min_permission="edit"))
         if not post or post.origin_kind != "composer" or post.giveaway_campaign is None:
             raise HTTPException(status_code=404, detail="Giveaway not found.")
         try:
@@ -1897,7 +1970,7 @@ def api_end_giveaway(post_id: str, request: Request):
 def api_recalculate_giveaway(post_id: str, request: Request):
     principal = require_api_access(request, role="user")
     with db_session() as session:
-        post = get_post(session, post_id, owner_user_id=_owner_user_id_for_principal(principal))
+        post = get_post(session, post_id, **_persona_access_kwargs(principal, min_permission="edit"))
         if not post or post.origin_kind != "composer" or post.giveaway_campaign is None:
             raise HTTPException(status_code=404, detail="Giveaway not found.")
         updated = recalculate_giveaway_entries(
@@ -1917,7 +1990,7 @@ def api_recalculate_giveaway(post_id: str, request: Request):
 def api_rerun_giveaway_raffle(post_id: str, request: Request):
     principal = require_api_access(request, role="user")
     with db_session() as session:
-        post = get_post(session, post_id, owner_user_id=_owner_user_id_for_principal(principal))
+        post = get_post(session, post_id, **_persona_access_kwargs(principal, min_permission="edit"))
         if not post or post.origin_kind != "composer" or post.giveaway_campaign is None:
             raise HTTPException(status_code=404, detail="Giveaway not found.")
         updated = rerun_giveaway_raffle(
@@ -1950,7 +2023,7 @@ async def api_reopen_giveaway(post_id: str, request: Request):
         raise HTTPException(status_code=400, detail="Choose a new giveaway end date and time.")
 
     with db_session() as session:
-        post = get_post(session, post_id, owner_user_id=_owner_user_id_for_principal(principal))
+        post = get_post(session, post_id, **_persona_access_kwargs(principal, min_permission="edit"))
         if not post or post.origin_kind != "composer" or post.giveaway_campaign is None:
             raise HTTPException(status_code=404, detail="Giveaway not found.")
         try:
@@ -1974,7 +2047,7 @@ async def api_reopen_giveaway(post_id: str, request: Request):
 def api_scan_instagram_giveaway(post_id: str, request: Request):
     principal = require_api_access(request, role="user")
     with db_session() as session:
-        post = get_post(session, post_id, owner_user_id=_owner_user_id_for_principal(principal))
+        post = get_post(session, post_id, **_persona_access_kwargs(principal, min_permission="edit"))
         if not post or post.origin_kind != "composer" or post.giveaway_campaign is None:
             raise HTTPException(status_code=404, detail="Giveaway not found.")
         try:
@@ -1997,7 +2070,7 @@ def api_scan_instagram_giveaway(post_id: str, request: Request):
 def api_send_now(post_id: str, request: Request, background_tasks: BackgroundTasks) -> ScheduledPostRead:
     principal = require_api_access(request, role="user")
     with db_session() as session:
-        post = get_post(session, post_id, owner_user_id=_owner_user_id_for_principal(principal))
+        post = get_post(session, post_id, **_persona_access_kwargs(principal, min_permission="edit"))
         if not post or post.origin_kind != "composer":
             raise HTTPException(status_code=404, detail="Scheduled post not found.")
         try:
@@ -2020,7 +2093,7 @@ async def api_sandbox_preview(request: Request) -> SandboxPreviewRead:
     raw_payload = await request.json()
     payload = SandboxPreviewRequest.model_validate(raw_payload)
     with db_session() as session:
-        persona = get_persona(session, payload.persona_id, owner_user_id=_owner_user_id_for_principal(principal))
+        persona = get_persona(session, payload.persona_id, **_persona_access_kwargs(principal))
         if not persona:
             raise HTTPException(status_code=404, detail="Persona not found.")
         try:

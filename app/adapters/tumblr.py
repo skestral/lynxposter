@@ -5,7 +5,7 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from app.adapters.base import ConfigurationError, DestinationAdapter, get_account_credentials
-from app.adapters.common import is_video_attachment, service_body
+from app.adapters.common import is_video_attachment, service_attachments, service_body
 from app.domain import PublishPreview, PublishResult, ValidationIssue
 from app.models import Account, CanonicalPost, Persona
 
@@ -15,7 +15,7 @@ class TumblrDestinationAdapter(DestinationAdapter):
 
     def validate(self, post: CanonicalPost, persona: Persona, account: Account) -> list[ValidationIssue]:
         issues: list[ValidationIssue] = []
-        attachments = sorted(post.attachments, key=lambda item: item.sort_order)
+        attachments = service_attachments(post, account)
         video_count = sum(1 for attachment in attachments if is_video_attachment(attachment))
         image_count = len(attachments) - video_count
 
@@ -45,7 +45,7 @@ class TumblrDestinationAdapter(DestinationAdapter):
         *,
         context: dict[str, str | None] | None = None,
     ) -> PublishPreview:
-        attachments = sorted(post.attachments, key=lambda item: item.sort_order)
+        attachments = service_attachments(post, account)
         body = service_body(post, account)
         if attachments:
             image_paths = [str(Path(attachment.storage_path)) for attachment in attachments if not is_video_attachment(attachment)]
@@ -104,7 +104,7 @@ class TumblrDestinationAdapter(DestinationAdapter):
             config["oauth_token"],
             config["oauth_secret"],
         )
-        attachments = sorted(post.attachments, key=lambda item: item.sort_order)
+        attachments = service_attachments(post, account)
         body = service_body(post, account)
         if attachments:
             image_paths = [str(Path(attachment.storage_path)) for attachment in attachments if not is_video_attachment(attachment)]

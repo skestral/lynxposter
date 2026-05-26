@@ -41,6 +41,10 @@
 </div>
 {%- endmacro %}
 {% block content %}
+{% set can_manage_persona_credentials = can_manage_persona_credentials if can_manage_persona_credentials is defined else true %}
+{% set can_manage_persona_sharing = can_manage_persona_sharing if can_manage_persona_sharing is defined else false %}
+{% set persona_access_permission = persona_access_permission if persona_access_permission is defined else "owner" %}
+{% set can_edit_persona = persona_access_permission in ["owner", "edit"] %}
 <div class="card hero-card section-card mb-4">
     <div class="card-body">
         <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
@@ -71,6 +75,11 @@
     <li class="nav-item" role="presentation">
         <button class="nav-link" id="persona-routing-tab" data-bs-toggle="tab" data-bs-target="#persona-routing-pane" type="button" role="tab">Routes</button>
     </li>
+    {% if can_manage_persona_sharing %}
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="persona-sharing-tab" data-bs-toggle="tab" data-bs-target="#persona-sharing-pane" type="button" role="tab">Sharing</button>
+    </li>
+    {% endif %}
 </ul>
 
 <div class="tab-content">
@@ -172,7 +181,10 @@
                     </div>
 
                     <div class="d-flex gap-2 flex-wrap">
-                        <button class="btn btn-primary" type="submit">Save Persona</button>
+                        <button class="btn btn-primary" type="submit" {% if not can_edit_persona %}disabled{% endif %}>Save Persona</button>
+                        {% if not can_edit_persona %}
+                        <span class="small text-secondary align-self-center">View access only.</span>
+                        {% endif %}
                     </div>
                 </form>
             </div>
@@ -181,6 +193,7 @@
 
     <div class="tab-pane fade" id="persona-accounts-pane" role="tabpanel" aria-labelledby="persona-accounts-tab" tabindex="0">
         <div class="row g-4">
+            {% if can_manage_persona_credentials %}
             <div class="col-12 col-xl-5">
                 <div class="card section-card h-100">
                     <div class="card-body">
@@ -250,8 +263,9 @@
                     </div>
                 </div>
             </div>
+            {% endif %}
 
-            <div class="col-12 col-xl-7">
+            <div class="col-12 {% if can_manage_persona_credentials %}col-xl-7{% endif %}">
                 <div class="card section-card h-100">
                     <div class="card-body">
                         <div class="d-flex justify-content-between align-items-center mb-3">
@@ -289,6 +303,7 @@
                                     </div>
                                 </summary>
                                 <div class="px-3 pb-3">
+                                    {% if can_manage_persona_credentials %}
                                     <form class="account-update-form tab-pane-stack" data-account-id="{{ entry.account.id }}" data-service="{{ entry.account.service }}">
                                         <div class="surface-panel">
                                             <div class="section-kicker mb-2">Basics</div>
@@ -432,6 +447,24 @@
                                             </button>
                                         </div>
                                     </form>
+                                    {% else %}
+                                    <div class="surface-panel-soft mb-0">
+                                        <div class="row g-3">
+                                            <div class="col-md-4">
+                                                <div class="small text-secondary">Handle</div>
+                                                <div>{{ entry.account.handle_or_identifier or "-" }}</div>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <div class="small text-secondary">Inbound</div>
+                                                <div>{{ "Enabled" if entry.account.source_enabled else "Off" }}</div>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <div class="small text-secondary">Publishing</div>
+                                                <div>{{ "Enabled" if entry.account.destination_enabled else "Off" }}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% endif %}
                                 </div>
                             </details>
                             {% else %}
@@ -453,7 +486,7 @@
                         <h2 class="h5 mb-1">Delivery Map</h2>
                         <p class="text-secondary mb-0">Choose where new posts should travel when this persona watches a source account for incoming content.</p>
                     </div>
-                    <button class="btn btn-primary" id="save-routes-button" {% if not source_accounts or not destination_accounts %}disabled{% endif %}>Save Routes</button>
+                    <button class="btn btn-primary" id="save-routes-button" {% if not source_accounts or not destination_accounts or not can_edit_persona %}disabled{% endif %}>Save Routes</button>
                 </div>
                 {% if source_accounts and destination_accounts %}
                 <div class="table-responsive">
@@ -481,6 +514,7 @@
                                             data-source-id="{{ source.id }}"
                                             data-destination-id="{{ destination.id }}"
                                             {% if routes_map.get((source.id, destination.id)) %}checked{% endif %}
+                                            {% if not can_edit_persona %}disabled{% endif %}
                                         >
                                     {% endif %}
                                 </td>
@@ -496,6 +530,65 @@
             </div>
         </div>
     </div>
+    {% if can_manage_persona_sharing %}
+    <div class="tab-pane fade" id="persona-sharing-pane" role="tabpanel" aria-labelledby="persona-sharing-tab" tabindex="0">
+        <div class="row g-4">
+            <div class="col-12 col-xl-5">
+                <div class="card section-card h-100">
+                    <div class="card-body">
+                        <div class="section-kicker mb-2">Share Persona</div>
+                        <h2 class="h5 mb-3">Invite a collaborator</h2>
+                        <form id="persona-access-create-form" class="tab-pane-stack">
+                            <div class="surface-panel">
+                                <label class="form-label">Email</label>
+                                <input class="form-control" name="email" type="email" placeholder="teammate@example.com" required>
+                                <div class="form-text">If the email matches a local user, access becomes active immediately. Otherwise it stays pending.</div>
+                            </div>
+                            <div class="surface-panel">
+                                <label class="form-label">Permission</label>
+                                <select class="form-select" name="permission">
+                                    <option value="view">View only</option>
+                                    <option value="edit">Edit posts and routes</option>
+                                </select>
+                            </div>
+                            <button class="btn btn-primary" type="submit">Share Persona</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-xl-7">
+                <div class="card section-card h-100">
+                    <div class="card-body">
+                        <div class="section-kicker mb-2">Current Access</div>
+                        <h2 class="h5 mb-3">Collaborators</h2>
+                        <div class="d-flex flex-column gap-3">
+                            {% for access in persona_access_entries %}
+                            <div class="surface-panel-soft persona-access-row" data-access-id="{{ access.id }}">
+                                <div class="d-flex flex-column flex-md-row justify-content-between gap-3">
+                                    <div>
+                                        <div class="fw-semibold">{{ access.email or access.user_id }}</div>
+                                        <div class="small text-secondary">{{ access.status|title }} · {{ access.permission|title }}</div>
+                                    </div>
+                                    <div class="d-flex gap-2 flex-wrap align-items-start">
+                                        <select class="form-select form-select-sm persona-access-permission" style="width: 140px;">
+                                            <option value="view" {% if access.permission == "view" %}selected{% endif %}>View</option>
+                                            <option value="edit" {% if access.permission == "edit" %}selected{% endif %}>Edit</option>
+                                        </select>
+                                        <button class="btn btn-sm btn-outline-primary persona-access-save" type="button">Save</button>
+                                        <button class="btn btn-sm btn-outline-danger persona-access-delete" type="button">Remove</button>
+                                    </div>
+                                </div>
+                            </div>
+                            {% else %}
+                            <div class="alert alert-light border mb-0">No collaborators yet.</div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}
 
@@ -534,7 +627,9 @@ function buildAccountPayload(form) {
 }
 
 function toggleCreateServiceFields() {
-  const service = document.getElementById("new-account-service").value;
+  const serviceSelect = document.getElementById("new-account-service");
+  if (!serviceSelect) return;
+  const service = serviceSelect.value;
   document.querySelectorAll("#account-create-form .service-field").forEach((field) => {
     field.style.display = field.dataset.service === service ? "" : "none";
     field.querySelectorAll("input").forEach((input) => {
@@ -543,7 +638,7 @@ function toggleCreateServiceFields() {
   });
 }
 
-document.getElementById("new-account-service").addEventListener("change", toggleCreateServiceFields);
+document.getElementById("new-account-service")?.addEventListener("change", toggleCreateServiceFields);
 toggleCreateServiceFields();
 
 document.getElementById("persona-update-form").addEventListener("submit", async (event) => {
@@ -582,7 +677,7 @@ document.getElementById("persona-update-form").addEventListener("submit", async 
   window.location.reload();
 });
 
-document.getElementById("account-create-form").addEventListener("submit", async (event) => {
+document.getElementById("account-create-form")?.addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
   const scoped = collectScopedFields(form);
@@ -702,5 +797,56 @@ if (saveRoutesButton) {
     window.location.reload();
   });
 }
+
+document.getElementById("persona-access-create-form")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const payload = {
+    email: form.email.value,
+    permission: form.permission.value,
+  };
+  const response = await fetch(`/personas/${personaId}/access`, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    alert(await window.readApiMessage(response));
+    return;
+  }
+  window.location.reload();
+});
+
+document.querySelectorAll(".persona-access-save").forEach((button) => {
+  button.addEventListener("click", async () => {
+    const row = button.closest(".persona-access-row");
+    const permission = row?.querySelector(".persona-access-permission")?.value || "view";
+    const response = await fetch(`/personas/${personaId}/access/${row.dataset.accessId}`, {
+      method: "PUT",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({permission}),
+    });
+    if (!response.ok) {
+      alert(await window.readApiMessage(response));
+      return;
+    }
+    window.location.reload();
+  });
+});
+
+document.querySelectorAll(".persona-access-delete").forEach((button) => {
+  button.addEventListener("click", async () => {
+    const row = button.closest(".persona-access-row");
+    if (!row) return;
+    const confirmed = window.confirm("Remove this collaborator from the persona?");
+    if (!confirmed) return;
+    const response = await fetch(`/personas/${personaId}/access/${row.dataset.accessId}`, {method: "DELETE"});
+    if (!response.ok) {
+      alert(await window.readApiMessage(response));
+      return;
+    }
+    window.location.reload();
+  });
+});
 </script>
 {% endblock %}

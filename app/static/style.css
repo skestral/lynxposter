@@ -38,6 +38,217 @@
     --lp-disabled-ink: rgba(30, 43, 70, 0.62);
 }
 
+/* Frontend overhaul shell: frosted utility, subtle pride accents, and mobile-first navigation. */
+.app-backdrop {
+    display: none;
+}
+
+body {
+    background:
+        linear-gradient(140deg, rgba(255, 62, 165, 0.08), transparent 24%),
+        linear-gradient(220deg, rgba(255, 151, 0, 0.08), transparent 28%),
+        linear-gradient(180deg, #fbfcff 0%, #f4f7fb 100%);
+}
+
+.app-page,
+.app-version-footer {
+    padding-bottom: 6rem;
+}
+
+.app-topbar,
+.section-card,
+.surface-panel,
+.surface-panel-soft,
+.details-card,
+.dashboard-v2-shell,
+.dashboard-v2-panel,
+.dashboard-v2-metric,
+.dashboard-v2-list-card,
+.card {
+    border-radius: 8px;
+}
+
+.app-topbar,
+.section-card,
+.surface-panel,
+.dashboard-v2-shell,
+.dashboard-v2-panel,
+.dashboard-v2-metric,
+.dashboard-v2-list-card {
+    border: 1px solid rgba(110, 122, 150, 0.18);
+    background: rgba(255, 255, 255, 0.78);
+    box-shadow: 0 12px 36px rgba(31, 42, 68, 0.08);
+}
+
+.nav-pills .nav-link,
+.btn,
+.form-control,
+.form-select,
+.badge,
+.mobile-bottom-nav,
+.mobile-bottom-nav-create {
+    border-radius: 8px;
+}
+
+.nav-pills .nav-link.active,
+.glass-tabs .nav-link.active,
+.dashboard-v2-tabs .nav-link.active {
+    border: 1px solid transparent;
+    background:
+        linear-gradient(#fff, #fff) padding-box,
+        linear-gradient(100deg, #e6007a, #ff8a00, #ffe100, #008f39, #244aa5, #7a1fa2) border-box;
+    color: var(--lp-ink);
+}
+
+.btn-primary {
+    border: 1px solid rgba(var(--lp-accent-rgb), 0.35);
+    background: rgba(var(--lp-accent-rgb), 0.14);
+    color: var(--lp-ink);
+}
+
+.btn-primary:hover {
+    border-color: rgba(var(--lp-accent-rgb), 0.58);
+    background: rgba(var(--lp-accent-rgb), 0.2);
+    color: var(--lp-ink);
+}
+
+.destination-media-list {
+    display: grid;
+    gap: 0.45rem;
+}
+
+.destination-media-item {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-width: 0;
+    font-size: 0.86rem;
+    color: var(--lp-ink-soft);
+}
+
+.destination-media-item span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.mobile-bottom-nav {
+    position: fixed;
+    right: 1rem;
+    bottom: 0.8rem;
+    left: 1rem;
+    z-index: 1040;
+    display: none;
+    align-items: center;
+    justify-content: space-around;
+    gap: 0.35rem;
+    padding: 0.55rem;
+    border: 1px solid rgba(110, 122, 150, 0.18);
+    background: rgba(255, 255, 255, 0.88);
+    box-shadow: 0 14px 34px rgba(31, 42, 68, 0.16);
+    backdrop-filter: blur(18px);
+}
+
+.mobile-bottom-nav-link,
+.mobile-bottom-nav-create {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 3.25rem;
+    min-height: 2.35rem;
+    padding: 0 0.55rem;
+    color: var(--lp-ink-soft);
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.mobile-bottom-nav-link.active,
+.mobile-bottom-nav-create {
+    border: 1px solid transparent;
+    background:
+        linear-gradient(rgba(255, 255, 255, 0.94), rgba(255, 255, 255, 0.94)) padding-box,
+        linear-gradient(100deg, #e6007a, #ff8a00, #ffe100, #008f39, #244aa5, #7a1fa2) border-box;
+    color: var(--lp-ink);
+}
+
+.mobile-bottom-nav-create {
+    min-width: 2.45rem;
+    min-height: 2.45rem;
+    padding: 0;
+    font-size: 1.35rem;
+    line-height: 1;
+}
+
+@media (min-width: 1280px) {
+    .app-topbar-wrap {
+        position: fixed;
+        top: 1.25rem;
+        bottom: 1.25rem;
+        left: 1.25rem;
+        z-index: 1030;
+        width: 260px;
+        padding: 0;
+    }
+
+    .app-topbar-wrap .container {
+        max-width: none;
+    }
+
+    .app-topbar {
+        height: 100%;
+        align-items: stretch;
+        flex-direction: column;
+        padding: 1rem;
+    }
+
+    .app-nav-rail,
+    .app-nav-pills,
+    .app-identity-cluster {
+        align-items: stretch;
+        flex-direction: column;
+        width: 100%;
+    }
+
+    .app-nav-pills .nav-link {
+        width: 100%;
+    }
+
+    .app-page,
+    .app-version-footer {
+        width: auto;
+        max-width: none;
+        margin-left: 300px;
+        margin-right: 1.25rem;
+    }
+}
+
+@media (max-width: 767.98px) {
+    .app-topbar-wrap {
+        display: none;
+    }
+
+    .app-page {
+        padding-top: 0.85rem !important;
+        padding-inline: 0.85rem;
+    }
+
+    .mobile-bottom-nav {
+        display: flex;
+    }
+
+    .table-responsive,
+    .dashboard-v2-shell,
+    .section-card,
+    .surface-panel {
+        max-width: 100%;
+        overflow-x: auto;
+    }
+
+    .dashboard-v2-metrics-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
 body {
     --bs-body-color: var(--lp-ink);
     --bs-body-bg: transparent;

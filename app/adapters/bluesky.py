@@ -20,6 +20,7 @@ from app.adapters.common import (
     import_existing_posts_on_first_scan,
     is_initial_sync,
     is_video_attachment,
+    service_attachments,
     service_body,
 )
 from app.domain import (
@@ -306,7 +307,7 @@ class BlueskyDestinationAdapter(DestinationAdapter):
     def validate(self, post: CanonicalPost, persona: Persona, account: Account) -> list[ValidationIssue]:
         body = service_body(post, account)
         issues: list[ValidationIssue] = []
-        attachments = sorted(post.attachments, key=lambda item: item.sort_order)
+        attachments = service_attachments(post, account)
         video_attachments = [attachment for attachment in attachments if is_video_attachment(attachment)]
         if len(body) > 300:
             issues.append(ValidationIssue(service="bluesky", field="body", message="Bluesky posts are limited to 300 characters."))
@@ -351,7 +352,7 @@ class BlueskyDestinationAdapter(DestinationAdapter):
     ) -> PublishPreview:
         body = service_body(post, account)
         facets, notes = _build_preview_facets(body)
-        attachments = sorted(post.attachments, key=lambda item: item.sort_order)
+        attachments = service_attachments(post, account)
         request_shape: dict[str, Any] = {
             "text": body,
             "facets": facets,
@@ -403,16 +404,17 @@ class BlueskyDestinationAdapter(DestinationAdapter):
         client = _get_client(config, update_session=update_session)
         body = service_body(post, account)
         facets = _build_facets(body)
+        attachments = service_attachments(post, account)
 
         response = None
-        if len(post.attachments) == 1 and is_video_attachment(post.attachments[0]):
-            attachment = post.attachments[0]
+        if len(attachments) == 1 and is_video_attachment(attachments[0]):
+            attachment = attachments[0]
             with Path(attachment.storage_path).open("rb") as handle:
                 response = client.send_video(body, handle.read(), attachment.alt_text, facets=facets)
-        elif post.attachments:
+        elif attachments:
             image_data: list[bytes] = []
             image_alts: list[str] = []
-            for attachment in sorted(post.attachments, key=lambda item: item.sort_order):
+            for attachment in attachments:
                 with Path(attachment.storage_path).open("rb") as handle:
                     image_data.append(handle.read())
                 image_alts.append(attachment.alt_text)

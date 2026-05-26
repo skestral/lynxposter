@@ -172,6 +172,9 @@
                                 <div class="row g-2" id="target-account-list">
                                     {% for account in accounts %}
                                     <div class="col-12" data-account-service="{{ account.service }}">
+                                        {% set account_override = post.publish_overrides_json.get(account.id) or post.publish_overrides_json.get(account.service) %}
+                                        {% set override_body = account_override.get('body', '') if account_override is mapping else (account_override if account_override is string else '') %}
+                                        {% set override_attachment_ids = account_override.get('attachment_ids') if account_override is mapping and account_override.get('attachment_ids') is not none else none %}
                                         <div class="border rounded p-3 bg-white">
                                             <div class="form-check">
                                                 <input class="form-check-input target-checkbox" type="checkbox" value="{{ account.id }}" id="target-{{ account.id }}" {% if account.id in post.target_account_ids %}checked{% endif %}>
@@ -181,7 +184,36 @@
                                             <div class="small text-secondary mt-2 post-guidance-summary"></div>
                                             <div class="mt-2">
                                                 <label class="form-label small-muted mb-1">Optional override body</label>
-                                                <textarea class="form-control override-body" data-account-id="{{ account.id }}" rows="2">{{ post.publish_overrides_json.get(account.id, {}).get('body', '') if post.publish_overrides_json.get(account.id) else '' }}</textarea>
+                                                <textarea class="form-control override-body" data-account-id="{{ account.id }}" rows="2">{{ override_body }}</textarea>
+                                            </div>
+                                            <div class="destination-media-override border rounded p-2 bg-body-tertiary mt-3">
+                                                <div class="form-check">
+                                                    <input
+                                                        class="form-check-input destination-media-custom"
+                                                        type="checkbox"
+                                                        id="target-media-custom-{{ account.id }}"
+                                                        data-account-id="{{ account.id }}"
+                                                        {% if override_attachment_ids is not none %}checked{% endif %}
+                                                    >
+                                                    <label class="form-check-label small fw-semibold" for="target-media-custom-{{ account.id }}">Use custom media for this destination</label>
+                                                </div>
+                                                <div class="destination-media-list mt-2">
+                                                    {% for attachment in post.attachments %}
+                                                    <label class="destination-media-item">
+                                                        <input
+                                                            class="form-check-input override-attachment"
+                                                            type="checkbox"
+                                                            data-account-id="{{ account.id }}"
+                                                            data-attachment-id="{{ attachment.id }}"
+                                                            {% if override_attachment_ids is none or attachment.id in override_attachment_ids %}checked{% endif %}
+                                                        >
+                                                        <span>{{ loop.index }}. {{ attachment.mime_type }}</span>
+                                                    </label>
+                                                    {% else %}
+                                                    <div class="small text-secondary">Save media on this post before setting destination media.</div>
+                                                    {% endfor %}
+                                                </div>
+                                                <div class="form-text">Leave custom media off to use the global media queue and ordering.</div>
                                             </div>
                                             <div class="post-guidance-panel border rounded p-2 bg-body-tertiary mt-3" data-account-id="{{ account.id }}">
                                                 <div class="fw-semibold small">Delivery Notes</div>
@@ -550,6 +582,29 @@ function combinedAttachmentSnapshot() {
   };
 }
 
+function activeExistingAttachmentIds() {
+  return new Set(activeExistingAttachments().map((item) => item.id));
+}
+
+function destinationAttachmentItems(wrapper) {
+  const customToggle = wrapper.querySelector(".destination-media-custom");
+  if (!customToggle?.checked) {
+    return activeExistingAttachments().concat(
+      Array.from(uploadsInput?.files || []).map((file) => ({mime_type: file.type || ""}))
+    );
+  }
+  const activeIds = activeExistingAttachmentIds();
+  const selectedIds = Array.from(wrapper.querySelectorAll(".override-attachment"))
+    .filter((checkbox) => checkbox.checked && activeIds.has(checkbox.dataset.attachmentId))
+    .map((checkbox) => checkbox.dataset.attachmentId);
+  const attachmentsById = Object.fromEntries(activeExistingAttachments().map((item) => [item.id, item]));
+  return selectedIds.map((id) => attachmentsById[id]).filter(Boolean);
+}
+
+function destinationAttachmentSnapshot(wrapper) {
+  return attachmentSnapshot(destinationAttachmentItems(wrapper));
+}
+
 function escapeHtml(value) {
   const span = document.createElement("span");
   span.textContent = value == null ? "" : String(value);
@@ -819,6 +874,7 @@ function refreshPostGuidance() {
     const service = wrapper.dataset.accountService;
     const rule = servicePostGuidance[service];
     const override = wrapper.querySelector(".override-body")?.value.trim() || "";
+    const targetSnapshot = destinationAttachmentSnapshot(wrapper);
 
     summary.textContent = describeServiceGuidance(rule);
     panel.classList.remove("is-ok", "is-warning", "is-danger");
@@ -829,7 +885,7 @@ function refreshPostGuidance() {
       return;
     }
 
-    const evaluation = evaluateServiceGuidance(rule, override || bodyTextarea.value, snapshot);
+    const evaluation = evaluateServiceGuidance(rule, override || bodyTextarea.value, targetSnapshot);
     panel.classList.add(`is-${evaluation.tone}`);
     renderGuidanceLines(status, evaluation.lines, evaluation.tone);
   });
@@ -847,6 +903,18 @@ function buildPostPayload(form) {
     if (textarea.value.trim()) {
       publishOverrides[textarea.dataset.accountId] = {body: textarea.value};
     }
+  });
+  const activeIds = activeExistingAttachmentIds();
+  form.querySelectorAll(".destination-media-custom").forEach((toggle) => {
+    if (!toggle.checked) return;
+    const accountId = toggle.dataset.accountId;
+    const attachmentIds = Array.from(form.querySelectorAll(`.override-attachment[data-account-id="${CSS.escape(accountId)}"]`))
+      .filter((checkbox) => checkbox.checked && activeIds.has(checkbox.dataset.attachmentId))
+      .map((checkbox) => checkbox.dataset.attachmentId);
+    publishOverrides[accountId] = {
+      ...(publishOverrides[accountId] || {}),
+      attachment_ids: attachmentIds,
+    };
   });
   const metadata = {};
   if (form.source_link.value.trim()) metadata.link = form.source_link.value.trim();

@@ -14,6 +14,7 @@ from starlette.datastructures import FormData, UploadFile
 
 from app.main import _read_scheduled_post_payload
 from app.services.auth import Principal
+from app.adapters.common import service_attachments
 from app.domain import CanonicalPostPayload, ExternalPostRefPayload, MediaItem
 from app.models import CanonicalPost, DeliveryJob, MediaAttachment
 from app.schemas import ScheduledPostCreate, ScheduledPostUpdate
@@ -286,6 +287,99 @@ def test_update_scheduled_post_reorders_and_deletes_media_attachments(session, t
     assert paths[0].exists()
     assert not paths[1].exists()
     assert paths[2].exists()
+
+
+def test_destination_media_override_selects_ordered_attachment_subset(session, tmp_path):
+    persona = _create_persona(session, slug="destination-media-override")
+    mastodon = _create_account(session, persona, service="mastodon", label="Mastodon", source_enabled=False, destination_enabled=True)
+    discord = _create_account(session, persona, service="discord", label="Discord", source_enabled=False, destination_enabled=True)
+    image_one = tmp_path / "one.jpg"
+    image_two = tmp_path / "two.jpg"
+    image_one.write_bytes(b"one")
+    image_two.write_bytes(b"two")
+
+    post = create_scheduled_post(
+        session,
+        ScheduledPostCreate.model_validate(
+            {
+                "persona_id": persona.id,
+                "body": "With per-destination media",
+                "status": "draft",
+                "target_account_ids": [mastodon.id, discord.id],
+                "publish_overrides_json": {},
+                "metadata_json": {},
+                "scheduled_for": None,
+            }
+        ),
+        [
+            MediaItem(storage_path=image_one, mime_type="image/jpeg", alt_text="One", size_bytes=3, checksum="one", sort_order=0),
+            MediaItem(storage_path=image_two, mime_type="image/jpeg", alt_text="Two", size_bytes=3, checksum="two", sort_order=1),
+        ],
+    )
+    attachments = sorted(post.attachments, key=lambda item: item.sort_order)
+
+    updated = update_scheduled_post(
+        session,
+        post,
+        ScheduledPostUpdate.model_validate(
+            {
+                "publish_overrides_json": {
+                    mastodon.id: {"body": "Mastodon copy", "attachment_ids": [attachments[1].id]},
+                    discord.id: {"body": "Discord copy"},
+                }
+            }
+        ),
+    )
+
+    assert [attachment.id for attachment in service_attachments(updated, mastodon)] == [attachments[1].id]
+    assert [attachment.id for attachment in service_attachments(updated, discord)] == [attachments[0].id, attachments[1].id]
+
+
+def test_destination_media_override_rejects_deleted_attachment(session, tmp_path, monkeypatch):
+    persona = _create_persona(session, slug="destination-media-deleted")
+    mastodon = _create_account(session, persona, service="mastodon", label="Mastodon", source_enabled=False, destination_enabled=True)
+    uploads_dir = tmp_path / "uploads"
+    uploads_dir.mkdir()
+    image_one = uploads_dir / "one.jpg"
+    image_two = uploads_dir / "two.jpg"
+    image_one.write_bytes(b"one")
+    image_two.write_bytes(b"two")
+
+    post = create_scheduled_post(
+        session,
+        ScheduledPostCreate.model_validate(
+            {
+                "persona_id": persona.id,
+                "body": "With per-destination media",
+                "status": "draft",
+                "target_account_ids": [mastodon.id],
+                "publish_overrides_json": {},
+                "metadata_json": {},
+                "scheduled_for": None,
+            }
+        ),
+        [
+            MediaItem(storage_path=image_one, mime_type="image/jpeg", alt_text="One", size_bytes=3, checksum="one", sort_order=0),
+            MediaItem(storage_path=image_two, mime_type="image/jpeg", alt_text="Two", size_bytes=3, checksum="two", sort_order=1),
+        ],
+    )
+    attachment_ids = {attachment.alt_text: attachment.id for attachment in post.attachments}
+    monkeypatch.setattr(
+        "app.services.storage.settings",
+        replace(storage_settings, uploads_dir=uploads_dir, imported_media_dir=tmp_path / "imported"),
+    )
+
+    with pytest.raises(ValueError, match="Destination media overrides"):
+        update_scheduled_post(
+            session,
+            post,
+            ScheduledPostUpdate.model_validate(
+                {
+                    "publish_overrides_json": {mastodon.id: {"attachment_ids": [attachment_ids["Two"]]}},
+                    "deleted_attachment_ids": [attachment_ids["Two"]],
+                }
+            ),
+        )
 
 
 def test_delete_scheduled_post_removes_draft_and_children(session, tmp_path, monkeypatch):
