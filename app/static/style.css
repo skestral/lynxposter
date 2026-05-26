@@ -3004,3 +3004,104 @@ body[data-ui-mode="dark"] .mobile-bottom-nav-create {
         linear-gradient(rgba(31, 41, 59, 0.94), rgba(31, 41, 59, 0.94)) padding-box,
         var(--lp-pride-border) border-box;
 }
+
+/* Rounded polish pass: align controls and containers with the Figma pill shape. */
+:root {
+    --lp-radius-sm: 14px;
+    --lp-radius-md: 18px;
+    --lp-radius-lg: 20px;
+    --lp-radius-xl: 22px;
+    --lp-control-radius: 18px;
+    --lp-container-radius: 20px;
+}
+
+.btn,
+.nav-pills .nav-link,
+.glass-tabs .nav-link,
+.dashboard-v2-tabs .nav-link,
+.form-control,
+.form-select,
+.input-group-text,
+.badge,
+.app-sidebar-link,
+.app-brand-mark,
+.app-mode-switch,
+.app-mode-button,
+.app-version-pill,
+.dashboard-v2-chip,
+.dashboard-v2-panel-link,
+.dashboard-v2-live-pill,
+.mobile-bottom-nav-link,
+.mobile-bottom-nav-create {
+    border-radius: var(--lp-control-radius) !important;
+}
+
+.card,
+.section-card,
+.hero-card,
+.surface-panel,
+.surface-panel-soft,
+.details-card,
+details.surface-details,
+.modal-content,
+.table-responsive,
+.list-group-item,
+.app-identity-card,
+.dashboard-v2-metric,
+.dashboard-v2-panel,
+.dashboard-v2-list-card,
+.dashboard-v2-signal-row,
+.dashboard-v2-alert-row,
+.dashboard-v2-run-detail,
+.metric-card,
+.scheduled-kanban-lane,
+.scheduled-calendar-cell,
+.scheduled-calendar-column,
+.scheduled-calendar-event,
+.planner-card,
+.scheduled-kanban-card,
+.composer-preview-phone,
+.webhook-json-preview {
+    border-radius: var(--lp-container-radius) !important;
+}
+
+.app-sidebar,
+.mobile-app-header,
+.mobile-bottom-nav,
+.dashboard-v2-tabs,
+.glass-tabs {
+    border-radius: calc(var(--lp-container-radius) + 4px) !important;
+}
+
+.mobile-bottom-nav > * {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.mobile-bottom-nav-create {
+    flex: 0 0 3rem;
+    min-height: 2.65rem;
+    font-size: 1.45rem;
+    font-weight: 780;
+}
+
+.nav-pills .nav-link.active,
+.glass-tabs .nav-link.active,
+.dashboard-v2-tabs .nav-link.active,
+.mobile-bottom-nav-link.active,
+.mobile-bottom-nav-create {
+    background:
+        linear-gradient(rgba(255, 255, 255, 0.94), rgba(255, 255, 255, 0.94)) padding-box,
+        var(--lp-pride-border) border-box;
+    border: 1px solid transparent;
+}
+
+body[data-ui-mode="dark"] .nav-pills .nav-link.active,
+body[data-ui-mode="dark"] .glass-tabs .nav-link.active,
+body[data-ui-mode="dark"] .dashboard-v2-tabs .nav-link.active,
+body[data-ui-mode="dark"] .mobile-bottom-nav-link.active,
+body[data-ui-mode="dark"] .mobile-bottom-nav-create {
+    background:
+        linear-gradient(rgba(31, 41, 59, 0.94), rgba(31, 41, 59, 0.94)) padding-box,
+        var(--lp-pride-border) border-box;
+}

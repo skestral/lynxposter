@@ -123,7 +123,7 @@
             <nav class="mobile-bottom-nav" aria-label="Mobile primary navigation">
                 <a class="mobile-bottom-nav-link {% if page_path == '/' %}active{% endif %}" href="/">Home</a>
                 <a class="mobile-bottom-nav-link {% if page_path.startswith('/scheduled-posts') %}active{% endif %}" href="/scheduled-posts/page">Plan</a>
-                {% if page_path == '/' and current_principal.is_user %}
+                {% if current_principal.is_user %}
                 <a class="mobile-bottom-nav-create" href="/scheduled-posts/new/page" aria-label="Create post">+</a>
                 {% endif %}
                 <a class="mobile-bottom-nav-link {% if page_path.startswith('/personas') %}active{% endif %}" href="/personas/page">People</a>
