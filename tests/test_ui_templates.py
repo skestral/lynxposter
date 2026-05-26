@@ -1289,6 +1289,9 @@ def test_theme_runtime_uses_selected_colorway_tokens():
     assert catalog["pride-trans"]["modes"]["light"]["theme_border"].startswith("linear-gradient(100deg, #5bcffb")
     assert ".lp-theme-active-surface" in stylesheet
     assert "var(--lp-theme-border)" in stylesheet
+    assert "--lp-select-icon" in stylesheet
+    assert "background-image: var(--lp-select-icon), var(--lp-select-action-bg)" in stylesheet
+    assert "body[data-ui-mode=\"dark\"] .form-select" in stylesheet
     assert "var(--lp-pride-border)" not in stylesheet
     assert "linear-gradient(100deg, #e6007a" not in stylesheet
 

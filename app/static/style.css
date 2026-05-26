@@ -2988,6 +2988,58 @@ body[data-ui-mode="dark"] .mobile-bottom-nav-create {
         var(--lp-theme-border) border-box;
 }
 
+/* Select controls need their own affordance; shared input backgrounds erase Bootstrap's arrow. */
+.form-select {
+    --lp-select-icon: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M5 7.5L10 12.5L15 7.5' stroke='%235e6c87' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    --lp-select-action-bg: linear-gradient(90deg, transparent 0%, rgba(var(--lp-accent-rgb), 0.05) 32%, rgba(var(--lp-accent-rgb), 0.12) 100%);
+    -webkit-appearance: none;
+    appearance: none;
+    padding-right: 2.85rem;
+    background-color: var(--lp-input-bg);
+    background-image: var(--lp-select-icon), var(--lp-select-action-bg);
+    background-repeat: no-repeat, no-repeat;
+    background-position: right 0.95rem center, right center;
+    background-size: 0.92rem 0.92rem, 2.55rem 100%;
+}
+
+.form-select:hover {
+    border-color: var(--lp-theme-outline);
+}
+
+.form-select:focus {
+    background-image: var(--lp-select-icon), var(--lp-select-action-bg);
+}
+
+.form-select.form-select-sm,
+.form-select-sm {
+    padding-right: 2.45rem;
+    background-position: right 0.76rem center, right center;
+    background-size: 0.78rem 0.78rem, 2.18rem 100%;
+}
+
+.form-select[multiple],
+.form-select[size]:not([size="1"]) {
+    padding-right: 0.95rem;
+    background-image: none;
+}
+
+.form-select option {
+    background: var(--lp-elevated);
+    color: var(--lp-ink);
+}
+
+body[data-ui-mode="dark"] .form-select {
+    --lp-select-icon: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M5 7.5L10 12.5L15 7.5' stroke='%23eaf0fb' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    --lp-select-action-bg: linear-gradient(90deg, transparent 0%, rgba(var(--lp-accent-rgb), 0.11) 32%, rgba(var(--lp-accent-rgb), 0.22) 100%);
+    background-color: rgba(18, 25, 38, 0.72) !important;
+    background-image: var(--lp-select-icon), var(--lp-select-action-bg) !important;
+}
+
+body[data-ui-mode="dark"] .form-select option {
+    background: #121926;
+    color: #eef3fb;
+}
+
 /* Figma workspace alignment for Planner and Composer. */
 .figma-page-header,
 .planner-surface-header,
