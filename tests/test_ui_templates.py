@@ -10,6 +10,7 @@ from starlette.requests import Request
 from app.adapters import get_service_definition, iter_service_definitions, service_composer_constraints_context
 from app.main import templates
 from app.schemas import AccountRead
+from app.services.ui import ui_theme_catalog_for_client, ui_theme_runtime_style
 
 
 def _request_with_principal(timezone_name: str = "UTC") -> Request:
@@ -1221,6 +1222,24 @@ def test_account_settings_template_renders_theme_picker():
     assert "theme-picker-grid" in html
     assert 'name="preferred_name"' in html
     assert 'value="Savannah"' in html
+
+
+def test_theme_runtime_uses_selected_colorway_tokens():
+    lagoon_style = ui_theme_runtime_style("lagoon", "light")
+    rainbow_style = ui_theme_runtime_style("pride-rainbow", "light")
+    catalog = {theme["id"]: theme for theme in ui_theme_catalog_for_client()}
+    stylesheet = Path("app/static/style.css").read_text(encoding="utf-8")
+
+    assert "--lp-theme-border: linear-gradient(100deg, #bfe8ea, #eefcfb, #96d3cf);" in lagoon_style
+    assert "--lp-theme-active-fill:" in lagoon_style
+    assert "--lp-theme-rail:" in lagoon_style
+    assert "#ff6b6b" not in lagoon_style
+    assert "--lp-theme-border: linear-gradient(100deg, #ff6b6b, #ffd166, #4ecdc4, #5b7cfa);" in rainbow_style
+    assert catalog["pride-trans"]["modes"]["light"]["theme_border"].startswith("linear-gradient(100deg, #5bcffb")
+    assert ".lp-theme-active-surface" in stylesheet
+    assert "var(--lp-theme-border)" in stylesheet
+    assert "var(--lp-pride-border)" not in stylesheet
+    assert "linear-gradient(100deg, #e6007a" not in stylesheet
 
 
 def test_logs_template_renders_grouped_worker_runs():

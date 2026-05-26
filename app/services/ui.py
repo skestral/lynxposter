@@ -345,6 +345,13 @@ def _hex_to_rgb(value: str) -> str:
     return f"{red}, {green}, {blue}"
 
 
+def _theme_gradient(swatches: object) -> str:
+    colors = [str(color) for color in swatches if str(color).strip()] if isinstance(swatches, (list, tuple)) else []
+    if len(colors) < 2:
+        colors = ["#5674d9", "#7fb8df"]
+    return f"linear-gradient(100deg, {', '.join(colors)})"
+
+
 def normalize_ui_theme(value: str | None) -> str:
     candidate = str(value or "").strip().lower()
     if candidate in _UI_THEME_BY_ID:
@@ -375,6 +382,18 @@ def ui_theme_tokens(value: str | None, mode: str | None = None) -> dict[str, str
     base_tokens = _base_tokens_for_mode(normalized_mode)
     merged = {**base_tokens, **mode_tokens}
     merged["accent_rgb"] = _hex_to_rgb(merged["accent"])
+    theme_gradient = _theme_gradient(option.get("swatches", (merged["accent"], merged["secondary"])))
+    is_dark = normalized_mode == "dark"
+    merged["theme_border"] = theme_gradient
+    merged["theme_rail"] = theme_gradient
+    merged["theme_active_fill"] = "rgba(31, 41, 59, 0.94)" if is_dark else "rgba(255, 255, 255, 0.94)"
+    merged["theme_active_tint"] = f"rgba({merged['accent_rgb']}, {0.22 if is_dark else 0.13})"
+    merged["theme_hover_tint"] = f"rgba({merged['accent_rgb']}, {0.18 if is_dark else 0.1})"
+    merged["theme_outline"] = f"rgba({merged['accent_rgb']}, {0.46 if is_dark else 0.34})"
+    merged["frame_bg"] = merged["bg_mid"]
+    merged["panel_bg"] = "rgba(28, 36, 52, 0.84)" if is_dark else "rgba(255, 255, 255, 0.82)"
+    merged["panel_bg_strong"] = "rgba(18, 25, 38, 0.9)" if is_dark else "rgba(255, 255, 255, 0.96)"
+    merged["pride_border"] = theme_gradient
     return merged
 
 

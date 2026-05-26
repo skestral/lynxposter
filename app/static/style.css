@@ -38,15 +38,15 @@
     --lp-disabled-ink: rgba(30, 43, 70, 0.62);
 }
 
-/* Frontend overhaul shell: frosted utility, subtle pride accents, and mobile-first navigation. */
+/* Frontend overhaul shell: frosted utility, theme accents, and mobile-first navigation. */
 .app-backdrop {
     display: none;
 }
 
 body {
     background:
-        linear-gradient(140deg, rgba(255, 62, 165, 0.08), transparent 24%),
-        linear-gradient(220deg, rgba(255, 151, 0, 0.08), transparent 28%),
+        linear-gradient(140deg, var(--lp-blob-one), transparent 24%),
+        linear-gradient(220deg, var(--lp-blob-three), transparent 28%),
         linear-gradient(180deg, #fbfcff 0%, #f4f7fb 100%);
 }
 
@@ -94,8 +94,8 @@ body {
 .glass-tabs .nav-link.active {
     border: 1px solid transparent;
     background:
-        linear-gradient(#fff, #fff) padding-box,
-        linear-gradient(100deg, #e6007a, #ff8a00, #ffe100, #008f39, #244aa5, #7a1fa2) border-box;
+        linear-gradient(var(--lp-theme-active-fill), var(--lp-theme-active-fill)) padding-box,
+        var(--lp-theme-border) border-box;
     color: var(--lp-ink);
 }
 
@@ -165,8 +165,8 @@ body {
 .mobile-bottom-nav-create {
     border: 1px solid transparent;
     background:
-        linear-gradient(rgba(255, 255, 255, 0.94), rgba(255, 255, 255, 0.94)) padding-box,
-        linear-gradient(100deg, #e6007a, #ff8a00, #ffe100, #008f39, #244aa5, #7a1fa2) border-box;
+        linear-gradient(var(--lp-theme-active-fill), var(--lp-theme-active-fill)) padding-box,
+        var(--lp-theme-border) border-box;
     color: var(--lp-ink);
 }
 
@@ -1407,11 +1407,11 @@ details > summary::-webkit-details-marker {
 }
 
 .theme-option input:checked + .theme-option-card {
-    border-color: rgba(var(--lp-accent-rgb), 0.34);
+    border-color: var(--lp-theme-outline);
     box-shadow:
         0 18px 36px rgba(var(--lp-shadow-rgb), 0.12),
         inset 0 1px 0 rgba(255, 255, 255, 0.18);
-    background: linear-gradient(135deg, rgba(var(--lp-accent-rgb), 0.13), var(--lp-elevated));
+    background: linear-gradient(135deg, var(--lp-theme-active-tint), var(--lp-elevated));
 }
 
 .theme-option-swatches {
@@ -2263,7 +2263,12 @@ body[data-ui-mode="dark"] .alert-warning {
     --lp-frame-bg: #f6f8fc;
     --lp-panel-bg: rgba(255, 255, 255, 0.82);
     --lp-panel-bg-strong: rgba(255, 255, 255, 0.96);
-    --lp-pride-border: linear-gradient(100deg, #e6007a, #ff8a00, #ffe100, #008f39, #244aa5, #7a1fa2);
+    --lp-theme-border: linear-gradient(100deg, #d6e6ff, #f3f7ff, #b6d3ff);
+    --lp-theme-rail: var(--lp-theme-border);
+    --lp-theme-active-fill: rgba(255, 255, 255, 0.94);
+    --lp-theme-active-tint: rgba(var(--lp-accent-rgb), 0.13);
+    --lp-theme-hover-tint: rgba(var(--lp-accent-rgb), 0.1);
+    --lp-theme-outline: rgba(var(--lp-accent-rgb), 0.34);
 }
 
 html,
@@ -2275,8 +2280,8 @@ body {
 body {
     color: var(--lp-ink);
     background:
-        linear-gradient(120deg, rgba(230, 0, 122, 0.045), transparent 23rem),
-        linear-gradient(232deg, rgba(255, 138, 0, 0.055), transparent 25rem),
+        linear-gradient(120deg, var(--lp-blob-one), transparent 23rem),
+        linear-gradient(232deg, var(--lp-blob-three), transparent 25rem),
         linear-gradient(180deg, #fbfcff 0%, var(--lp-frame-bg) 100%);
 }
 
@@ -2286,6 +2291,28 @@ body::after,
 .app-blob,
 .hero-card::before {
     display: none !important;
+}
+
+.lp-theme-active-surface {
+    border: 1px solid transparent;
+    background:
+        linear-gradient(var(--lp-theme-active-fill), var(--lp-theme-active-fill)) padding-box,
+        var(--lp-theme-border) border-box;
+    color: var(--lp-ink);
+}
+
+.lp-theme-tint-surface {
+    border-color: var(--lp-theme-outline);
+    background: linear-gradient(135deg, var(--lp-theme-active-tint), var(--lp-elevated));
+}
+
+.lp-theme-rail {
+    background: var(--lp-theme-rail);
+}
+
+.lp-theme-hover-surface:hover,
+.lp-theme-hover-surface:focus-visible {
+    background: var(--lp-theme-hover-tint);
 }
 
 .app-shell,
@@ -2318,8 +2345,8 @@ body::after,
     padding: 1.25rem;
     border-right: 1px solid rgba(117, 136, 173, 0.2);
     background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(249, 251, 255, 0.78)),
-        linear-gradient(150deg, rgba(230, 0, 122, 0.05), transparent 42%);
+        linear-gradient(180deg, var(--lp-panel-bg-strong), var(--lp-panel-bg)),
+        linear-gradient(150deg, var(--lp-theme-hover-tint), transparent 42%);
     box-shadow: 12px 0 42px rgba(31, 42, 68, 0.055);
     backdrop-filter: blur(20px);
 }
@@ -2370,8 +2397,8 @@ body::after,
 .app-sidebar-link.active {
     border-color: transparent;
     background:
-        linear-gradient(rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.92)) padding-box,
-        var(--lp-pride-border) border-box;
+        linear-gradient(var(--lp-theme-active-fill), var(--lp-theme-active-fill)) padding-box,
+        var(--lp-theme-border) border-box;
     color: var(--lp-ink);
     box-shadow: 0 12px 28px rgba(31, 42, 68, 0.08);
 }
@@ -2420,8 +2447,8 @@ body::after,
     height: 2.55rem;
     border-radius: 8px;
     background:
-        linear-gradient(rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.92)) padding-box,
-        var(--lp-pride-border) border-box;
+        linear-gradient(var(--lp-theme-active-fill), var(--lp-theme-active-fill)) padding-box,
+        var(--lp-theme-border) border-box;
     border: 1px solid transparent;
     box-shadow: none;
     letter-spacing: 0;
@@ -2456,8 +2483,8 @@ body::after,
 
 .app-mode-button.is-active {
     background:
-        linear-gradient(rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.88)) padding-box,
-        var(--lp-pride-border) border-box;
+        linear-gradient(var(--lp-theme-active-fill), var(--lp-theme-active-fill)) padding-box,
+        var(--lp-theme-border) border-box;
     border: 1px solid transparent;
 }
 
@@ -2560,8 +2587,8 @@ details.surface-details,
 .glass-tabs .nav-link.active {
     border-color: transparent;
     background:
-        linear-gradient(rgba(255, 255, 255, 0.94), rgba(255, 255, 255, 0.94)) padding-box,
-        var(--lp-pride-border) border-box;
+        linear-gradient(var(--lp-theme-active-fill), var(--lp-theme-active-fill)) padding-box,
+        var(--lp-theme-border) border-box;
     color: var(--lp-ink);
     box-shadow: none;
 }
@@ -2931,8 +2958,8 @@ body[data-ui-mode="dark"] .glass-tabs .nav-link.active,
 body[data-ui-mode="dark"] .mobile-bottom-nav-link.active,
 body[data-ui-mode="dark"] .mobile-bottom-nav-create {
     background:
-        linear-gradient(rgba(31, 41, 59, 0.94), rgba(31, 41, 59, 0.94)) padding-box,
-        var(--lp-pride-border) border-box;
+        linear-gradient(var(--lp-theme-active-fill), var(--lp-theme-active-fill)) padding-box,
+        var(--lp-theme-border) border-box;
 }
 
 /* Figma workspace alignment for Planner and Composer. */
@@ -3035,7 +3062,7 @@ body[data-ui-mode="dark"] .mobile-bottom-nav-create {
     height: 0.28rem;
     margin-bottom: 0.72rem;
     border-radius: 999px;
-    background: var(--lp-pride-border);
+    background: var(--lp-theme-rail);
 }
 
 .figma-stat-label {
@@ -3084,19 +3111,19 @@ body[data-ui-mode="dark"] .mobile-bottom-nav-create {
 }
 
 .planner-stat-grid .figma-stat-card:nth-child(1) .figma-stat-accent {
-    background: #e0004d;
+    background: var(--lp-theme-rail);
 }
 
 .planner-stat-grid .figma-stat-card:nth-child(2) .figma-stat-accent {
-    background: #ff8a00;
+    background: var(--lp-theme-rail);
 }
 
 .planner-stat-grid .figma-stat-card:nth-child(3) .figma-stat-accent {
-    background: #008f39;
+    background: var(--lp-theme-rail);
 }
 
 .planner-stat-grid .figma-stat-card:nth-child(4) .figma-stat-accent {
-    background: #244aa5;
+    background: var(--lp-theme-rail);
 }
 
 .planner-range-panel {
@@ -3167,27 +3194,27 @@ body[data-ui-mode="dark"] .mobile-bottom-nav-create {
     width: 2.1rem;
     height: 0.28rem;
     border-radius: 999px;
-    background: #7b8aa5;
+    background: var(--lp-theme-rail);
 }
 
 .planner-board-surface [data-kanban-bucket="drafts"]::before {
-    background: #ff8a00;
+    background: var(--lp-theme-rail);
 }
 
 .planner-board-surface [data-kanban-bucket="scheduled"]::before {
-    background: #008f39;
+    background: var(--lp-theme-rail);
 }
 
 .planner-board-surface [data-kanban-bucket="running"]::before {
-    background: #244aa5;
+    background: var(--lp-theme-rail);
 }
 
 .planner-board-surface [data-kanban-bucket="attention"]::before {
-    background: #c23a52;
+    background: var(--lp-theme-rail);
 }
 
 .planner-board-surface [data-kanban-bucket="done"]::before {
-    background: #6f7f98;
+    background: var(--lp-theme-rail);
 }
 
 .planner-board-lane-summary {
@@ -3332,8 +3359,8 @@ body[data-ui-mode="dark"] .mobile-bottom-nav-create {
 .planner-calendar-surface .scheduled-calendar-column.is-today {
     border-color: transparent;
     background:
-        linear-gradient(rgba(255, 245, 248, 0.86), rgba(255, 245, 248, 0.86)) padding-box,
-        var(--lp-pride-border) border-box;
+        linear-gradient(var(--lp-theme-active-fill), var(--lp-theme-active-fill)) padding-box,
+        var(--lp-theme-border) border-box;
 }
 
 .scheduled-calendar-weekday-inline {
@@ -3370,7 +3397,7 @@ body[data-ui-mode="dark"] .mobile-bottom-nav-create {
     width: 1.55rem;
     height: 0.22rem;
     border-radius: 999px;
-    background: var(--lp-pride-border);
+    background: var(--lp-theme-rail);
 }
 
 .planner-calendar-card-time {
@@ -3547,8 +3574,8 @@ body[data-ui-mode="dark"] .planner-calendar-surface .scheduled-calendar-column {
 
 body[data-ui-mode="dark"] .planner-calendar-surface .scheduled-calendar-column.is-today {
     background:
-        linear-gradient(rgba(31, 41, 59, 0.9), rgba(31, 41, 59, 0.9)) padding-box,
-        var(--lp-pride-border) border-box;
+        linear-gradient(var(--lp-theme-active-fill), var(--lp-theme-active-fill)) padding-box,
+        var(--lp-theme-border) border-box;
 }
 
 body[data-ui-mode="dark"] .planner-calendar-card-time,
@@ -3617,8 +3644,8 @@ body[data-ui-mode="dark"] .planner-calendar-surface .scheduled-calendar-day-numb
 .btn-primary:active {
     border: 1px solid transparent !important;
     background:
-        linear-gradient(rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.9)) padding-box,
-        var(--lp-pride-border) border-box !important;
+        linear-gradient(var(--lp-theme-active-fill), var(--lp-theme-active-fill)) padding-box,
+        var(--lp-theme-border) border-box !important;
     color: var(--lp-ink) !important;
 }
 
@@ -3641,8 +3668,8 @@ body[data-ui-mode="dark"] .planner-calendar-surface .scheduled-calendar-day-numb
 .dashboard-v2-panel-link:hover {
     border: 1px solid transparent !important;
     background:
-        linear-gradient(rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.9)) padding-box,
-        var(--lp-pride-border) border-box !important;
+        linear-gradient(var(--lp-theme-active-fill), var(--lp-theme-active-fill)) padding-box,
+        var(--lp-theme-border) border-box !important;
     color: var(--lp-ink) !important;
 }
 
@@ -3729,8 +3756,8 @@ body[data-ui-mode="dark"] .btn-outline-secondary:focus-visible,
 body[data-ui-mode="dark"] .btn-group .btn-outline-secondary.active,
 body[data-ui-mode="dark"] .dashboard-v2-panel-link:hover {
     background:
-        linear-gradient(rgba(31, 41, 59, 0.94), rgba(31, 41, 59, 0.94)) padding-box,
-        var(--lp-pride-border) border-box !important;
+        linear-gradient(var(--lp-theme-active-fill), var(--lp-theme-active-fill)) padding-box,
+        var(--lp-theme-border) border-box !important;
     color: #f6f8fc !important;
 }
 
@@ -3912,8 +3939,8 @@ details.surface-details,
 .mobile-bottom-nav-link.active,
 .mobile-bottom-nav-create {
     background:
-        linear-gradient(rgba(255, 255, 255, 0.94), rgba(255, 255, 255, 0.94)) padding-box,
-        var(--lp-pride-border) border-box;
+        linear-gradient(var(--lp-theme-active-fill), var(--lp-theme-active-fill)) padding-box,
+        var(--lp-theme-border) border-box;
     border: 1px solid transparent;
 }
 
@@ -3922,6 +3949,6 @@ body[data-ui-mode="dark"] .glass-tabs .nav-link.active,
 body[data-ui-mode="dark"] .mobile-bottom-nav-link.active,
 body[data-ui-mode="dark"] .mobile-bottom-nav-create {
     background:
-        linear-gradient(rgba(31, 41, 59, 0.94), rgba(31, 41, 59, 0.94)) padding-box,
-        var(--lp-pride-border) border-box;
+        linear-gradient(var(--lp-theme-active-fill), var(--lp-theme-active-fill)) padding-box,
+        var(--lp-theme-border) border-box;
 }
