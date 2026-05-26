@@ -393,9 +393,12 @@ def test_scheduled_post_templates_render_attachment_previews():
     assert 'planner-card-layout' in planner_html
     assert 'planner-card-main' in planner_html
     assert 'planner-card-open' in planner_html
+    assert 'planner-board-mini-title' in planner_html
+    assert 'planner-board-mini-meta' in planner_html
     assert 'items.slice(-kanbanCollapsedLimit)' in planner_html
     assert 'data-kanban-toggle="${bucket}"' in planner_html
-    assert 'Display All ${items.length}' in planner_html
+    assert 'Display all ${items.length}' in planner_html
+    assert 'planner-board-lane-empty' in planner_html
     assert 'planner-move-modal' in planner_html
     assert 'document.body.appendChild(plannerMoveModalElement)' in planner_html
     assert 'function queueMoveModal(post, target)' in planner_html

@@ -3172,11 +3172,11 @@ body[data-ui-mode="dark"] .mobile-bottom-nav-create {
     position: relative;
     width: 100%;
     max-width: 100%;
-    gap: 0.35rem;
-    height: 8.7rem;
-    min-height: 8.7rem;
-    padding: 0.78rem 0.95rem;
-    overflow: hidden;
+    gap: 0.62rem;
+    height: auto;
+    min-height: 9.85rem;
+    padding: 0.82rem 0.9rem;
+    overflow: visible;
 }
 
 .planner-board-surface .scheduled-kanban-lane-header {
@@ -3217,62 +3217,91 @@ body[data-ui-mode="dark"] .mobile-bottom-nav-create {
     background: var(--lp-theme-rail);
 }
 
-.planner-board-lane-summary {
+.planner-board-lane-summary,
+.planner-board-lane-empty {
     color: var(--lp-ink-soft);
     font-size: 0.78rem;
     line-height: 1.35;
-    min-height: 1.1rem;
     max-width: 100%;
+}
+
+.planner-board-lane-summary {
+    min-height: 1.1rem;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
+.planner-board-lane-empty {
+    display: flex;
+    align-items: center;
+    min-height: 3.2rem;
+    padding: 0.6rem 0.65rem;
+    border: 1px dashed var(--lp-border-soft);
+    border-radius: 8px;
+    background: rgba(var(--lp-shadow-rgb), 0.03);
+}
+
 .planner-board-mini-list {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.35rem;
-    min-height: 1.72rem;
-    max-height: 1.72rem;
-    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 0.42rem;
+    min-width: 0;
 }
 
 .planner-board-mini-card {
-    display: inline-flex;
-    align-items: center;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
     justify-content: center;
+    gap: 0.16rem;
     width: 100%;
     min-width: 0;
     max-width: 100%;
-    padding: 0.28rem 0.5rem;
+    min-height: 2.78rem;
+    padding: 0.48rem 0.58rem;
     border: 1px solid rgba(117, 136, 173, 0.18);
-    border-radius: 999px;
+    border-radius: 8px;
     background: rgba(255, 255, 255, 0.68);
     color: var(--lp-ink);
-    font-size: 0.72rem;
-    font-weight: 650;
-    line-height: 1.1;
+    font-size: 0.76rem;
+    line-height: 1.22;
     text-decoration: none;
     box-shadow: none;
 }
 
-.planner-board-mini-card span {
+.planner-board-mini-title,
+.planner-board-mini-meta {
+    display: block;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
+.planner-board-mini-title {
+    color: var(--lp-ink);
+    font-weight: 700;
+}
+
+.planner-board-mini-meta {
+    color: var(--lp-ink-soft);
+    font-size: 0.68rem;
+    font-weight: 600;
+}
+
 .planner-board-surface .scheduled-kanban-list-summary {
-    margin-top: auto;
+    margin-top: 0.04rem;
     padding: 0;
     border: 0;
     background: transparent;
     justify-content: flex-end;
-    min-height: 2rem;
+    min-height: 0;
 }
 
 .planner-board-surface .scheduled-kanban-toggle {
-    min-width: 7rem;
+    min-width: 0;
+    padding-inline: 0.72rem;
 }
 
 .planner-board-surface .scheduled-kanban-list-summary > span {
