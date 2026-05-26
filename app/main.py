@@ -60,6 +60,7 @@ from app.services.auth import (
 from app.services.alerts import AlertDispatcher
 from app.services.app_settings import read_app_settings, send_settings_test_webhook, update_app_settings
 from app.services.delivery import new_run_id, process_delivery_queue
+from app.services.dashboard_v2 import build_dashboard_v2_view_model
 from app.services.events import log_run_event
 from app.services.bootstrap import bootstrap
 from app.services.giveaway_activity import build_dashboard_giveaway_activity_monitor
@@ -916,6 +917,60 @@ def dashboard(request: Request) -> HTMLResponse:
                 instagram_webhook_observability=webhook_observability,
                 giveaway_activity_monitor=giveaway_activity_monitor,
                 scheduler_status=_scheduler_service(request).get_status(),
+                admin_mode=bool(auth_enabled() and principal.is_admin),
+                cleared_dashboard_alert_count=_coerce_int_query_param(request.query_params.get("alerts_cleared")),
+            ),
+        )
+
+
+@app.get("/dashboard-v2", response_class=HTMLResponse)
+def dashboard_v2(request: Request) -> HTMLResponse:
+    guarded = _page_guard(request)
+    if isinstance(guarded, RedirectResponse):
+        return guarded
+    principal = guarded
+    with db_session() as session:
+        owner_user_id = _owner_user_id_for_principal(principal)
+        activity_filters = _dashboard_activity_filters_from_request(request)
+        personas = list_personas(session, owner_user_id=owner_user_id)
+        posts = [_serialize_post(post) for post in list_scheduled_posts(session, owner_user_id=owner_user_id)]
+        run_events = [serialize_run_event(event) for event in list_run_events(session, limit=80, owner_user_id=owner_user_id)]
+        alert_events = [
+            serialize_alert_event(event)
+            for event in _visible_dashboard_alerts(request, list_alert_events(session, limit=100, owner_user_id=owner_user_id))
+        ]
+        run_groups = summarize_run_events(run_events, limit_runs=8)
+        webhook_observability = instagram_webhook_observability(session, window_days=7, recent_limit=8, field_limit=5) if principal.is_admin else None
+        giveaway_activity_monitor = build_dashboard_giveaway_activity_monitor(
+            session,
+            owner_user_id=owner_user_id,
+            filters=activity_filters,
+        )
+        scheduler_status = _scheduler_service(request).get_status()
+        dashboard_v2_model = build_dashboard_v2_view_model(
+            personas=personas,
+            posts=posts,
+            run_groups=run_groups,
+            alert_events=alert_events,
+            scheduler_status=scheduler_status,
+            giveaway_activity_monitor=giveaway_activity_monitor,
+            instagram_webhook_observability=webhook_observability,
+            timezone_name=_principal_timezone(principal),
+        )
+        return templates.TemplateResponse(
+            name="dashboard_v2.html",
+            request=request,
+            context=_template_context(
+                request,
+                personas=personas,
+                posts=posts,
+                persona_name_by_id={persona.id: persona.name for persona in personas},
+                run_groups=run_groups,
+                alert_events=alert_events,
+                instagram_webhook_observability=webhook_observability,
+                giveaway_activity_monitor=giveaway_activity_monitor,
+                scheduler_status=scheduler_status,
+                dashboard_v2=dashboard_v2_model,
                 admin_mode=bool(auth_enabled() and principal.is_admin),
                 cleared_dashboard_alert_count=_coerce_int_query_param(request.query_params.get("alerts_cleared")),
             ),

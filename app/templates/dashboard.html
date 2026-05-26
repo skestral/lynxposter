@@ -32,11 +32,13 @@
                     {% if current_principal.is_user %}
                     <a class="btn btn-primary" href="/personas/page">Manage Personas</a>
                     <a class="btn btn-outline-primary" href="/scheduled-posts/page">Open Planner</a>
+                    <a class="btn btn-outline-primary" href="/dashboard-v2">Preview Dashboard V2</a>
                     <a class="btn btn-outline-secondary" href="/logs/page">View Activity</a>
                     {% endif %}
                     {% if current_principal.is_admin %}
                     <a class="btn btn-primary" href="/admin/users/page">Manage Users</a>
                     <a class="btn btn-outline-primary" href="/settings/page">Open Settings</a>
+                    <a class="btn btn-outline-primary" href="/dashboard-v2">Preview Dashboard V2</a>
                     {% endif %}
                 </div>
             </div>

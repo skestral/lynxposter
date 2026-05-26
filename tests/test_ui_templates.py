@@ -987,6 +987,80 @@ def test_dashboard_template_truncates_long_navbar_identity_text():
     assert "registerLiveUpdates" in html
 
 
+def test_dashboard_v2_template_renders_mobile_friendly_tab_shell():
+    html = templates.env.get_template("dashboard_v2.html").render(
+        request=_request_with_principal(),
+        current_principal=SimpleNamespace(
+            is_authenticated=True,
+            is_user=True,
+            is_admin=False,
+            user_id="user-1",
+            display_name="Lynx",
+            role="user",
+            timezone="UTC",
+            ui_theme="skylight",
+            ui_mode="light",
+        ),
+        auth_enabled=False,
+        personas=[],
+        posts=[],
+        persona_name_by_id={},
+        run_groups=[],
+        alert_events=[],
+        scheduler_status=SimpleNamespace(),
+        giveaway_activity_monitor={},
+        instagram_webhook_observability=None,
+        admin_mode=False,
+        cleared_dashboard_alert_count=0,
+        dashboard_v2={
+            "overview_metrics": [
+                {"label": "Autorun", "value": "Active", "detail": "Next pass queued", "tone": "green", "href": "/settings/page"},
+                {"label": "Scheduled", "value": "0", "detail": "0 due today", "tone": "blue", "href": "/scheduled-posts/page"},
+            ],
+            "delivery_total": 0,
+            "delivery_chart": [
+                {"label": "Succeeded", "count": 0, "tone": "green", "width_pct": 0},
+                {"label": "Failed", "count": 0, "tone": "red", "width_pct": 0},
+            ],
+            "status_lanes": [],
+            "upcoming_post_cards": [],
+            "recent_post_cards": [],
+            "scheduled_today_count": 0,
+            "account_count": 0,
+            "enabled_persona_count": 0,
+            "latest_run": None,
+            "latest_run_errors": 0,
+            "run_count": 0,
+            "alert_count": 0,
+            "giveaway_metrics": {"campaigns": 0, "channels": 0, "entrants": 0, "activities": 0},
+            "giveaway_rollups": [],
+            "giveaway_recent_events": [],
+            "open_giveaways": [],
+            "webhook_total": 0,
+            "webhook_matched": 0,
+            "webhook_match_pct": 0,
+            "webhook_observability": None,
+            "scheduler": {
+                "label": "Active",
+                "tone": "green",
+                "automation_enabled": True,
+                "cycle_in_progress": False,
+                "next_run_at": None,
+                "last_run_trigger": None,
+                "last_run_finished_at": None,
+                "interval_seconds": 300,
+            },
+        },
+    )
+
+    assert "dashboard-v2-bleed" in html
+    assert "dashboard-v2-tabs" in html
+    assert "data-bs-target=\"#dashboard-v2-overview\"" in html
+    assert "dashboard-v2-metrics-grid" in html
+    assert "dashboard-v2-manual-run-button" in html
+    assert "registerLiveUpdates" in html
+
+
 def test_settings_template_renders_instagram_webhook_setup_guidance():
     html = templates.env.get_template("settings.html").render(
         request=_request_with_principal(),

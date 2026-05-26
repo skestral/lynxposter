@@ -345,3 +345,105 @@ def test_dashboard_route_renders_persona_names_for_alerts_and_run_events(monkeyp
     finally:
         Base.metadata.drop_all(engine)
         engine.dispose()
+
+
+def test_dashboard_v2_route_renders_ops_health_for_admin(monkeypatch, tmp_path):
+    engine, SessionLocal = _install_dashboard_test_app(monkeypatch, tmp_path)
+
+    try:
+        with SessionLocal() as session:
+            persona = _create_persona(session, name="Savannah", slug="savannah-dashboard-v2")
+            _create_alert(session, persona, run_id="run-alert-v2", message="Dashboard V2 alert")
+            _create_run_event(session, persona, run_id="run-event-v2", message="Dashboard V2 event")
+            post = CanonicalPost(
+                persona_id=persona.id,
+                origin_kind="composer",
+                post_type="standard",
+                status="scheduled",
+                body="Dashboard V2 scheduled post",
+                publish_overrides_json={},
+                metadata_json={},
+                scheduled_for=datetime.now(timezone.utc) + timedelta(hours=2),
+            )
+            session.add(post)
+            session.add(
+                InstagramGiveawayWebhookEvent(
+                    provider_event_field="comments",
+                    event_type="comment",
+                    payload_json={"entry": {"id": "instagram-account"}, "change": {"field": "comments", "value": {"id": "comment-1"}}},
+                    signature_valid=True,
+                    processed=True,
+                )
+            )
+            session.commit()
+
+        with TestClient(app) as client:
+            response = client.get("/dashboard-v2")
+
+        assert response.status_code == 200
+        assert "Dashboard V2" in response.text
+        assert "Ops Health" in response.text
+        assert "Dashboard V2 scheduled post" in response.text
+        assert "Dashboard V2 alert" in response.text
+        assert "Instagram Webhooks" in response.text
+        assert "dashboard-v2-tabs" in response.text
+        assert "dashboard-v2-live-update-status" in response.text
+    finally:
+        Base.metadata.drop_all(engine)
+        engine.dispose()
+
+
+def test_dashboard_v2_route_respects_user_scope(monkeypatch, tmp_path):
+    engine, SessionLocal = _install_dashboard_test_app(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        "app.main.build_principal_from_request",
+        lambda request: Principal(
+            user_id="user-1",
+            display_name="Lynx",
+            role="user",
+            timezone="UTC",
+            is_authenticated=True,
+        ),
+    )
+
+    try:
+        with SessionLocal() as session:
+            owned_persona = _create_persona(session, name="Owned", slug="owned-dashboard-v2", owner_user_id="user-1")
+            other_persona = _create_persona(session, name="Other", slug="other-dashboard-v2", owner_user_id="other-user")
+            session.add_all(
+                [
+                    CanonicalPost(
+                        persona_id=owned_persona.id,
+                        origin_kind="composer",
+                        post_type="standard",
+                        status="scheduled",
+                        body="Owned user post",
+                        publish_overrides_json={},
+                        metadata_json={},
+                        scheduled_for=datetime.now(timezone.utc) + timedelta(hours=2),
+                    ),
+                    CanonicalPost(
+                        persona_id=other_persona.id,
+                        origin_kind="composer",
+                        post_type="standard",
+                        status="scheduled",
+                        body="Other user post",
+                        publish_overrides_json={},
+                        metadata_json={},
+                        scheduled_for=datetime.now(timezone.utc) + timedelta(hours=3),
+                    ),
+                ]
+            )
+            session.commit()
+
+        with TestClient(app) as client:
+            response = client.get("/dashboard-v2")
+
+        assert response.status_code == 200
+        assert "Owned user post" in response.text
+        assert "Other user post" not in response.text
+        assert "Instagram Webhooks" in response.text
+        assert "Admin Only" in response.text
+    finally:
+        Base.metadata.drop_all(engine)
+        engine.dispose()

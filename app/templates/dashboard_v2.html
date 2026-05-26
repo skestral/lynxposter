@@ -1,0 +1,419 @@
+{% extends "base.html" %}
+
+{% macro status_dot(tone) -%}
+<span class="dashboard-v2-status-dot is-{{ tone or 'muted' }}" aria-hidden="true"></span>
+{%- endmacro %}
+
+{% macro metric_tile(metric) -%}
+{% if metric.href %}
+<a class="dashboard-v2-metric is-{{ metric.tone or 'muted' }}" href="{{ metric.href }}">
+{% else %}
+<div class="dashboard-v2-metric is-{{ metric.tone or 'muted' }}">
+{% endif %}
+    <div class="dashboard-v2-metric-accent"></div>
+    <div class="dashboard-v2-metric-label">{{ metric.label }}</div>
+    <div class="dashboard-v2-metric-value">{{ metric.value }}</div>
+    <div class="dashboard-v2-metric-detail">{{ metric.detail }}</div>
+{% if metric.href %}
+</a>
+{% else %}
+</div>
+{% endif %}
+{%- endmacro %}
+
+{% macro bar_row(item) -%}
+<div class="dashboard-v2-bar-row">
+    <div class="dashboard-v2-bar-label">{{ item.label }}</div>
+    <div class="dashboard-v2-bar-track">
+        <div class="dashboard-v2-bar-fill is-{{ item.tone or 'muted' }}" style="--bar-width: {{ item.width_pct }}%;"></div>
+    </div>
+    <div class="dashboard-v2-bar-count">{{ item.count }}</div>
+</div>
+{%- endmacro %}
+
+{% macro post_card(card, compact=false) -%}
+{% set post = card.post %}
+<a class="dashboard-v2-list-card" href="/scheduled-posts/{{ post.id }}/page">
+    <div class="dashboard-v2-list-card-main">
+        <div class="dashboard-v2-list-title">{{ card.preview }}</div>
+        <div class="dashboard-v2-list-meta">
+            {{ persona_name_by_id.get(post.persona_id, post.persona_id) }}
+            {% if post.post_type == "giveaway" %} &middot; Giveaway{% endif %}
+        </div>
+        {% if not compact and post.scheduled_for %}
+        <div class="dashboard-v2-list-meta">{{ post.scheduled_for|datetime_display }}</div>
+        {% endif %}
+    </div>
+    <span class="dashboard-v2-chip is-{{ 'red' if post.display_status in ['failure', 'failed'] else ('amber' if post.display_status == 'partial_failure' else ('green' if post.display_status == 'success' else 'blue')) }}">
+        {{ post.display_status|replace('_', ' ')|title }}
+    </span>
+</a>
+{%- endmacro %}
+
+{% block content %}
+{% set model = dashboard_v2 %}
+{% set version_info = app_version() %}
+<div class="dashboard-v2-bleed">
+    <section class="dashboard-v2-shell" aria-labelledby="dashboard-v2-title">
+        <div class="dashboard-v2-topbar">
+            <div class="dashboard-v2-title-block">
+                <div class="dashboard-v2-kicker">Dashboard V2</div>
+                <h1 id="dashboard-v2-title">Ops Health</h1>
+                <div class="dashboard-v2-subtitle">Publishing, giveaways, alerts, and platform signals in one view.</div>
+            </div>
+            <div class="dashboard-v2-actions">
+                <span class="dashboard-v2-live-pill" id="dashboard-v2-live-update-status">{{ status_dot('green') }}Live</span>
+                <span class="dashboard-v2-live-pill">{{ timezone_indicator() }}</span>
+                <a class="btn btn-outline-secondary btn-sm" href="/">Classic</a>
+                {% if current_principal.is_user %}
+                <a class="btn btn-primary btn-sm" href="/scheduled-posts/new/page">Create Post</a>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if cleared_dashboard_alert_count %}
+        <div class="dashboard-v2-alert-note">
+            Cleared {{ cleared_dashboard_alert_count }} dashboard alert{% if cleared_dashboard_alert_count != 1 %}s{% endif %}.
+        </div>
+        {% endif %}
+
+        <ul class="nav nav-pills dashboard-v2-tabs" id="dashboard-v2-tabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="dashboard-v2-overview-tab" data-bs-toggle="tab" data-bs-target="#dashboard-v2-overview" type="button" role="tab">Overview</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="dashboard-v2-planner-tab" data-bs-toggle="tab" data-bs-target="#dashboard-v2-planner" type="button" role="tab">Planner</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="dashboard-v2-giveaways-tab" data-bs-toggle="tab" data-bs-target="#dashboard-v2-giveaways" type="button" role="tab">Giveaways</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="dashboard-v2-activity-tab" data-bs-toggle="tab" data-bs-target="#dashboard-v2-activity" type="button" role="tab">Activity</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="dashboard-v2-health-tab" data-bs-toggle="tab" data-bs-target="#dashboard-v2-health" type="button" role="tab">Health</button>
+            </li>
+        </ul>
+
+        <div class="tab-content dashboard-v2-tab-content" id="dashboard-v2-tab-content">
+            <div class="tab-pane fade show active" id="dashboard-v2-overview" role="tabpanel" aria-labelledby="dashboard-v2-overview-tab" tabindex="0">
+                <div class="dashboard-v2-metrics-grid">
+                    {% for metric in model.overview_metrics %}
+                        {{ metric_tile(metric) }}
+                    {% endfor %}
+                </div>
+
+                <div class="dashboard-v2-overview-grid">
+                    <section class="dashboard-v2-panel dashboard-v2-panel-primary">
+                        <div class="dashboard-v2-panel-head">
+                            <div>
+                                <div class="dashboard-v2-panel-kicker">Automation</div>
+                                <h2>{{ model.scheduler.label }}</h2>
+                            </div>
+                            {{ status_dot(model.scheduler.tone) }}
+                        </div>
+                        <div class="dashboard-v2-keyline">
+                            <span>Interval</span>
+                            <strong>{{ model.scheduler.interval_seconds }} seconds</strong>
+                        </div>
+                        <div class="dashboard-v2-keyline">
+                            <span>Next Run</span>
+                            <strong>{{ model.scheduler.next_run_at|datetime_display if model.scheduler.next_run_at else "-" }}</strong>
+                        </div>
+                        <div class="dashboard-v2-keyline">
+                            <span>Last Finished</span>
+                            <strong>{{ model.scheduler.last_run_finished_at|datetime_display if model.scheduler.last_run_finished_at else "-" }}</strong>
+                        </div>
+                        {% if not auth_enabled or current_principal.is_admin %}
+                        <div class="dashboard-v2-button-row">
+                            <button class="btn btn-primary btn-sm" id="dashboard-v2-manual-run-button" type="button">Run Now</button>
+                            {% if model.scheduler.automation_enabled %}
+                            <button class="btn btn-outline-secondary btn-sm" id="dashboard-v2-pause-automation-button" type="button">Pause</button>
+                            {% else %}
+                            <button class="btn btn-outline-success btn-sm" id="dashboard-v2-start-automation-button" type="button">Start</button>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                        <div id="dashboard-v2-scheduler-feedback" class="dashboard-v2-muted mt-2"></div>
+                    </section>
+
+                    <section class="dashboard-v2-panel">
+                        <div class="dashboard-v2-panel-head">
+                            <div>
+                                <div class="dashboard-v2-panel-kicker">Delivery</div>
+                                <h2>{{ model.delivery_total }} States</h2>
+                            </div>
+                            <a href="/logs/page" class="dashboard-v2-panel-link">Logs</a>
+                        </div>
+                        <div class="dashboard-v2-bars">
+                            {% for item in model.delivery_chart %}
+                                {{ bar_row(item) }}
+                            {% endfor %}
+                        </div>
+                    </section>
+
+                    <section class="dashboard-v2-panel">
+                        <div class="dashboard-v2-panel-head">
+                            <div>
+                                <div class="dashboard-v2-panel-kicker">Giveaways</div>
+                                <h2>{{ model.giveaway_metrics.get("entrants", 0) }} Entrants</h2>
+                            </div>
+                            <a href="/scheduled-posts/page" class="dashboard-v2-panel-link">Open</a>
+                        </div>
+                        <div class="dashboard-v2-donut" style="--donut-value: {{ 100 if model.giveaway_metrics.get('entrants', 0) and model.giveaway_metrics.get('activities', 0) else 0 }}%;">
+                            <span>{{ model.giveaway_metrics.get("activities", 0) }}</span>
+                        </div>
+                        <div class="dashboard-v2-muted">Captured activities across {{ model.giveaway_metrics.get("campaigns", 0) }} open campaign{% if model.giveaway_metrics.get("campaigns", 0) != 1 %}s{% endif %}.</div>
+                    </section>
+                </div>
+
+                <div class="dashboard-v2-bottom-grid">
+                    <section class="dashboard-v2-panel">
+                        <div class="dashboard-v2-panel-head">
+                            <div>
+                                <div class="dashboard-v2-panel-kicker">Today</div>
+                                <h2>{{ model.scheduled_today_count }} Scheduled</h2>
+                            </div>
+                            <a href="/scheduled-posts/page" class="dashboard-v2-panel-link">Planner</a>
+                        </div>
+                        <div class="dashboard-v2-list-stack">
+                            {% for card in model.upcoming_post_cards[:3] %}
+                                {{ post_card(card, compact=true) }}
+                            {% else %}
+                            <div class="dashboard-v2-empty">No scheduled posts on deck.</div>
+                            {% endfor %}
+                        </div>
+                    </section>
+
+                    <section class="dashboard-v2-panel">
+                        <div class="dashboard-v2-panel-head">
+                            <div>
+                                <div class="dashboard-v2-panel-kicker">Recent Signals</div>
+                                <h2>{{ model.giveaway_recent_events|length }} Activities</h2>
+                            </div>
+                            <a href="/logs/page" class="dashboard-v2-panel-link">Activity</a>
+                        </div>
+                        <div class="dashboard-v2-list-stack">
+                            {% for event in model.giveaway_recent_events[:3] %}
+                            <a class="dashboard-v2-signal-row" href="{{ event.campaign_href }}">
+                                <span class="dashboard-v2-signal-dot is-{{ 'pink' if event.service == 'instagram' else ('blue' if event.service == 'bluesky' else 'muted') }}"></span>
+                                <span>
+                                    <strong>{{ event.actor_label }}</strong>
+                                    <span>{{ event.service_label }} &middot; {{ event.event_label }}</span>
+                                </span>
+                            </a>
+                            {% else %}
+                            <div class="dashboard-v2-empty">No giveaway activity captured yet.</div>
+                            {% endfor %}
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="dashboard-v2-planner" role="tabpanel" aria-labelledby="dashboard-v2-planner-tab" tabindex="0">
+                <div class="dashboard-v2-two-column">
+                    <section class="dashboard-v2-panel">
+                        <div class="dashboard-v2-panel-head">
+                            <div>
+                                <div class="dashboard-v2-panel-kicker">Post Status</div>
+                                <h2>{{ posts|length }} Plans</h2>
+                            </div>
+                            <a href="/scheduled-posts/page" class="dashboard-v2-panel-link">Board</a>
+                        </div>
+                        <div class="dashboard-v2-bars">
+                            {% for lane in model.status_lanes %}
+                                {{ bar_row(lane) }}
+                            {% else %}
+                            <div class="dashboard-v2-empty">No post plans yet.</div>
+                            {% endfor %}
+                        </div>
+                    </section>
+
+                    <section class="dashboard-v2-panel">
+                        <div class="dashboard-v2-panel-head">
+                            <div>
+                                <div class="dashboard-v2-panel-kicker">Upcoming</div>
+                                <h2>Next Posts</h2>
+                            </div>
+                            <a href="/scheduled-posts/new/page" class="dashboard-v2-panel-link">Create</a>
+                        </div>
+                        <div class="dashboard-v2-list-stack">
+                            {% for card in model.upcoming_post_cards %}
+                                {{ post_card(card) }}
+                            {% else %}
+                            <div class="dashboard-v2-empty">Nothing scheduled yet.</div>
+                            {% endfor %}
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="dashboard-v2-giveaways" role="tabpanel" aria-labelledby="dashboard-v2-giveaways-tab" tabindex="0">
+                <div class="dashboard-v2-two-column">
+                    <section class="dashboard-v2-panel">
+                        <div class="dashboard-v2-panel-head">
+                            <div>
+                                <div class="dashboard-v2-panel-kicker">Open Giveaways</div>
+                                <h2>{{ model.open_giveaways|length }} Active</h2>
+                            </div>
+                            <a href="/scheduled-posts/page" class="dashboard-v2-panel-link">Planner</a>
+                        </div>
+                        <div class="dashboard-v2-list-stack">
+                            {% for giveaway in model.open_giveaways %}
+                            <a class="dashboard-v2-list-card" href="{{ giveaway.href }}">
+                                <div class="dashboard-v2-list-card-main">
+                                    <div class="dashboard-v2-list-title">{{ giveaway.label }}</div>
+                                    <div class="dashboard-v2-list-meta">{{ giveaway.persona_name }} &middot; {{ giveaway.channel_labels|join(", ") }}</div>
+                                    <div class="dashboard-v2-list-meta">{{ giveaway.giveaway_end_at|datetime_display if giveaway.giveaway_end_at else "No close time set" }}</div>
+                                </div>
+                                <span class="dashboard-v2-chip is-pink">{{ giveaway.status|replace('_', ' ')|title }}</span>
+                            </a>
+                            {% else %}
+                            <div class="dashboard-v2-empty">No active giveaways right now.</div>
+                            {% endfor %}
+                        </div>
+                    </section>
+
+                    <section class="dashboard-v2-panel">
+                        <div class="dashboard-v2-panel-head">
+                            <div>
+                                <div class="dashboard-v2-panel-kicker">Channels</div>
+                                <h2>{{ model.giveaway_metrics.get("channels", 0) }} Watched</h2>
+                            </div>
+                        </div>
+                        <div class="dashboard-v2-bars">
+                            {% for rollup in model.giveaway_rollups %}
+                            <div class="dashboard-v2-bar-row">
+                                <div class="dashboard-v2-bar-label">{{ rollup.label }}</div>
+                                <div class="dashboard-v2-bar-track">
+                                    <div class="dashboard-v2-bar-fill is-{{ 'pink' if rollup.service == 'instagram' else ('blue' if rollup.service == 'bluesky' else 'muted') }}" style="--bar-width: {{ 100 if model.giveaway_metrics.get('activities', 0) == 0 else (rollup.activity_count / model.giveaway_metrics.get('activities', 1) * 100)|round }}%;"></div>
+                                </div>
+                                <div class="dashboard-v2-bar-count">{{ rollup.activity_count }}</div>
+                            </div>
+                            {% else %}
+                            <div class="dashboard-v2-empty">No channel activity yet.</div>
+                            {% endfor %}
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="dashboard-v2-activity" role="tabpanel" aria-labelledby="dashboard-v2-activity-tab" tabindex="0">
+                <div class="dashboard-v2-two-column">
+                    <section class="dashboard-v2-panel">
+                        <div class="dashboard-v2-panel-head">
+                            <div>
+                                <div class="dashboard-v2-panel-kicker">Alerts</div>
+                                <h2>{{ alert_events|length }} Recent</h2>
+                            </div>
+                            <a href="/logs/page" class="dashboard-v2-panel-link">Inspect</a>
+                        </div>
+                        <div class="dashboard-v2-list-stack">
+                            {% for alert in alert_events[:5] %}
+                            <div class="dashboard-v2-alert-row">
+                                <div class="dashboard-v2-list-title">{{ alert.message }}</div>
+                                <div class="dashboard-v2-list-meta">{{ alert.persona_name or "No persona" }} &middot; {{ alert.operation }} &middot; {{ alert.created_at|datetime_display }}</div>
+                            </div>
+                            {% else %}
+                            <div class="dashboard-v2-empty">No alerts right now.</div>
+                            {% endfor %}
+                        </div>
+                    </section>
+
+                    <section class="dashboard-v2-panel">
+                        <div class="dashboard-v2-panel-head">
+                            <div>
+                                <div class="dashboard-v2-panel-kicker">Runs</div>
+                                <h2>{{ model.run_count }} Recent</h2>
+                            </div>
+                            <a href="/logs/page" class="dashboard-v2-panel-link">Logs</a>
+                        </div>
+                        <div class="dashboard-v2-list-stack">
+                            {% for run in run_groups[:4] %}
+                            <details class="dashboard-v2-run-detail" {% if loop.first %}open{% endif %}>
+                                <summary>
+                                    <span>{{ (run.trigger or "run")|title }} Run</span>
+                                    <span>{{ run.counts.errors }} errors</span>
+                                </summary>
+                                <div class="dashboard-v2-muted">{{ run.summary_message }}</div>
+                            </details>
+                            {% else %}
+                            <div class="dashboard-v2-empty">No automation runs recorded yet.</div>
+                            {% endfor %}
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="dashboard-v2-health" role="tabpanel" aria-labelledby="dashboard-v2-health-tab" tabindex="0">
+                <div class="dashboard-v2-three-column">
+                    <section class="dashboard-v2-panel">
+                        <div class="dashboard-v2-panel-kicker">People</div>
+                        <h2>{{ model.enabled_persona_count }} Personas</h2>
+                        <p class="dashboard-v2-muted">{{ model.account_count }} connected account{% if model.account_count != 1 %}s{% endif %} available for routing.</p>
+                        <a href="/personas/page" class="dashboard-v2-panel-link">Manage Personas</a>
+                    </section>
+                    <section class="dashboard-v2-panel">
+                        <div class="dashboard-v2-panel-kicker">Build</div>
+                        <h2>v{{ version_info.version }}</h2>
+                        <p class="dashboard-v2-muted">{{ version_info.git_sha_short or "unknown" }} &middot; {{ version_info.git_source }}</p>
+                        <a href="/settings/page" class="dashboard-v2-panel-link">Settings</a>
+                    </section>
+                    <section class="dashboard-v2-panel">
+                        <div class="dashboard-v2-panel-kicker">Instagram Webhooks</div>
+                        {% if model.webhook_observability %}
+                        <h2>{{ model.webhook_match_pct }}% Matched</h2>
+                        <p class="dashboard-v2-muted">{{ model.webhook_total }} events captured in the last {{ model.webhook_observability.window_days }} days.</p>
+                        <a href="/logs/page#instagram-webhooks" class="dashboard-v2-panel-link">Open Webhooks</a>
+                        {% else %}
+                        <h2>Admin Only</h2>
+                        <p class="dashboard-v2-muted">Webhook observability is visible to admins.</p>
+                        {% endif %}
+                    </section>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+window.registerLiveUpdates?.({
+  topics: {{ (["dashboard", "run_events", "alert_events", "scheduled_posts"] + (["instagram_webhooks"] if current_principal.is_admin else [])) | tojson }},
+  statusElementId: "dashboard-v2-live-update-status",
+  readyLabel: "Live",
+  updatingLabel: "Refreshing...",
+});
+
+async function postDashboardV2SchedulerAction(url) {
+  const feedback = document.getElementById("dashboard-v2-scheduler-feedback");
+  if (feedback) feedback.textContent = "Working...";
+  const response = await fetch(url, {method: "POST"});
+  if (!response.ok) {
+    if (feedback) feedback.textContent = await window.readApiMessage(response);
+    return;
+  }
+  const result = await response.json();
+  if (feedback) feedback.textContent = result.message || "Action complete.";
+  window.location.reload();
+}
+
+document.getElementById("dashboard-v2-manual-run-button")?.addEventListener("click", () => postDashboardV2SchedulerAction("/scheduler/run"));
+document.getElementById("dashboard-v2-pause-automation-button")?.addEventListener("click", () => postDashboardV2SchedulerAction("/scheduler/pause"));
+document.getElementById("dashboard-v2-start-automation-button")?.addEventListener("click", () => postDashboardV2SchedulerAction("/scheduler/start"));
+
+const dashboardV2Tabs = Array.from(document.querySelectorAll("#dashboard-v2-tabs [data-bs-toggle='tab']"));
+const initialDashboardV2Hash = window.location.hash;
+if (initialDashboardV2Hash) {
+  const trigger = dashboardV2Tabs.find((button) => button.dataset.bsTarget === initialDashboardV2Hash);
+  if (trigger) bootstrap.Tab.getOrCreateInstance(trigger).show();
+}
+dashboardV2Tabs.forEach((button) => {
+  button.addEventListener("shown.bs.tab", (event) => {
+    const target = event.target?.dataset?.bsTarget;
+    if (target) history.replaceState(null, "", target);
+  });
+});
+</script>
+{% endblock %}
