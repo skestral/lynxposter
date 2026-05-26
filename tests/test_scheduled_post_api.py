@@ -686,6 +686,163 @@ def test_rerun_giveaway_api_selects_new_winner_from_current_evidence(api_stack, 
     assert payload["pools"][0]["final_winner"]["provider_username"] == "second.test"
 
 
+def test_reopen_giveaway_api_returns_closed_giveaway_to_collecting(api_stack):
+    api_client, SessionLocal = api_stack
+    with SessionLocal() as session:
+        persona = _create_persona(session, slug="scheduled-post-api-reopen-giveaway")
+        bluesky = _create_destination_account(session, persona, service="bluesky", label="Bluesky")
+        post = create_scheduled_post(
+            session,
+            ScheduledPostCreate.model_validate(
+                {
+                    "persona_id": persona.id,
+                    "body": "Reopen this giveaway",
+                    "post_type": "giveaway",
+                    "status": "draft",
+                    "target_account_ids": [bluesky.id],
+                    "publish_overrides_json": {},
+                    "metadata_json": {},
+                    "scheduled_for": None,
+                    "giveaway": {
+                        "giveaway_end_at": datetime.now(timezone.utc) - timedelta(hours=1),
+                        "pool_mode": "combined",
+                        "channels": [
+                            {
+                                "service": "bluesky",
+                                "account_id": bluesky.id,
+                                "rules": {
+                                    "kind": "all",
+                                    "children": [
+                                        {"kind": "atom", "atom": "reply_or_quote_present", "params": {}},
+                                    ],
+                                },
+                            }
+                        ],
+                    },
+                }
+            ),
+            [],
+        )
+        post.status = "posted"
+        job = next(job for job in post.delivery_jobs if job.target_account_id == bluesky.id)
+        job.status = "posted"
+        job.external_id = "3k-reopen"
+        channel = post.giveaway_campaign.channels[0]
+        channel.status = "winner_selected"
+        channel.target_post_uri = "at://did:plc:owner/app.bsky.feed.post/3k-reopen"
+        entrant = GiveawayEntrant(
+            channel=channel,
+            provider_user_id="did:plc:first",
+            provider_username="first.test",
+            display_label="first.test",
+            eligibility_status="eligible",
+            signal_state_json={
+                "reply_present": True,
+                "quote_present": False,
+                "like_present": False,
+                "repost_present": False,
+                "follow_present": None,
+                "reply_posts": [{"uri": "at://did:plc:first/app.bsky.feed.post/reply", "text": "First"}],
+                "quote_posts": [],
+                "reply_or_quote_mention_count": 0,
+            },
+        )
+        channel.entrants.append(entrant)
+        session.flush()
+        campaign = post.giveaway_campaign
+        campaign.status = "winner_selected"
+        campaign.frozen_at = datetime.now(timezone.utc)
+        campaign.last_evaluated_at = datetime.now(timezone.utc)
+        pool = campaign.pools[0]
+        pool.status = "winner_selected"
+        pool.candidate_entry_ids_json = [entrant.id]
+        pool.final_winner_entry = entrant
+        pool.frozen_at = datetime.now(timezone.utc)
+        pool.last_evaluated_at = datetime.now(timezone.utc)
+        session.commit()
+        post_id = post.id
+
+    new_end_at = (datetime.now(timezone.utc) + timedelta(days=2)).replace(second=0, microsecond=0)
+    response = api_client.post(
+        f"/scheduled-posts/{post_id}/giveaway/reopen",
+        json={"giveaway_end_at": new_end_at.strftime("%Y-%m-%dT%H:%M")},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "collecting"
+    assert payload["giveaway_end_at"] == new_end_at.isoformat().replace("+00:00", "Z")
+    assert payload["pools"][0]["status"] == "collecting"
+    assert payload["pools"][0]["candidate_count"] == 0
+    assert payload["pools"][0]["final_winner"] is None
+
+    with SessionLocal() as session:
+        saved = get_post(session, post_id)
+        assert saved.giveaway_campaign.status == "collecting"
+        assert saved.giveaway_campaign.frozen_at is None
+        assert saved.giveaway_campaign.giveaway_end_at.replace(tzinfo=timezone.utc) == new_end_at
+        saved_pool = saved.giveaway_campaign.pools[0]
+        assert saved_pool.status == "collecting"
+        assert saved_pool.candidate_entry_ids_json == []
+        assert saved_pool.final_winner_entry is None
+
+
+def test_reopen_giveaway_api_rejects_past_end_time(api_stack):
+    api_client, SessionLocal = api_stack
+    with SessionLocal() as session:
+        persona = _create_persona(session, slug="scheduled-post-api-reopen-giveaway-past")
+        bluesky = _create_destination_account(session, persona, service="bluesky", label="Bluesky")
+        post = create_scheduled_post(
+            session,
+            ScheduledPostCreate.model_validate(
+                {
+                    "persona_id": persona.id,
+                    "body": "Reopen this giveaway",
+                    "post_type": "giveaway",
+                    "status": "draft",
+                    "target_account_ids": [bluesky.id],
+                    "publish_overrides_json": {},
+                    "metadata_json": {},
+                    "scheduled_for": None,
+                    "giveaway": {
+                        "giveaway_end_at": datetime.now(timezone.utc) - timedelta(hours=1),
+                        "pool_mode": "combined",
+                        "channels": [
+                            {
+                                "service": "bluesky",
+                                "account_id": bluesky.id,
+                                "rules": {
+                                    "kind": "all",
+                                    "children": [
+                                        {"kind": "atom", "atom": "reply_or_quote_present", "params": {}},
+                                    ],
+                                },
+                            }
+                        ],
+                    },
+                }
+            ),
+            [],
+        )
+        post.status = "posted"
+        job = next(job for job in post.delivery_jobs if job.target_account_id == bluesky.id)
+        job.status = "posted"
+        job.external_id = "3k-reopen-past"
+        channel = post.giveaway_campaign.channels[0]
+        channel.target_post_uri = "at://did:plc:owner/app.bsky.feed.post/3k-reopen-past"
+        post.giveaway_campaign.status = "failed"
+        session.commit()
+        post_id = post.id
+
+    response = api_client.post(
+        f"/scheduled-posts/{post_id}/giveaway/reopen",
+        json={"giveaway_end_at": "2026-01-01T12:00"},
+    )
+
+    assert response.status_code == 400
+    assert "future" in response.json()["detail"]
+
+
 def test_scheduled_post_api_exposes_delivery_outcome_breakdown(api_stack):
     api_client, SessionLocal = api_stack
     with SessionLocal() as session:

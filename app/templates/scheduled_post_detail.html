@@ -205,6 +205,7 @@
                         {% endif %}
                         {% if post.giveaway and post.giveaway.status in ["winner_selected", "winner_confirmed", "review_required", "failed"] %}
                         <button class="btn btn-outline-warning" type="button" id="rerun-giveaway-button">Rerun Raffle</button>
+                        <button class="btn btn-outline-primary" type="button" id="reopen-giveaway-toggle-button">Reopen Giveaway</button>
                         {% endif %}
                         {% if post.giveaway and post.giveaway.status in ["scheduled", "collecting"] %}
                         <button class="btn btn-outline-warning" type="button" id="end-giveaway-button">End Giveaway</button>
@@ -212,6 +213,23 @@
                         <button class="btn btn-outline-primary" type="button" id="send-now-button">Publish Now</button>
                         <a class="btn btn-outline-secondary" href="/sandbox/page?post_id={{ post.id }}">Open In Preview Studio</a>
                     </div>
+                    {% if post.giveaway and post.giveaway.status in ["winner_selected", "winner_confirmed", "review_required", "failed"] %}
+                    <div class="surface-panel-soft mt-3 d-none" id="reopen-giveaway-panel">
+                        <div class="row g-3 align-items-end">
+                            <div class="col-12 col-md-6">
+                                <label class="form-label d-flex align-items-center gap-2 flex-wrap" for="reopen-giveaway-end-at">
+                                    <span>New Giveaway End</span>
+                                    <span class="badge text-bg-light border rounded-pill">{{ timezone_indicator() }}</span>
+                                </label>
+                                <input class="form-control" id="reopen-giveaway-end-at" type="datetime-local" value="{{ post.giveaway.giveaway_end_at|datetime_local_input if post.giveaway.giveaway_end_at else '' }}">
+                            </div>
+                            <div class="col-12 col-md-auto d-flex gap-2 flex-wrap">
+                                <button class="btn btn-primary" type="button" id="reopen-giveaway-submit-button">Reopen Giveaway</button>
+                                <button class="btn btn-outline-secondary" type="button" id="reopen-giveaway-cancel-button">Cancel</button>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
                 </form>
             </div>
         </div>
@@ -448,6 +466,11 @@ const savedMediaCount = document.getElementById("saved-media-count");
 const deletePostButton = document.getElementById("delete-post-button");
 const recalculateGiveawayButton = document.getElementById("recalculate-giveaway-button");
 const rerunGiveawayButton = document.getElementById("rerun-giveaway-button");
+const reopenGiveawayToggleButton = document.getElementById("reopen-giveaway-toggle-button");
+const reopenGiveawayPanel = document.getElementById("reopen-giveaway-panel");
+const reopenGiveawayEndAtInput = document.getElementById("reopen-giveaway-end-at");
+const reopenGiveawaySubmitButton = document.getElementById("reopen-giveaway-submit-button");
+const reopenGiveawayCancelButton = document.getElementById("reopen-giveaway-cancel-button");
 const endGiveawayButton = document.getElementById("end-giveaway-button");
 const instagramScanButton = document.getElementById("instagram-scan-button");
 const postTypeSelect = document.getElementById("post-type-select");
@@ -937,6 +960,49 @@ if (rerunGiveawayButton) {
     } finally {
       rerunGiveawayButton.disabled = false;
       rerunGiveawayButton.textContent = "Rerun Raffle";
+    }
+  });
+}
+
+if (reopenGiveawayToggleButton && reopenGiveawayPanel) {
+  reopenGiveawayToggleButton.addEventListener("click", () => {
+    reopenGiveawayPanel.classList.remove("d-none");
+    if (reopenGiveawayEndAtInput) {
+      reopenGiveawayEndAtInput.focus();
+    }
+  });
+}
+
+if (reopenGiveawayCancelButton && reopenGiveawayPanel) {
+  reopenGiveawayCancelButton.addEventListener("click", () => {
+    reopenGiveawayPanel.classList.add("d-none");
+  });
+}
+
+if (reopenGiveawaySubmitButton && reopenGiveawayEndAtInput) {
+  reopenGiveawaySubmitButton.addEventListener("click", async () => {
+    if (!reopenGiveawayEndAtInput.value) {
+      alert("Choose a new giveaway end date and time.");
+      return;
+    }
+    const confirmed = window.confirm("Reopen this giveaway with the new closing date? Existing captured activity will remain, and the raffle result will be cleared.");
+    if (!confirmed) return;
+    reopenGiveawaySubmitButton.disabled = true;
+    reopenGiveawaySubmitButton.textContent = "Reopening...";
+    try {
+      const response = await fetch(`/scheduled-posts/${postId}/giveaway/reopen`, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({giveaway_end_at: reopenGiveawayEndAtInput.value}),
+      });
+      if (!response.ok) {
+        alert(await window.readApiMessage(response));
+        return;
+      }
+      window.location.reload();
+    } finally {
+      reopenGiveawaySubmitButton.disabled = false;
+      reopenGiveawaySubmitButton.textContent = "Reopen Giveaway";
     }
   });
 }

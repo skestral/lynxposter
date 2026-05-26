@@ -2073,6 +2073,61 @@ def rerun_giveaway_raffle(
     return campaign
 
 
+def reopen_giveaway_campaign(
+    session: Session,
+    campaign: GiveawayCampaign,
+    *,
+    giveaway_end_at: datetime,
+    run_id: str,
+) -> GiveawayCampaign:
+    new_end_at = normalize_datetime(giveaway_end_at)
+    if new_end_at is None:
+        raise ValueError("Choose a new giveaway end date and time.")
+    if new_end_at <= utcnow():
+        raise ValueError("Choose a giveaway end date and time in the future.")
+    if campaign.status in {GIVEAWAY_STATUS_SCHEDULED, GIVEAWAY_STATUS_COLLECTING}:
+        raise ValueError("This giveaway is already active. Update the end date and save the post plan instead.")
+
+    hydrate_channel_targets(campaign)
+    ready_channels = [channel for channel in campaign.channels if _channel_target_ready(channel)]
+    if not ready_channels:
+        raise ValueError("This giveaway cannot be reopened until at least one published target post is available.")
+
+    campaign.giveaway_end_at = new_end_at
+    campaign.status = GIVEAWAY_STATUS_COLLECTING
+    campaign.frozen_at = None
+    campaign.last_evaluated_at = None
+    campaign.last_error = None
+
+    for channel in campaign.channels:
+        channel.status = GIVEAWAY_STATUS_COLLECTING if _channel_target_ready(channel) else GIVEAWAY_STATUS_SCHEDULED
+        channel.last_error = None
+
+    _sync_campaign_pools(campaign)
+    for pool in campaign.pools:
+        pool.status = GIVEAWAY_STATUS_COLLECTING
+        pool.candidate_entry_ids_json = []
+        pool.provisional_winner_entry = None
+        pool.final_winner_entry = None
+        pool.frozen_at = None
+        pool.last_evaluated_at = None
+        pool.last_error = None
+
+    log_run_event(
+        session,
+        run_id=run_id,
+        persona_id=campaign.post.persona_id,
+        persona_name=campaign.post.persona.name if campaign.post.persona else None,
+        service="giveaway",
+        operation="giveaway",
+        message=f"Reopened giveaway post {campaign.post_id} until {new_end_at.isoformat()}.",
+        post_id=campaign.post_id,
+        metadata={"campaign_id": campaign.id, "giveaway_end_at": new_end_at.isoformat()},
+    )
+    session.flush()
+    return campaign
+
+
 def finalize_giveaway_campaign(
     session: Session,
     campaign: GiveawayCampaign,

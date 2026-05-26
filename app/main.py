@@ -70,6 +70,7 @@ from app.services.giveaway_engine import (
     end_giveaway_campaign,
     process_giveaway_lifecycle,
     recalculate_giveaway_entries,
+    reopen_giveaway_campaign,
     rerun_giveaway_raffle,
     scan_instagram_giveaway_channels,
     serialize_giveaway,
@@ -1870,6 +1871,42 @@ def api_rerun_giveaway_raffle(post_id: str, request: Request):
             _alert_dispatcher(request),
             run_id=new_run_id(),
         )
+        publish_live_update(
+            LIVE_UPDATE_TOPIC_SCHEDULED_POSTS,
+            LIVE_UPDATE_TOPIC_DASHBOARD,
+            LIVE_UPDATE_TOPIC_LOGS,
+        )
+        return serialize_giveaway(updated)
+
+
+@app.post("/scheduled-posts/{post_id}/giveaway/reopen")
+async def api_reopen_giveaway(post_id: str, request: Request):
+    principal = require_api_access(request, role="user")
+    try:
+        payload = await request.json()
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Giveaway reopen request must be JSON.") from exc
+    raw_end_at = payload.get("giveaway_end_at") if isinstance(payload, dict) else None
+    try:
+        new_end_at = _local_timezone_to_utc(str(raw_end_at or ""), _principal_timezone(principal))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Choose a valid giveaway end date and time.") from exc
+    if new_end_at is None:
+        raise HTTPException(status_code=400, detail="Choose a new giveaway end date and time.")
+
+    with db_session() as session:
+        post = get_post(session, post_id, owner_user_id=_owner_user_id_for_principal(principal))
+        if not post or post.origin_kind != "composer" or post.giveaway_campaign is None:
+            raise HTTPException(status_code=404, detail="Giveaway not found.")
+        try:
+            updated = reopen_giveaway_campaign(
+                session,
+                post.giveaway_campaign,
+                giveaway_end_at=new_end_at,
+                run_id=new_run_id(),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         publish_live_update(
             LIVE_UPDATE_TOPIC_SCHEDULED_POSTS,
             LIVE_UPDATE_TOPIC_DASHBOARD,
