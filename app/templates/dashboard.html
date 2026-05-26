@@ -7,14 +7,14 @@
             <div class="card-body p-4">
                 <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
                     <div>
-                        <h1 class="h3 mb-2">Welcome to your posting den</h1>
+                        <h1 class="h3 mb-2">Welcome to your publishing workspace</h1>
                         <p class="mb-0 text-secondary">Keep personas, post plans, and activity in one tidy spot while lynxposter handles the wandering.</p>
                         {% if current_principal.is_admin %}
                         <p class="mb-0 small text-secondary mt-2">Admin tools still stay close at paw, including people, instance settings, and automation controls.</p>
                         {% endif %}
                     </div>
                     <div class="d-flex gap-2 flex-wrap">
-                        <span class="badge rounded-pill text-bg-light border px-3 py-2" id="dashboard-live-update-status">Live updates purring</span>
+                        <span class="badge rounded-pill text-bg-light border px-3 py-2" id="dashboard-live-update-status">Live updates on</span>
                         <span class="badge rounded-pill text-bg-light border px-3 py-2">{{ timezone_indicator() }}</span>
                         {% if current_principal.is_user %}
                         <span class="badge rounded-pill soft-badge px-3 py-2">{{ personas|length }} personas</span>
@@ -137,7 +137,7 @@
                                 </td>
                             </tr>
                         {% else %}
-                            <tr><td colspan="3" class="text-secondary">No personas yet. Create one to start prowling.</td></tr>
+                            <tr><td colspan="3" class="text-secondary">No personas yet. Create one to start publishing.</td></tr>
                         {% endfor %}
                         </tbody>
                     </table>
@@ -368,7 +368,7 @@
 window.registerLiveUpdates?.({
   topics: {{ (["dashboard", "run_events", "alert_events", "scheduled_posts"] + (["instagram_webhooks"] if current_principal.is_admin else [])) | tojson }},
   statusElementId: "dashboard-live-update-status",
-  readyLabel: "Live updates purring",
+  readyLabel: "Live updates on",
   updatingLabel: "Refreshing…",
 });
 

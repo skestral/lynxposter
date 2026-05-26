@@ -6,7 +6,7 @@
             <div>
                 <div class="section-kicker mb-2">Planner</div>
                 <h1 class="h4 mb-1">Post Planner</h1>
-                <p class="text-secondary mb-0">See the full queue at a glance, drag plans into place, and keep every post lined up for its next pounce.</p>
+                <p class="text-secondary mb-0">See the full queue at a glance, drag plans into place, and keep every post lined up for its next publish window.</p>
             </div>
             <div class="d-flex gap-2 flex-wrap">
                 <a class="btn btn-primary" href="/scheduled-posts/new/page">Create Post</a>
@@ -28,7 +28,7 @@
             <div class="card-body">
                 <div class="section-kicker mb-2">Quick Moves</div>
                 <h2 class="h5 mb-2">Drag, drop, and tidy the queue</h2>
-                <p class="text-secondary mb-0">Drop a card onto a calendar day to reschedule it, or move it between board lanes to draft it, schedule it, or queue it up right meow.</p>
+                <p class="text-secondary mb-0">Drop a card onto a calendar day to reschedule it, or move it between board lanes to draft it, schedule it, or queue it now.</p>
             </div>
         </div>
     </div>
@@ -793,7 +793,7 @@ function buildMoveContext(post, target) {
       return {
         title: "Queue This Post",
         targetLabel: "Nudge it into the next publish cycle",
-        description: "We will queue this post for delivery right meow.",
+        description: "We will queue this post for delivery now.",
         submitLabel: "Queue Post",
         nextStatus: "queued",
         requireSchedule: true,

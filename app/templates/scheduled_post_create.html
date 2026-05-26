@@ -6,7 +6,7 @@
             <div>
                 <div class="section-kicker mb-2">Composer</div>
                 <h1 class="h4 mb-1">Create a post</h1>
-                <p class="text-secondary mb-0">Write once, line up the right destinations, and let lynxposter handle the tail-end details.</p>
+                <p class="text-secondary mb-0">Write once, line up the right destinations, and let lynxposter handle the delivery details.</p>
             </div>
             <div class="d-flex gap-2 flex-wrap">
                 <a class="btn btn-outline-secondary" href="/scheduled-posts/page">Back to Planner</a>
@@ -25,7 +25,7 @@
                     <div>
                         <div class="section-kicker mb-2">Draft Desk</div>
                         <h2 class="h5 mb-1">Build your next post plan</h2>
-                        <p class="text-secondary mb-0">The flow is split into quick tabs so you can pounce from copy to media to destinations without losing your place.</p>
+                        <p class="text-secondary mb-0">The flow is split into quick tabs so you can move from copy to media to destinations without losing your place.</p>
                     </div>
                     <span class="badge soft-badge rounded-pill px-3 py-2">{{ personas|length }} personas ready</span>
                 </div>
@@ -178,7 +178,7 @@
                         </div>
                         <div class="small text-secondary">lynxposter</div>
                     </div>
-                    <div class="composer-preview-body" id="preview-body-copy">Your post preview will stretch out here as you type.</div>
+                    <div class="composer-preview-body" id="preview-body-copy">Your post preview appears here as you type.</div>
                     <div class="composer-preview-media" id="preview-media-summary">No media selected yet.</div>
                     <div class="composer-preview-footer">
                         <span id="preview-target-count">0 targets</span>
@@ -187,7 +187,7 @@
                 </div>
                 <div class="surface-panel-soft mt-3">
                     <div class="fw-semibold mb-2">Quick pep talk</div>
-                    <div class="small text-secondary mb-0">Keep the copy warm, pick the right destinations, and your next post will be ready to pounce into the planner.</div>
+                    <div class="small text-secondary mb-0">Pick the right destinations and your next post will be ready for the planner.</div>
                 </div>
             </div>
         </div>
@@ -527,7 +527,7 @@ function refreshComposerPreview() {
 
   previewPersonaName.textContent = selectedPersonaLabel;
   previewScheduleLabel.textContent = formatScheduledPreview(scheduledForInput.value);
-  previewBodyCopy.textContent = bodyText || "Your post preview will stretch out here as you type.";
+  previewBodyCopy.textContent = bodyText || "Your post preview appears here as you type.";
   previewMediaSummary.textContent = snapshot.total
     ? `${describeAttachmentSnapshot(snapshot)} ready to ship.`
     : "No media selected yet.";

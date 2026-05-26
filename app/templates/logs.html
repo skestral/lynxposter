@@ -11,7 +11,7 @@
                     </div>
                     <div class="d-flex gap-2 flex-wrap">
                         <span class="badge text-bg-light border rounded-pill px-3 py-2">{{ timezone_indicator() }}</span>
-                        <span class="badge rounded-pill text-bg-light border px-3 py-2" id="logs-live-update-status">Live updates purring</span>
+                        <span class="badge rounded-pill text-bg-light border px-3 py-2" id="logs-live-update-status">Live updates on</span>
                     </div>
                 </div>
                 {% if cleared_count is not none %}
@@ -265,7 +265,7 @@
 window.registerLiveUpdates?.({
   topics: {{ (["run_events", "alert_events"] + (["instagram_webhooks"] if current_principal.is_admin else [])) | tojson }},
   statusElementId: "logs-live-update-status",
-  readyLabel: "Live updates purring",
+  readyLabel: "Live updates on",
   updatingLabel: "Refreshing…",
 });
 </script>
