@@ -367,13 +367,13 @@ def test_scheduled_post_templates_render_attachment_previews():
     assert 'deleted_attachment_ids' in detail_html
     assert 'Selected images and videos will travel with this post plan.' in create_html
     assert 'Post Snapshot' in detail_html
-    assert 'Post Snapshot' in create_html
-    assert 'id="compose-tabs"' in create_html
+    assert 'Media Queue' in create_html
+    assert 'composer-design-grid' in create_html
     assert 'preview-persona-name' in create_html
     assert 'Create Post Plan' in create_html
-    assert 'id="scheduled-workspace-tabs"' in planner_html
-    assert 'workspace-calendar-pane' in planner_html
-    assert 'workspace-kanban-pane' in planner_html
+    assert 'planner-workspace-layout' in planner_html
+    assert 'planner-calendar-surface' in planner_html
+    assert 'planner-board-surface' in planner_html
     assert 'calendar-view-month' in planner_html
     assert 'calendar-view-week' in planner_html
     assert 'scheduled-calendar-grid' in planner_html
@@ -1054,8 +1054,7 @@ def test_dashboard_v2_template_renders_mobile_friendly_tab_shell():
     )
 
     assert "dashboard-v2-bleed" in html
-    assert "dashboard-v2-tabs" in html
-    assert "data-bs-target=\"#dashboard-v2-overview\"" in html
+    assert "dashboard-v2-tabs" not in html
     assert "dashboard-v2-metrics-grid" in html
     assert "dashboard-v2-manual-run-button" in html
     assert "registerLiveUpdates" in html

@@ -76,24 +76,6 @@
         </div>
         {% endif %}
 
-        <ul class="nav nav-pills dashboard-v2-tabs" id="dashboard-v2-tabs" role="tablist">
-            <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="dashboard-v2-overview-tab" data-bs-toggle="tab" data-bs-target="#dashboard-v2-overview" type="button" role="tab">Overview</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="dashboard-v2-planner-tab" data-bs-toggle="tab" data-bs-target="#dashboard-v2-planner" type="button" role="tab">Planner</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="dashboard-v2-giveaways-tab" data-bs-toggle="tab" data-bs-target="#dashboard-v2-giveaways" type="button" role="tab">Giveaways</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="dashboard-v2-activity-tab" data-bs-toggle="tab" data-bs-target="#dashboard-v2-activity" type="button" role="tab">Activity</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="dashboard-v2-health-tab" data-bs-toggle="tab" data-bs-target="#dashboard-v2-health" type="button" role="tab">Health</button>
-            </li>
-        </ul>
-
         <div class="tab-content dashboard-v2-tab-content" id="dashboard-v2-tab-content">
             <div class="tab-pane fade show active" id="dashboard-v2-overview" role="tabpanel" aria-labelledby="dashboard-v2-overview-tab" tabindex="0">
                 <div class="dashboard-v2-metrics-grid">
@@ -416,17 +398,5 @@ document.getElementById("dashboard-v2-manual-run-button")?.addEventListener("cli
 document.getElementById("dashboard-v2-pause-automation-button")?.addEventListener("click", () => postDashboardV2SchedulerAction("/scheduler/pause"));
 document.getElementById("dashboard-v2-start-automation-button")?.addEventListener("click", () => postDashboardV2SchedulerAction("/scheduler/start"));
 
-const dashboardV2Tabs = Array.from(document.querySelectorAll("#dashboard-v2-tabs [data-bs-toggle='tab']"));
-const initialDashboardV2Hash = window.location.hash;
-if (initialDashboardV2Hash) {
-  const trigger = dashboardV2Tabs.find((button) => button.dataset.bsTarget === initialDashboardV2Hash);
-  if (trigger) bootstrap.Tab.getOrCreateInstance(trigger).show();
-}
-dashboardV2Tabs.forEach((button) => {
-  button.addEventListener("shown.bs.tab", (event) => {
-    const target = event.target?.dataset?.bsTarget;
-    if (target) history.replaceState(null, "", target);
-  });
-});
 </script>
 {% endblock %}

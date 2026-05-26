@@ -386,7 +386,7 @@ def test_dashboard_v2_route_renders_ops_health_for_admin(monkeypatch, tmp_path):
         assert "Dashboard V2 scheduled post" in response.text
         assert "Dashboard V2 alert" in response.text
         assert "Instagram Webhooks" in response.text
-        assert "dashboard-v2-tabs" in response.text
+        assert "dashboard-v2-tabs" not in response.text
         assert "dashboard-v2-live-update-status" in response.text
     finally:
         Base.metadata.drop_all(engine)

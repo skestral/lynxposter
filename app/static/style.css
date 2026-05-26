@@ -91,8 +91,7 @@ body {
 }
 
 .nav-pills .nav-link.active,
-.glass-tabs .nav-link.active,
-.dashboard-v2-tabs .nav-link.active {
+.glass-tabs .nav-link.active {
     border: 1px solid transparent;
     background:
         linear-gradient(#fff, #fff) padding-box,
@@ -1647,7 +1646,6 @@ details > summary::-webkit-details-marker {
 
 .dashboard-v2-topbar,
 .dashboard-v2-actions,
-.dashboard-v2-tabs,
 .dashboard-v2-button-row {
     display: flex;
     align-items: center;
@@ -1736,41 +1734,6 @@ details > summary::-webkit-details-marker {
     font-weight: 650;
     margin-bottom: 1rem;
     padding: 0.85rem 1rem;
-}
-
-.dashboard-v2-tabs {
-    position: sticky;
-    top: 5.25rem;
-    z-index: 5;
-    gap: 0.45rem;
-    overflow-x: auto;
-    padding: 0.45rem;
-    margin-bottom: 1rem;
-    border: 1px solid var(--dash-border);
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.66);
-    backdrop-filter: blur(18px);
-    scrollbar-width: none;
-}
-
-.dashboard-v2-tabs::-webkit-scrollbar {
-    display: none;
-}
-
-.dashboard-v2-tabs .nav-link {
-    border: 1px solid transparent;
-    border-radius: 999px;
-    color: var(--lp-ink-soft);
-    font-weight: 750;
-    padding: 0.58rem 0.9rem;
-    white-space: nowrap;
-}
-
-.dashboard-v2-tabs .nav-link.active {
-    border-color: rgba(251, 99, 119, 0.28);
-    background: var(--dash-panel-strong);
-    color: var(--lp-ink);
-    box-shadow: 0 12px 28px rgba(216, 74, 88, 0.12);
 }
 
 .dashboard-v2-tab-content {
@@ -2121,10 +2084,6 @@ body[data-ui-mode="dark"] .dashboard-v2-shell {
     background: linear-gradient(135deg, rgba(23, 28, 42, 0.92), rgba(30, 36, 52, 0.94) 52%, rgba(58, 38, 48, 0.78));
 }
 
-body[data-ui-mode="dark"] .dashboard-v2-tabs {
-    background: rgba(30, 36, 52, 0.7);
-}
-
 body[data-ui-mode="dark"] .dashboard-v2-chip {
     color: #ffffff;
 }
@@ -2251,15 +2210,6 @@ body[data-ui-mode="dark"] .alert-warning {
 
     .dashboard-v2-actions {
         justify-content: flex-start;
-    }
-
-    .dashboard-v2-tabs {
-        top: 0.5rem;
-        border-radius: 1.2rem;
-    }
-
-    .dashboard-v2-tabs .nav-link {
-        padding-inline: 0.75rem;
     }
 
     .dashboard-v2-metrics-grid {
@@ -2592,8 +2542,7 @@ details.surface-details,
     letter-spacing: 0.08em;
 }
 
-.glass-tabs,
-.dashboard-v2-tabs {
+.glass-tabs {
     display: flex;
     gap: 0.45rem;
     max-width: 100%;
@@ -2602,15 +2551,13 @@ details.surface-details,
     scrollbar-width: thin;
 }
 
-.glass-tabs .nav-link,
-.dashboard-v2-tabs .nav-link {
+.glass-tabs .nav-link {
     border-radius: 8px !important;
     white-space: nowrap;
 }
 
 .nav-pills .nav-link.active,
-.glass-tabs .nav-link.active,
-.dashboard-v2-tabs .nav-link.active {
+.glass-tabs .nav-link.active {
     border-color: transparent;
     background:
         linear-gradient(rgba(255, 255, 255, 0.94), rgba(255, 255, 255, 0.94)) padding-box,
@@ -2644,17 +2591,6 @@ details.surface-details,
 
 .dashboard-v2-subtitle {
     max-width: 48rem;
-}
-
-.dashboard-v2-tabs {
-    position: sticky;
-    top: 0;
-    z-index: 8;
-    margin-bottom: 1rem;
-    padding: 0.55rem;
-    border: 1px solid rgba(117, 136, 173, 0.16);
-    background: rgba(250, 252, 255, 0.88);
-    backdrop-filter: blur(16px);
 }
 
 .dashboard-v2-tab-content {
@@ -2917,10 +2853,6 @@ code,
         justify-content: flex-start;
     }
 
-    .dashboard-v2-tabs {
-        top: 3.9rem;
-    }
-
     .dashboard-v2-metrics-grid,
     .dashboard-v2-overview-grid,
     .dashboard-v2-bottom-grid,
@@ -2977,7 +2909,6 @@ body[data-ui-mode="dark"] {
 body[data-ui-mode="dark"] .app-sidebar,
 body[data-ui-mode="dark"] .mobile-app-header,
 body[data-ui-mode="dark"] .mobile-bottom-nav,
-body[data-ui-mode="dark"] .dashboard-v2-tabs,
 body[data-ui-mode="dark"] .section-card,
 body[data-ui-mode="dark"] .hero-card,
 body[data-ui-mode="dark"] .card,
@@ -2997,12 +2928,332 @@ body[data-ui-mode="dark"] .app-sidebar-link.active,
 body[data-ui-mode="dark"] .app-mode-button.is-active,
 body[data-ui-mode="dark"] .nav-pills .nav-link.active,
 body[data-ui-mode="dark"] .glass-tabs .nav-link.active,
-body[data-ui-mode="dark"] .dashboard-v2-tabs .nav-link.active,
 body[data-ui-mode="dark"] .mobile-bottom-nav-link.active,
 body[data-ui-mode="dark"] .mobile-bottom-nav-create {
     background:
         linear-gradient(rgba(31, 41, 59, 0.94), rgba(31, 41, 59, 0.94)) padding-box,
         var(--lp-pride-border) border-box;
+}
+
+/* Figma workspace alignment for Planner and Composer. */
+.figma-page-header,
+.planner-surface-header,
+.composer-surface-header,
+.composer-action-row,
+.planner-selected-surface {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    min-width: 0;
+}
+
+.figma-page-header {
+    margin-bottom: 1rem;
+}
+
+.figma-page-header h1 {
+    color: var(--lp-ink);
+    font-weight: 780;
+}
+
+.figma-page-actions,
+.planner-surface-controls {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+}
+
+.figma-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.85rem;
+    margin-bottom: 1rem;
+}
+
+.figma-stat-card,
+.planner-calendar-surface,
+.planner-board-surface,
+.planner-selected-surface,
+.composer-editor-surface,
+.composer-platform-surface,
+.composer-schedule-surface,
+.composer-giveaway-surface,
+.composer-destination-card,
+.composer-media-card,
+.composer-override-launcher {
+    border: 1px solid rgba(117, 136, 173, 0.18);
+    border-radius: var(--lp-container-radius);
+    background: var(--lp-panel-bg);
+    box-shadow: 0 12px 28px rgba(31, 42, 68, 0.065);
+    backdrop-filter: blur(18px);
+}
+
+.figma-stat-card {
+    min-height: 7.5rem;
+    padding: 1rem;
+}
+
+.figma-stat-accent {
+    width: 2.25rem;
+    height: 0.28rem;
+    margin-bottom: 0.72rem;
+    border-radius: 999px;
+    background: var(--lp-pride-border);
+}
+
+.figma-stat-label {
+    color: var(--lp-ink-soft);
+    font-size: 0.74rem;
+    font-weight: 780;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.figma-stat-value {
+    margin-top: 0.35rem;
+    color: var(--lp-ink);
+    font-size: clamp(1.18rem, 1.8vw, 1.72rem);
+    font-weight: 790;
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+}
+
+.figma-stat-detail {
+    margin-top: 0.42rem;
+    color: var(--lp-ink-soft);
+    font-size: 0.84rem;
+}
+
+.planner-workspace-page,
+.composer-workspace-page,
+.composer-form-shell {
+    display: flex;
+    flex-direction: column;
+    gap: 0.95rem;
+    min-width: 0;
+}
+
+.planner-workspace-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 2.1fr) minmax(18rem, 0.95fr);
+    gap: 0.95rem;
+    align-items: start;
+}
+
+.planner-calendar-surface,
+.planner-board-surface,
+.planner-selected-surface {
+    padding: 1rem;
+}
+
+.planner-range-panel {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin: 1rem 0;
+}
+
+.planner-board-surface {
+    position: sticky;
+    top: 1rem;
+}
+
+.planner-board-surface .scheduled-kanban-board {
+    display: flex;
+    flex-direction: column;
+    gap: 0.72rem;
+    overflow: visible;
+    padding: 0;
+}
+
+.planner-board-surface .scheduled-kanban-lane {
+    min-height: 0;
+    padding: 0.8rem;
+}
+
+.planner-board-surface .scheduled-kanban-lane-header {
+    align-items: center;
+}
+
+.planner-board-surface .planner-card,
+.planner-board-surface .scheduled-kanban-card {
+    padding: 0.68rem;
+}
+
+.planner-selected-surface {
+    align-items: flex-start;
+}
+
+.composer-design-grid {
+    display: grid;
+    grid-template-columns: minmax(24rem, 0.95fr) minmax(0, 1fr);
+    gap: 0.95rem;
+    align-items: start;
+}
+
+.composer-editor-surface,
+.composer-platform-surface,
+.composer-schedule-surface,
+.composer-giveaway-surface {
+    padding: 1rem;
+}
+
+.composer-side-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 0.95rem;
+    min-width: 0;
+}
+
+.composer-surface-header.is-compact {
+    align-items: flex-start;
+}
+
+.composer-control-grid,
+.composer-schedule-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.8rem;
+    margin: 1rem 0;
+}
+
+.composer-schedule-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin: 0;
+}
+
+.composer-caption-field,
+.composer-media-queue,
+.composer-platform-surface .composer-preview-phone {
+    margin-top: 1rem;
+}
+
+.composer-caption-field textarea {
+    margin-top: 0.5rem;
+    min-height: 10.75rem;
+    resize: vertical;
+}
+
+.composer-media-queue {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.composer-media-list,
+.composer-destination-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 0.72rem;
+    min-width: 0;
+}
+
+.composer-media-card,
+.composer-destination-card {
+    padding: 0.78rem;
+}
+
+.composer-destination-wrapper {
+    min-width: 0;
+}
+
+.composer-destination-card .post-guidance-panel,
+.composer-media-card .border,
+.composer-media-card .bg-light {
+    background: rgba(255, 255, 255, 0.62) !important;
+}
+
+.composer-override-launcher {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    margin-top: 1rem;
+    padding: 0.82rem;
+    color: var(--lp-ink);
+    font-weight: 650;
+}
+
+.composer-override-launcher .figma-stat-accent {
+    flex: 0 0 auto;
+    margin: 0;
+}
+
+.composer-action-row {
+    justify-content: flex-start;
+}
+
+body[data-ui-mode="dark"] .figma-stat-card,
+body[data-ui-mode="dark"] .planner-calendar-surface,
+body[data-ui-mode="dark"] .planner-board-surface,
+body[data-ui-mode="dark"] .planner-selected-surface,
+body[data-ui-mode="dark"] .composer-editor-surface,
+body[data-ui-mode="dark"] .composer-platform-surface,
+body[data-ui-mode="dark"] .composer-schedule-surface,
+body[data-ui-mode="dark"] .composer-giveaway-surface,
+body[data-ui-mode="dark"] .composer-destination-card,
+body[data-ui-mode="dark"] .composer-media-card,
+body[data-ui-mode="dark"] .composer-override-launcher {
+    background: rgba(28, 36, 52, 0.84);
+    border-color: rgba(136, 152, 184, 0.22);
+}
+
+body[data-ui-mode="dark"] .figma-page-header h1,
+body[data-ui-mode="dark"] .figma-stat-value,
+body[data-ui-mode="dark"] .composer-override-launcher {
+    color: #eef3fb;
+}
+
+body[data-ui-mode="dark"] .composer-destination-card .post-guidance-panel,
+body[data-ui-mode="dark"] .composer-media-card .border,
+body[data-ui-mode="dark"] .composer-media-card .bg-light {
+    background: rgba(18, 25, 38, 0.72) !important;
+}
+
+@media (max-width: 1279.98px) {
+    .planner-workspace-layout,
+    .composer-design-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .planner-board-surface {
+        position: static;
+    }
+
+    .planner-board-surface .scheduled-kanban-board {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 767.98px) {
+    .figma-page-header,
+    .planner-surface-header,
+    .composer-surface-header,
+    .planner-selected-surface {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .figma-page-actions,
+    .planner-surface-controls {
+        justify-content: flex-start;
+    }
+
+    .figma-stat-grid,
+    .planner-board-surface .scheduled-kanban-board,
+    .composer-control-grid,
+    .composer-schedule-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .planner-range-panel {
+        align-items: stretch;
+        flex-direction: column;
+    }
 }
 
 /* Theme completion pass: catch Bootstrap controls and dark account surfaces. */
@@ -3237,7 +3488,6 @@ body[data-ui-mode="dark"] .badge.text-bg-dark {
 .btn,
 .nav-pills .nav-link,
 .glass-tabs .nav-link,
-.dashboard-v2-tabs .nav-link,
 .form-control,
 .form-select,
 .input-group-text,
@@ -3287,7 +3537,6 @@ details.surface-details,
 .app-sidebar,
 .mobile-app-header,
 .mobile-bottom-nav,
-.dashboard-v2-tabs,
 .glass-tabs {
     border-radius: calc(var(--lp-container-radius) + 4px) !important;
 }
@@ -3306,7 +3555,6 @@ details.surface-details,
 
 .nav-pills .nav-link.active,
 .glass-tabs .nav-link.active,
-.dashboard-v2-tabs .nav-link.active,
 .mobile-bottom-nav-link.active,
 .mobile-bottom-nav-create {
     background:
@@ -3317,7 +3565,6 @@ details.surface-details,
 
 body[data-ui-mode="dark"] .nav-pills .nav-link.active,
 body[data-ui-mode="dark"] .glass-tabs .nav-link.active,
-body[data-ui-mode="dark"] .dashboard-v2-tabs .nav-link.active,
 body[data-ui-mode="dark"] .mobile-bottom-nav-link.active,
 body[data-ui-mode="dark"] .mobile-bottom-nav-create {
     background:

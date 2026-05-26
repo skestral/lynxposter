@@ -1,197 +1,188 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="card hero-card section-card mb-4">
-    <div class="card-body p-4">
-        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
-            <div>
-                <div class="section-kicker mb-2">Composer</div>
-                <h1 class="h4 mb-1">Create a post</h1>
-                <p class="text-secondary mb-0">Write once, line up the right destinations, and let lynxposter handle the delivery details.</p>
-            </div>
-            <div class="d-flex gap-2 flex-wrap">
-                <a class="btn btn-outline-secondary" href="/scheduled-posts/page">Back to Planner</a>
-                <a class="btn btn-outline-secondary" href="/sandbox/page">Open Preview Studio</a>
-            </div>
-        </div>
-    </div>
-</div>
-
 {% if personas %}
-<div class="row g-4 align-items-start">
-    <div class="col-12 col-xl-8">
-        <div class="card section-card">
-            <div class="card-body">
-                <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
-                    <div>
-                        <div class="section-kicker mb-2">Draft Desk</div>
-                        <h2 class="h5 mb-1">Build your next post plan</h2>
-                        <p class="text-secondary mb-0">The flow is split into quick tabs so you can move from copy to media to destinations without losing your place.</p>
-                    </div>
-                    <span class="badge soft-badge rounded-pill px-3 py-2">{{ personas|length }} personas ready</span>
-                </div>
-
-                <form id="scheduled-post-form" class="tab-pane-stack">
-                    <ul class="nav nav-pills glass-tabs" id="compose-tabs" role="tablist">
-                        <li class="nav-item" role="presentation">
-                            <button class="nav-link active" id="compose-basics-tab" data-bs-toggle="tab" data-bs-target="#compose-basics-pane" type="button" role="tab">Basics</button>
-                        </li>
-                        <li class="nav-item" role="presentation">
-                            <button class="nav-link" id="compose-giveaway-tab" data-bs-toggle="tab" data-bs-target="#compose-giveaway-pane" type="button" role="tab">Giveaway</button>
-                        </li>
-                        <li class="nav-item" role="presentation">
-                            <button class="nav-link" id="compose-media-tab" data-bs-toggle="tab" data-bs-target="#compose-media-pane" type="button" role="tab">Media</button>
-                        </li>
-                        <li class="nav-item" role="presentation">
-                            <button class="nav-link" id="compose-targets-tab" data-bs-toggle="tab" data-bs-target="#compose-targets-pane" type="button" role="tab">Targets</button>
-                        </li>
-                    </ul>
-
-                    <div class="tab-content tab-pane-stack">
-                        <div class="tab-pane fade show active" id="compose-basics-pane" role="tabpanel" aria-labelledby="compose-basics-tab" tabindex="0">
-                            <div class="surface-panel">
-                                <div class="row g-3">
-                                    <div class="col-12">
-                                        <label class="form-label">Persona</label>
-                                        <select class="form-select" name="persona_id" id="persona-select">
-                                            {% for persona in personas %}
-                                            <option value="{{ persona.id }}">{{ persona.name }}</option>
-                                            {% endfor %}
-                                        </select>
-                                    </div>
-                                    <div class="col-12">
-                                        <div class="d-flex justify-content-between align-items-center gap-3">
-                                            <label class="form-label mb-0">Body</label>
-                                            <span class="small text-secondary" id="body-length-indicator">0 chars</span>
-                                        </div>
-                                        <textarea class="form-control" name="body" rows="7" placeholder="What is your post saying today?"></textarea>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label">Post Type</label>
-                                        <select class="form-select" name="post_type" id="post-type-select">
-                                            <option value="standard">Standard Post</option>
-                                            <option value="giveaway">Giveaway</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label">Status</label>
-                                        <select class="form-select" name="status" id="status-select">
-                                            <option value="draft">Draft</option>
-                                            <option value="scheduled">Scheduled</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label d-flex align-items-center gap-2 flex-wrap">
-                                            <span>Scheduled For</span>
-                                            <span class="badge text-bg-light border rounded-pill">{{ timezone_indicator() }}</span>
-                                        </label>
-                                        <input class="form-control" name="scheduled_for" id="scheduled-for-input" type="datetime-local">
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label">Original Link</label>
-                                        <input class="form-control" name="source_link" placeholder="Optional source or campaign link">
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label">Visibility</label>
-                                        <select class="form-select" name="visibility">
-                                            <option value="">Use persona default</option>
-                                            <option value="public">Public</option>
-                                            <option value="unlisted">Unlisted</option>
-                                            <option value="private">Private</option>
-                                            <option value="direct">Direct</option>
-                                        </select>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="tab-pane fade" id="compose-giveaway-pane" role="tabpanel" aria-labelledby="compose-giveaway-tab" tabindex="0">
-                            <div class="surface-panel giveaway-only d-none" id="giveaway-config-panel">
-                                <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
-                                    <div>
-                                        <div class="fw-semibold">Giveaway Builder</div>
-                                        <div class="small text-secondary">Mix Instagram and Bluesky channels, choose a pool mode, and define the qualifying actions visually.</div>
-                                    </div>
-                                    <span class="badge text-bg-light border">Generic engine</span>
-                                </div>
-                                <div id="giveaway-builder-root"></div>
-                                <div class="small text-secondary mt-3" id="giveaway-target-hint">Switch to giveaway mode to sync destinations from the enabled channels.</div>
-                            </div>
-                            <div class="surface-panel-soft">
-                                <div class="small text-secondary">This tab wakes up when the post type is <strong>Giveaway</strong>.</div>
-                            </div>
-                        </div>
-
-                        <div class="tab-pane fade" id="compose-media-pane" role="tabpanel" aria-labelledby="compose-media-tab" tabindex="0">
-                            <div class="surface-panel">
-                                <label class="form-label">Uploads</label>
-                                <input class="form-control" name="uploads" type="file" multiple>
-                                <div class="form-text" id="upload-summary">Selected images and videos will travel with this post plan.</div>
-                                <div id="upload-preview-list" class="row g-3 mt-1"></div>
-                            </div>
-                            <div class="surface-panel-soft">
-                                <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
-                                    <div>
-                                        <div class="fw-semibold">Post Snapshot</div>
-                                        <div class="small text-secondary">Live counts for the current body, attachments, and selected destinations.</div>
-                                    </div>
-                                    <div class="d-flex gap-2 flex-wrap">
-                                        <span class="badge text-bg-light border" id="snapshot-body-length">0 chars</span>
-                                        <span class="badge text-bg-light border" id="snapshot-attachments">0 attachments</span>
-                                        <span class="badge text-bg-light border" id="snapshot-targets">0 targets</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="tab-pane fade" id="compose-targets-pane" role="tabpanel" aria-labelledby="compose-targets-tab" tabindex="0">
-                            <div class="surface-panel">
-                                <label class="form-label">Destination Accounts</label>
-                                <div id="target-account-list" class="row g-2"></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="d-flex gap-2 flex-wrap">
-                        <button class="btn btn-primary" type="submit">Create Post Plan</button>
-                        <a class="btn btn-outline-secondary" href="/scheduled-posts/page">Back to Planner</a>
-                    </div>
-                </form>
-            </div>
+<div class="composer-workspace-page">
+    <section class="figma-page-header">
+        <div>
+            <div class="section-kicker mb-2">Post Composer</div>
+            <h1 class="h3 mb-1">Post Composer</h1>
+            <p class="text-secondary mb-0">Build copy, media, destination rules, and scheduling from one editor.</p>
         </div>
-    </div>
+        <div class="figma-page-actions">
+            <a class="btn btn-outline-secondary" href="/scheduled-posts/page">Cancel</a>
+            <button class="btn btn-primary" type="submit" form="scheduled-post-form">Post</button>
+        </div>
+    </section>
 
-    <div class="col-12 col-xl-4">
-        <div class="card section-card composer-preview-shell">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
+    <form id="scheduled-post-form" class="composer-form-shell">
+        <section class="figma-stat-grid composer-stat-grid" aria-label="Composer summary">
+            <div class="figma-stat-card">
+                <div class="figma-stat-accent"></div>
+                <div class="figma-stat-label">Step 1</div>
+                <div class="figma-stat-value">Active</div>
+                <div class="figma-stat-detail">Caption and setup</div>
+            </div>
+            <div class="figma-stat-card">
+                <div class="figma-stat-accent"></div>
+                <div class="figma-stat-label">Targets</div>
+                <div class="figma-stat-value" id="snapshot-targets">0 targets</div>
+                <div class="figma-stat-detail">Selected destinations</div>
+            </div>
+            <div class="figma-stat-card">
+                <div class="figma-stat-accent"></div>
+                <div class="figma-stat-label">Media</div>
+                <div class="figma-stat-value" id="snapshot-attachments">0 attachments</div>
+                <div class="figma-stat-detail">Upload queue</div>
+            </div>
+            <div class="figma-stat-card">
+                <div class="figma-stat-accent"></div>
+                <div class="figma-stat-label">Body</div>
+                <div class="figma-stat-value" id="snapshot-body-length">0 chars</div>
+                <div class="figma-stat-detail">Current length</div>
+            </div>
+        </section>
+
+        <section class="composer-design-grid">
+            <div class="composer-editor-surface">
+                <div class="composer-surface-header">
                     <div>
-                        <div class="section-kicker mb-2">Preview</div>
-                        <h2 class="h5 mb-0">Feed mockup</h2>
+                        <h2 class="h4 mb-1">Post Composer</h2>
+                        <p class="text-secondary mb-0">Start with the shared caption, then tune media and destinations.</p>
                     </div>
                     <span class="badge soft-badge rounded-pill px-3 py-2" id="preview-status-pill">Draft</span>
                 </div>
-                <div class="composer-preview-phone">
-                    <div class="composer-preview-header">
-                        <div>
-                            <div class="fw-semibold" id="preview-persona-name">{{ personas[0].name }}</div>
-                            <div class="small text-secondary" id="preview-schedule-label">Not scheduled yet</div>
-                        </div>
-                        <div class="small text-secondary">lynxposter</div>
+
+                <div class="composer-control-grid">
+                    <div>
+                        <label class="form-label">Persona</label>
+                        <select class="form-select" name="persona_id" id="persona-select">
+                            {% for persona in personas %}
+                            <option value="{{ persona.id }}">{{ persona.name }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
-                    <div class="composer-preview-body" id="preview-body-copy">Your post preview appears here as you type.</div>
-                    <div class="composer-preview-media" id="preview-media-summary">No media selected yet.</div>
-                    <div class="composer-preview-footer">
-                        <span id="preview-target-count">0 targets</span>
-                        <span id="preview-attachment-count">0 attachments</span>
+                    <div>
+                        <label class="form-label">Post Type</label>
+                        <select class="form-select" name="post_type" id="post-type-select">
+                            <option value="standard">Standard Post</option>
+                            <option value="giveaway">Giveaway</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label">Status</label>
+                        <select class="form-select" name="status" id="status-select">
+                            <option value="draft">Draft</option>
+                            <option value="scheduled">Scheduled</option>
+                        </select>
                     </div>
                 </div>
-                <div class="surface-panel-soft mt-3">
-                    <div class="fw-semibold mb-2">Quick pep talk</div>
-                    <div class="small text-secondary mb-0">Pick the right destinations and your next post will be ready for the planner.</div>
+
+                <div class="composer-caption-field">
+                    <div class="d-flex justify-content-between align-items-center gap-3">
+                        <label class="form-label mb-0">Caption</label>
+                        <span class="small text-secondary" id="body-length-indicator">0 chars</span>
+                    </div>
+                    <textarea class="form-control" name="body" rows="7" placeholder="What is your post saying today?"></textarea>
+                </div>
+
+                <div class="composer-media-queue">
+                    <div class="composer-surface-header is-compact">
+                        <div>
+                            <h3 class="h5 mb-1">Media Queue</h3>
+                            <p class="text-secondary mb-0" id="upload-summary">Selected images and videos will travel with this post plan.</p>
+                        </div>
+                        <label class="btn btn-outline-primary mb-0">
+                            Add media
+                            <input class="visually-hidden" name="uploads" type="file" multiple>
+                        </label>
+                    </div>
+                    <div id="upload-preview-list" class="composer-media-list"></div>
+                </div>
+
+                <div class="composer-override-launcher">
+                    <div class="figma-stat-accent"></div>
+                    <span>Destination-specific copy and media overrides are available after saving the post plan.</span>
                 </div>
             </div>
+
+            <div class="composer-side-stack">
+                <section class="composer-platform-surface">
+                    <div class="composer-surface-header">
+                        <div>
+                            <h2 class="h5 mb-1">Platform Preview</h2>
+                            <p class="text-secondary mb-0">Review selected destinations and service guidance.</p>
+                        </div>
+                    </div>
+                    <div class="composer-preview-phone">
+                        <div class="composer-preview-header">
+                            <div>
+                                <div class="fw-semibold" id="preview-persona-name">{{ personas[0].name }}</div>
+                                <div class="small text-secondary" id="preview-schedule-label">Not scheduled yet</div>
+                            </div>
+                            <div class="small text-secondary">lynxposter</div>
+                        </div>
+                        <div class="composer-preview-body" id="preview-body-copy">Your post preview appears here as you type.</div>
+                        <div class="composer-preview-media" id="preview-media-summary">No media selected yet.</div>
+                        <div class="composer-preview-footer">
+                            <span id="preview-target-count">0 targets</span>
+                            <span id="preview-attachment-count">0 attachments</span>
+                        </div>
+                    </div>
+                    <div class="composer-destination-rows" id="target-account-list"></div>
+                </section>
+
+                <section class="composer-schedule-surface">
+                    <h2 class="h5 mb-3">Scheduling</h2>
+                    <div class="composer-schedule-grid">
+                        <div>
+                            <label class="form-label d-flex align-items-center gap-2 flex-wrap">
+                                <span>Scheduled For</span>
+                                <span class="badge text-bg-light border rounded-pill">{{ timezone_indicator() }}</span>
+                            </label>
+                            <input class="form-control" name="scheduled_for" id="scheduled-for-input" type="datetime-local">
+                        </div>
+                        <div>
+                            <label class="form-label">Visibility</label>
+                            <select class="form-select" name="visibility">
+                                <option value="">Use persona default</option>
+                                <option value="public">Public</option>
+                                <option value="unlisted">Unlisted</option>
+                                <option value="private">Private</option>
+                                <option value="direct">Direct</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="form-label">Original Link</label>
+                            <input class="form-control" name="source_link" placeholder="Optional source or campaign link">
+                        </div>
+                    </div>
+                </section>
+
+                <section class="composer-giveaway-surface">
+                    <div class="surface-panel giveaway-only d-none" id="giveaway-config-panel">
+                        <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
+                            <div>
+                                <div class="fw-semibold">Giveaway Builder</div>
+                                <div class="small text-secondary">Mix Instagram and Bluesky channels, choose a pool mode, and define qualifying actions visually.</div>
+                            </div>
+                            <span class="badge text-bg-light border">Rules</span>
+                        </div>
+                        <div id="giveaway-builder-root"></div>
+                        <div class="small text-secondary mt-3" id="giveaway-target-hint">Switch to giveaway mode to sync destinations from the enabled channels.</div>
+                    </div>
+                    <div class="surface-panel-soft" id="giveaway-standby-panel">
+                        <div class="fw-semibold">Giveaway rules</div>
+                        <div class="small text-secondary">Switch the post type to Giveaway to define channels and requirements.</div>
+                    </div>
+                </section>
+            </div>
+        </section>
+
+        <div class="composer-action-row">
+            <button class="btn btn-primary" type="submit">Create Post Plan</button>
+            <a class="btn btn-outline-secondary" href="/scheduled-posts/page">Back to Planner</a>
         </div>
-    </div>
+    </form>
 </div>
 {% else %}
 <div class="card section-card">
@@ -228,6 +219,7 @@ const postTypeSelect = document.getElementById("post-type-select");
 const statusSelect = document.getElementById("status-select");
 const scheduledForInput = document.getElementById("scheduled-for-input");
 const giveawayConfigPanel = document.getElementById("giveaway-config-panel");
+const giveawayStandbyPanel = document.getElementById("giveaway-standby-panel");
 const giveawayTargetHint = document.getElementById("giveaway-target-hint");
 const giveawayBuilderRoot = document.getElementById("giveaway-builder-root");
 const previewPersonaName = document.getElementById("preview-persona-name");
@@ -401,10 +393,10 @@ function renderTargetAccounts() {
   }
   for (const account of accounts) {
     const wrapper = document.createElement("div");
-    wrapper.className = "col-12";
+    wrapper.className = "composer-destination-wrapper";
     wrapper.dataset.accountService = account.service;
     wrapper.innerHTML = `
-      <div class="border rounded p-3 bg-white">
+      <div class="composer-destination-card">
         <div class="form-check">
           <input class="form-check-input target-checkbox" type="checkbox" value="${account.id}" id="target-${account.id}" checked>
           <label class="form-check-label fw-semibold" for="target-${account.id}">${account.label}</label>
@@ -451,6 +443,7 @@ function refreshGiveawayState() {
   const isGiveaway = postTypeSelect.value === "giveaway";
   giveawayConfigPanel.classList.toggle("d-none", !isGiveaway);
   giveawayConfigPanel.classList.toggle("giveaway-only", isGiveaway);
+  giveawayStandbyPanel?.classList.toggle("d-none", isGiveaway);
   syncGiveawayTargets();
   if (isGiveaway) {
     const validation = giveawayBuilder.validate();
@@ -486,12 +479,12 @@ function renderUploadPreviews() {
   }
   for (const file of files) {
     const item = document.createElement("div");
-    item.className = "col-12";
+    item.className = "composer-media-item";
     const preview = file.type.startsWith("image/")
       ? `<img src="${URL.createObjectURL(file)}" alt="${file.name}" class="img-fluid rounded border" style="max-height: 220px;">`
       : `<div class="border rounded bg-light px-3 py-4 text-secondary text-center">${file.type || "Attachment"}</div>`;
     item.innerHTML = `
-      <div class="border rounded p-3 bg-white h-100">
+      <div class="composer-media-card">
         <div class="row g-3 align-items-center">
           <div class="col-md-4">
             ${preview}

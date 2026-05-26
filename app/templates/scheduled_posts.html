@@ -1,164 +1,155 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="card hero-card section-card mb-4">
-    <div class="card-body p-4">
-        <div class="d-flex flex-column flex-xl-row justify-content-between align-items-xl-center gap-3">
-            <div>
-                <div class="section-kicker mb-2">Planner</div>
-                <h1 class="h4 mb-1">Post Planner</h1>
-                <p class="text-secondary mb-0">See the full queue at a glance, drag plans into place, and keep every post lined up for its next publish window.</p>
-            </div>
-            <div class="d-flex gap-2 flex-wrap">
-                <a class="btn btn-primary" href="/scheduled-posts/new/page">Create Post</a>
-                <a class="btn btn-outline-secondary" href="/sandbox/page">Open Preview Studio</a>
-            </div>
+<div class="planner-workspace-page">
+    <section class="figma-page-header">
+        <div>
+            <div class="section-kicker mb-2">Planner Workspace</div>
+            <h1 class="h3 mb-1">Planner Workspace</h1>
+            <p class="text-secondary mb-0">Calendar, board lanes, and quick reschedule details in one workspace.</p>
         </div>
-        <div class="d-flex gap-2 flex-wrap mt-4">
-            <span class="badge soft-badge rounded-pill px-3 py-2" id="planner-total-count">{{ posts|length }} posts in view</span>
-            <span class="badge soft-badge rounded-pill px-3 py-2" id="planner-scheduled-count">0 scheduled</span>
-            <span class="badge soft-badge rounded-pill px-3 py-2" id="planner-attention-count">0 need attention</span>
-            <span class="badge soft-badge rounded-pill px-3 py-2" id="planner-persona-count">{{ persona_name_by_id|length }} personas ready</span>
+        <div class="figma-page-actions">
+            <a class="btn btn-outline-secondary" href="/sandbox/page">Preview Studio</a>
+            <a class="btn btn-primary" href="/scheduled-posts/new/page">Create Post</a>
         </div>
-    </div>
-</div>
+    </section>
 
-<div class="row g-4 mb-4">
-    <div class="col-12 col-xl-7">
-        <div class="card section-card h-100">
-            <div class="card-body">
-                <div class="section-kicker mb-2">Quick Moves</div>
-                <h2 class="h5 mb-2">Drag, drop, and tidy the queue</h2>
-                <p class="text-secondary mb-0">Drop a card onto a calendar day to reschedule it, or move it between board lanes to draft it, schedule it, or queue it now.</p>
-            </div>
+    <section class="figma-stat-grid planner-stat-grid" aria-label="Planner summary">
+        <div class="figma-stat-card">
+            <div class="figma-stat-accent"></div>
+            <div class="figma-stat-label">Posts</div>
+            <div class="figma-stat-value" id="planner-total-count">{{ posts|length }} posts in view</div>
+            <div class="figma-stat-detail">Current queue</div>
         </div>
-    </div>
-    <div class="col-12 col-xl-5">
-        <div class="card section-card h-100">
-            <div class="card-body">
-                <div class="section-kicker mb-2">Heads Up</div>
-                <h2 class="h5 mb-2">System lanes stay honest</h2>
-                <p class="text-secondary mb-0">Needs Attention and Completed reflect delivery results. They show what happened in the wild, while the other lanes are your editing playground.</p>
-            </div>
+        <div class="figma-stat-card">
+            <div class="figma-stat-accent"></div>
+            <div class="figma-stat-label">Scheduled</div>
+            <div class="figma-stat-value" id="planner-scheduled-count">0 scheduled</div>
+            <div class="figma-stat-detail">On calendar</div>
         </div>
-    </div>
-</div>
+        <div class="figma-stat-card">
+            <div class="figma-stat-accent"></div>
+            <div class="figma-stat-label">Attention</div>
+            <div class="figma-stat-value" id="planner-attention-count">0 need attention</div>
+            <div class="figma-stat-detail">Needs review</div>
+        </div>
+        <div class="figma-stat-card">
+            <div class="figma-stat-accent"></div>
+            <div class="figma-stat-label">Personas</div>
+            <div class="figma-stat-value" id="planner-persona-count">{{ persona_name_by_id|length }} ready</div>
+            <div class="figma-stat-detail">Available workspaces</div>
+        </div>
+    </section>
 
-<div class="card section-card">
-    <div class="card-body">
-        <ul class="nav nav-pills glass-tabs" id="scheduled-workspace-tabs" role="tablist">
-            <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="workspace-calendar-tab" data-bs-toggle="tab" data-bs-target="#workspace-calendar-pane" type="button" role="tab">Calendar</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="workspace-kanban-tab" data-bs-toggle="tab" data-bs-target="#workspace-kanban-pane" type="button" role="tab">Board</button>
-            </li>
-        </ul>
-
-        <div class="tab-content tab-pane-stack mt-4">
-            <div class="tab-pane fade show active" id="workspace-calendar-pane" role="tabpanel" aria-labelledby="workspace-calendar-tab" tabindex="0">
-                <div class="d-flex flex-column flex-xl-row justify-content-between align-items-xl-center gap-3 mb-4">
-                    <div>
-                        <div class="section-kicker mb-2">Planner</div>
-                        <h2 class="h5 mb-1">Calendar View</h2>
-                        <p class="text-secondary mb-0">Drop cards onto a day, then pick the exact time in the quick pop-up.</p>
-                    </div>
-                    <div class="d-flex flex-wrap gap-2 align-items-center">
-                        <span class="badge text-bg-light border rounded-pill px-3 py-2">{{ timezone_indicator() }}</span>
-                        <div class="btn-group" role="group" aria-label="Calendar view switcher">
-                            <button class="btn btn-outline-secondary active" type="button" id="calendar-view-month" data-calendar-view="month">Month</button>
-                            <button class="btn btn-outline-secondary" type="button" id="calendar-view-week" data-calendar-view="week">Week</button>
-                        </div>
-                        <button class="btn btn-outline-secondary" type="button" id="calendar-prev-button">Previous</button>
-                        <button class="btn btn-outline-secondary" type="button" id="calendar-today-button">Today</button>
-                        <button class="btn btn-outline-secondary" type="button" id="calendar-next-button">Next</button>
-                    </div>
+    <section class="planner-workspace-layout">
+        <div class="planner-calendar-surface">
+            <div class="planner-surface-header">
+                <div>
+                    <h2 class="h4 mb-1">Calendar Week</h2>
+                    <p class="text-secondary mb-0">Drop cards onto a day, then pick the exact time in the quick edit sheet.</p>
                 </div>
-                <div class="surface-panel-soft d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
-                    <div>
-                        <div class="fw-semibold" id="calendar-range-label">Loading calendar...</div>
-                        <div class="small text-secondary">Posts with a scheduled time appear here, including drafts that are still being refined on the board.</div>
+                <div class="planner-surface-controls">
+                    <span class="badge text-bg-light border rounded-pill px-3 py-2">{{ timezone_indicator() }}</span>
+                    <div class="btn-group" role="group" aria-label="Calendar view switcher">
+                        <button class="btn btn-outline-secondary active" type="button" id="calendar-view-month" data-calendar-view="month">Month</button>
+                        <button class="btn btn-outline-secondary" type="button" id="calendar-view-week" data-calendar-view="week">Week</button>
                     </div>
-                    <div class="d-flex gap-2 flex-wrap">
-                        <span class="badge text-bg-light border" id="calendar-summary-total">0 scheduled</span>
-                        <span class="badge text-bg-light border" id="calendar-summary-giveaways">0 giveaways</span>
-                    </div>
-                </div>
-                <div class="scheduled-calendar" id="scheduled-calendar-root">
-                    <div class="scheduled-calendar-weekdays" id="scheduled-calendar-weekdays"></div>
-                    <div class="scheduled-calendar-grid" id="scheduled-calendar-grid"></div>
-                </div>
-                <div class="scheduled-calendar-empty d-none" id="scheduled-calendar-empty">
-                    <div class="surface-panel text-center">
-                        <div class="fw-semibold mb-2">No post plans in this range</div>
-                        <div class="text-secondary">Hop to another week or month, or create a fresh post plan.</div>
-                    </div>
+                    <button class="btn btn-outline-secondary" type="button" id="calendar-prev-button">Previous</button>
+                    <button class="btn btn-outline-secondary" type="button" id="calendar-today-button">Today</button>
+                    <button class="btn btn-outline-secondary" type="button" id="calendar-next-button">Next</button>
                 </div>
             </div>
-
-            <div class="tab-pane fade" id="workspace-kanban-pane" role="tabpanel" aria-labelledby="workspace-kanban-tab" tabindex="0">
-                <div class="d-flex flex-column flex-xl-row justify-content-between align-items-xl-center gap-3 mb-4">
-                    <div>
-                        <div class="section-kicker mb-2">Workflow</div>
-                        <h2 class="h5 mb-1">Board View</h2>
-                        <p class="text-secondary mb-0">Use the first three lanes to shape the plan. The last two lanes report back on how the post actually landed.</p>
-                    </div>
-                    <span class="badge soft-badge rounded-pill px-3 py-2">Drag cards between editable lanes</span>
+            <div class="surface-panel-soft planner-range-panel">
+                <div>
+                    <div class="fw-semibold" id="calendar-range-label">Loading calendar...</div>
+                    <div class="small text-secondary">Scheduled posts appear here, including drafts that are still being refined on the board.</div>
                 </div>
-                <div class="scheduled-kanban-board" id="scheduled-kanban-board">
-                    <div class="scheduled-kanban-lane" data-kanban-bucket="drafts">
-                        <div class="scheduled-kanban-lane-header">
-                            <div>
-                                <div class="fw-semibold">Drafts</div>
-                                <div class="small text-secondary">Posts still taking shape.</div>
-                            </div>
-                            <span class="badge text-bg-light border" id="kanban-count-drafts">0</span>
-                        </div>
-                        <div class="scheduled-kanban-list planner-drop-zone" id="kanban-lane-drafts" data-drop-type="bucket" data-drop-bucket="drafts"></div>
-                    </div>
-                    <div class="scheduled-kanban-lane" data-kanban-bucket="scheduled">
-                        <div class="scheduled-kanban-lane-header">
-                            <div>
-                                <div class="fw-semibold">Scheduled</div>
-                                <div class="small text-secondary">Ready and waiting for go time.</div>
-                            </div>
-                            <span class="badge text-bg-light border" id="kanban-count-scheduled">0</span>
-                        </div>
-                        <div class="scheduled-kanban-list planner-drop-zone" id="kanban-lane-scheduled" data-drop-type="bucket" data-drop-bucket="scheduled"></div>
-                    </div>
-                    <div class="scheduled-kanban-lane" data-kanban-bucket="running">
-                        <div class="scheduled-kanban-lane-header">
-                            <div>
-                                <div class="fw-semibold">Queue Now</div>
-                                <div class="small text-secondary">Drop here to nudge the next send cycle.</div>
-                            </div>
-                            <span class="badge text-bg-light border" id="kanban-count-running">0</span>
-                        </div>
-                        <div class="scheduled-kanban-list planner-drop-zone" id="kanban-lane-running" data-drop-type="bucket" data-drop-bucket="running"></div>
-                    </div>
-                    <div class="scheduled-kanban-lane is-readonly" data-kanban-bucket="attention">
-                        <div class="scheduled-kanban-lane-header">
-                            <div>
-                                <div class="fw-semibold">Needs Attention</div>
-                                <div class="small text-secondary">Failures, partial failures, and cancelled work.</div>
-                            </div>
-                            <span class="badge text-bg-light border" id="kanban-count-attention">0</span>
-                        </div>
-                        <div class="scheduled-kanban-list" id="kanban-lane-attention"></div>
-                    </div>
-                    <div class="scheduled-kanban-lane is-readonly" data-kanban-bucket="done">
-                        <div class="scheduled-kanban-lane-header">
-                            <div>
-                                <div class="fw-semibold">Completed</div>
-                                <div class="small text-secondary">Delivered successfully.</div>
-                            </div>
-                            <span class="badge text-bg-light border" id="kanban-count-done">0</span>
-                        </div>
-                        <div class="scheduled-kanban-list" id="kanban-lane-done"></div>
-                    </div>
+                <div class="d-flex gap-2 flex-wrap">
+                    <span class="badge text-bg-light border" id="calendar-summary-total">0 scheduled</span>
+                    <span class="badge text-bg-light border" id="calendar-summary-giveaways">0 giveaways</span>
+                </div>
+            </div>
+            <div class="scheduled-calendar" id="scheduled-calendar-root">
+                <div class="scheduled-calendar-weekdays" id="scheduled-calendar-weekdays"></div>
+                <div class="scheduled-calendar-grid" id="scheduled-calendar-grid"></div>
+            </div>
+            <div class="scheduled-calendar-empty d-none" id="scheduled-calendar-empty">
+                <div class="surface-panel text-center">
+                    <div class="fw-semibold mb-2">No post plans in this range</div>
+                    <div class="text-secondary">Move to another week or month, or create a new post plan.</div>
                 </div>
             </div>
         </div>
-    </div>
+
+        <aside class="planner-board-surface">
+            <div class="planner-surface-header">
+                <div>
+                    <h2 class="h5 mb-1">Board Snapshot</h2>
+                    <p class="text-secondary mb-0">Drag cards between editable lanes. Last three cards per lane, with display all for longer lanes.</p>
+                </div>
+            </div>
+            <div class="scheduled-kanban-board" id="scheduled-kanban-board">
+                <div class="scheduled-kanban-lane" data-kanban-bucket="drafts">
+                    <div class="scheduled-kanban-lane-header">
+                        <div>
+                            <div class="fw-semibold">Drafts</div>
+                            <div class="small text-secondary">Posts still taking shape.</div>
+                        </div>
+                        <span class="badge text-bg-light border" id="kanban-count-drafts">0</span>
+                    </div>
+                    <div class="scheduled-kanban-list planner-drop-zone" id="kanban-lane-drafts" data-drop-type="bucket" data-drop-bucket="drafts"></div>
+                </div>
+                <div class="scheduled-kanban-lane" data-kanban-bucket="scheduled">
+                    <div class="scheduled-kanban-lane-header">
+                        <div>
+                            <div class="fw-semibold">Scheduled</div>
+                            <div class="small text-secondary">Ready and waiting for send time.</div>
+                        </div>
+                        <span class="badge text-bg-light border" id="kanban-count-scheduled">0</span>
+                    </div>
+                    <div class="scheduled-kanban-list planner-drop-zone" id="kanban-lane-scheduled" data-drop-type="bucket" data-drop-bucket="scheduled"></div>
+                </div>
+                <div class="scheduled-kanban-lane" data-kanban-bucket="running">
+                    <div class="scheduled-kanban-lane-header">
+                        <div>
+                            <div class="fw-semibold">Queue Now</div>
+                            <div class="small text-secondary">Nudge the next cycle.</div>
+                        </div>
+                        <span class="badge text-bg-light border" id="kanban-count-running">0</span>
+                    </div>
+                    <div class="scheduled-kanban-list planner-drop-zone" id="kanban-lane-running" data-drop-type="bucket" data-drop-bucket="running"></div>
+                </div>
+                <div class="scheduled-kanban-lane is-readonly" data-kanban-bucket="attention">
+                    <div class="scheduled-kanban-lane-header">
+                        <div>
+                            <div class="fw-semibold">Needs Attention</div>
+                            <div class="small text-secondary">Failures and cancelled work.</div>
+                        </div>
+                        <span class="badge text-bg-light border" id="kanban-count-attention">0</span>
+                    </div>
+                    <div class="scheduled-kanban-list" id="kanban-lane-attention"></div>
+                </div>
+                <div class="scheduled-kanban-lane is-readonly" data-kanban-bucket="done">
+                    <div class="scheduled-kanban-lane-header">
+                        <div>
+                            <div class="fw-semibold">Completed</div>
+                            <div class="small text-secondary">Delivered successfully.</div>
+                        </div>
+                        <span class="badge text-bg-light border" id="kanban-count-done">0</span>
+                    </div>
+                    <div class="scheduled-kanban-list" id="kanban-lane-done"></div>
+                </div>
+            </div>
+        </aside>
+    </section>
+
+    <section class="planner-selected-surface">
+        <div>
+            <div class="section-kicker mb-2">Selected Post</div>
+            <h2 class="h5 mb-1">Open any card for composer details</h2>
+            <p class="text-secondary mb-0">Drag to reschedule quickly, or open the card to edit copy, media, destination overrides, and giveaway details.</p>
+        </div>
+        <a class="btn btn-outline-primary" href="/scheduled-posts/new/page">Open composer</a>
+</section>
 </div>
 
 <div class="modal fade" id="planner-move-modal" tabindex="-1" aria-hidden="true">
