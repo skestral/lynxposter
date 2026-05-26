@@ -8,35 +8,37 @@
             <p class="text-secondary mb-0">Calendar, board lanes, and quick reschedule details in one workspace.</p>
         </div>
         <div class="figma-page-actions">
-            <a class="btn btn-outline-secondary" href="/sandbox/page">Preview Studio</a>
-            <a class="btn btn-primary" href="/scheduled-posts/new/page">Create Post</a>
+            <button class="btn btn-outline-secondary active" type="button" id="planner-top-calendar-button">Calendar</button>
+            <a class="btn btn-outline-secondary" href="#planner-board-panel">Board</a>
+            <a class="btn btn-outline-secondary" href="#kanban-lane-running">Queue</a>
+            <a class="btn btn-primary" href="/scheduled-posts/new/page">New</a>
         </div>
     </section>
 
     <section class="figma-stat-grid planner-stat-grid" aria-label="Planner summary">
         <div class="figma-stat-card">
             <div class="figma-stat-accent"></div>
-            <div class="figma-stat-label">Posts</div>
-            <div class="figma-stat-value" id="planner-total-count">{{ posts|length }} posts in view</div>
-            <div class="figma-stat-detail">Current queue</div>
+            <div class="figma-stat-label">Today</div>
+            <div class="figma-stat-value" id="planner-total-count">0 queued</div>
+            <div class="figma-stat-detail">Queued today</div>
         </div>
         <div class="figma-stat-card">
             <div class="figma-stat-accent"></div>
             <div class="figma-stat-label">Scheduled</div>
             <div class="figma-stat-value" id="planner-scheduled-count">0 scheduled</div>
-            <div class="figma-stat-detail">On calendar</div>
+            <div class="figma-stat-detail">Next 14 days</div>
+        </div>
+        <div class="figma-stat-card">
+            <div class="figma-stat-accent"></div>
+            <div class="figma-stat-label">Drafts</div>
+            <div class="figma-stat-value" id="planner-draft-count">0 drafts</div>
+            <div class="figma-stat-detail">Ready to place</div>
         </div>
         <div class="figma-stat-card">
             <div class="figma-stat-accent"></div>
             <div class="figma-stat-label">Attention</div>
-            <div class="figma-stat-value" id="planner-attention-count">0 need attention</div>
-            <div class="figma-stat-detail">Needs review</div>
-        </div>
-        <div class="figma-stat-card">
-            <div class="figma-stat-accent"></div>
-            <div class="figma-stat-label">Personas</div>
-            <div class="figma-stat-value" id="planner-persona-count">{{ persona_name_by_id|length }} ready</div>
-            <div class="figma-stat-detail">Available workspaces</div>
+            <div class="figma-stat-value" id="planner-attention-count">0 blocked</div>
+            <div class="figma-stat-detail">Blocked cards</div>
         </div>
     </section>
 
@@ -50,10 +52,10 @@
                 <div class="planner-surface-controls">
                     <span class="badge text-bg-light border rounded-pill px-3 py-2">{{ timezone_indicator() }}</span>
                     <div class="btn-group" role="group" aria-label="Calendar view switcher">
-                        <button class="btn btn-outline-secondary active" type="button" id="calendar-view-month" data-calendar-view="month">Month</button>
-                        <button class="btn btn-outline-secondary" type="button" id="calendar-view-week" data-calendar-view="week">Week</button>
+                        <button class="btn btn-outline-secondary active" type="button" id="calendar-view-week" data-calendar-view="week">Calendar</button>
+                        <button class="btn btn-outline-secondary" type="button" id="calendar-view-month" data-calendar-view="month">Month</button>
                     </div>
-                    <button class="btn btn-outline-secondary" type="button" id="calendar-prev-button">Previous</button>
+                    <button class="btn btn-outline-secondary" type="button" id="calendar-prev-button">Prev</button>
                     <button class="btn btn-outline-secondary" type="button" id="calendar-today-button">Today</button>
                     <button class="btn btn-outline-secondary" type="button" id="calendar-next-button">Next</button>
                 </div>
@@ -80,7 +82,7 @@
             </div>
         </div>
 
-        <aside class="planner-board-surface">
+        <aside class="planner-board-surface" id="planner-board-panel">
             <div class="planner-surface-header">
                 <div>
                     <h2 class="h5 mb-1">Board Snapshot</h2>
@@ -268,6 +270,7 @@ const calendarTodayButton = document.getElementById("calendar-today-button");
 const calendarViewButtons = Array.from(document.querySelectorAll("[data-calendar-view]"));
 const plannerTotalCount = document.getElementById("planner-total-count");
 const plannerScheduledCount = document.getElementById("planner-scheduled-count");
+const plannerDraftCount = document.getElementById("planner-draft-count");
 const plannerAttentionCount = document.getElementById("planner-attention-count");
 const kanbanLaneIds = {
   drafts: "kanban-lane-drafts",
@@ -285,7 +288,7 @@ const kanbanCountIds = {
 };
 const kanbanCollapsedLimit = 3;
 const plannerState = {
-  viewMode: "month",
+  viewMode: "week",
   anchorDate: new Date(),
 };
 const kanbanExpandedBuckets = new Set();
@@ -567,6 +570,37 @@ function plannerCardMarkup(post, compact = false) {
   `;
 }
 
+function plannerCalendarCardMarkup(post) {
+  const timeLabel = post.scheduledDate
+    ? new Intl.DateTimeFormat(undefined, {hour: "numeric", minute: "2-digit"}).format(post.scheduledDate)
+    : "open";
+  return `
+    <a
+      class="scheduled-calendar-event planner-card planner-calendar-card ${post.canDrag ? "is-draggable" : "is-locked"}"
+      href="${post.href}"
+      data-post-id="${post.id}"
+      ${post.canDrag ? 'draggable="true"' : ""}
+    >
+      <span class="planner-calendar-card-accent"></span>
+      <span class="planner-calendar-card-time">${escapeHtml(timeLabel)}</span>
+      <span class="planner-calendar-card-title">${escapeHtml(summarizeBody(post.body))}</span>
+    </a>
+  `;
+}
+
+function plannerBoardMiniCardMarkup(post) {
+  return `
+    <a
+      class="planner-board-mini-card planner-card ${post.canDrag ? "is-draggable" : "is-locked"}"
+      href="${post.href}"
+      data-post-id="${post.id}"
+      ${post.canDrag ? 'draggable="true"' : ""}
+    >
+      <span>${escapeHtml(summarizeBody(post.body))}</span>
+    </a>
+  `;
+}
+
 function setCalendarView(mode) {
   plannerState.viewMode = mode;
   calendarViewButtons.forEach((button) => {
@@ -592,6 +626,7 @@ function renderMonthCalendar() {
   const gridStart = addDays(monthStart, -monthStart.getDay());
   const cells = [];
 
+  calendarWeekdays.classList.remove("d-none");
   calendarWeekdays.innerHTML = Array.from({length: 7}, (_, index) => {
     const day = addDays(startOfWeek(new Date()), index);
     return `<div class="scheduled-calendar-weekday">${formatDayLabel(day, {weekday: "short"})}</div>`;
@@ -610,7 +645,7 @@ function renderMonthCalendar() {
           ${dayPosts.length ? `<span class="small text-secondary">${dayPosts.length}</span>` : ""}
         </div>
         <div class="scheduled-calendar-cell-events">
-          ${visiblePosts.map((post) => plannerCardMarkup(post, true)).join("")}
+          ${visiblePosts.map((post) => plannerCalendarCardMarkup(post)).join("")}
           ${hiddenCount ? `<div class="scheduled-calendar-more">+${hiddenCount} more scheduled</div>` : ""}
           ${!dayPosts.length ? '<div class="scheduled-calendar-placeholder">Drop a card here</div>' : ""}
         </div>
@@ -627,22 +662,26 @@ function renderWeekCalendar() {
   const start = startOfWeek(plannerState.anchorDate);
   const days = Array.from({length: 7}, (_, index) => addDays(start, index));
 
-  calendarWeekdays.innerHTML = days.map((day) => `
-    <div class="scheduled-calendar-weekday">
-      <div>${formatDayLabel(day, {weekday: "short"})}</div>
-      <div class="small text-secondary">${formatDayLabel(day, {month: "short", day: "numeric"})}</div>
-    </div>
-  `).join("");
+  calendarWeekdays.classList.add("d-none");
+  calendarWeekdays.innerHTML = "";
 
   calendarGrid.className = "scheduled-calendar-grid is-week";
   calendarGrid.innerHTML = days.map((day) => {
     const dayPosts = postsForDay(day);
+    const isToday = isSameDay(day, new Date());
     return `
-      <div class="scheduled-calendar-column planner-drop-zone" data-drop-type="day" data-drop-date="${toDateKey(day)}">
+      <div class="scheduled-calendar-column planner-drop-zone ${isToday ? "is-today" : ""}" data-drop-type="day" data-drop-date="${toDateKey(day)}">
+        <div class="scheduled-calendar-cell-head">
+          <div>
+            <div class="scheduled-calendar-weekday-inline">${formatDayLabel(day, {weekday: "short"})}</div>
+            <div class="scheduled-calendar-day-number">${day.getDate()}</div>
+          </div>
+          ${dayPosts.length ? `<span class="small text-secondary">${dayPosts.length}</span>` : ""}
+        </div>
         <div class="scheduled-calendar-column-events">
           ${dayPosts.length
-            ? dayPosts.map((post) => plannerCardMarkup(post)).join("")
-            : '<div class="scheduled-calendar-placeholder">Drop a card here</div>'}
+            ? dayPosts.map((post) => plannerCalendarCardMarkup(post)).join("")
+            : '<div class="scheduled-calendar-placeholder">open</div>'}
         </div>
       </div>
     `;
@@ -711,9 +750,18 @@ function renderKanbanBoard() {
       `
       : "";
     count.textContent = String(items.length);
-    lane.innerHTML = items.length
-      ? `${visibleItems.map((post) => plannerCardMarkup(post)).join("")}${toggleMarkup}`
-      : `<div class="scheduled-kanban-empty">${bucket === "attention" || bucket === "done" ? "Nothing to show here." : "Drop a card here."}</div>`;
+    const summaryText = visibleItems.length
+      ? visibleItems.map((post) => summarizeBody(post.body)).join(" / ")
+      : bucket === "attention" || bucket === "done"
+        ? "Nothing to show here."
+        : "Drop a card here.";
+    lane.innerHTML = `
+      <div class="planner-board-lane-summary">${escapeHtml(summaryText)}</div>
+      <div class="planner-board-mini-list">
+        ${visibleItems.map((post) => plannerBoardMiniCardMarkup(post)).join("")}
+      </div>
+      ${toggleMarkup}
+    `;
   });
   bindPlannerInteractions();
 }
@@ -721,9 +769,12 @@ function renderKanbanBoard() {
 function renderPlannerSummary() {
   const scheduledCount = plannerPosts.filter((post) => isCalendarPost(post)).length;
   const attentionCount = plannerPosts.filter((post) => statusBucket(post.displayStatus) === "attention").length;
-  plannerTotalCount.textContent = `${plannerPosts.length} post${plannerPosts.length === 1 ? "" : "s"} in view`;
+  const draftCount = plannerPosts.filter((post) => statusBucket(post.displayStatus) === "drafts").length;
+  const todayCount = plannerPosts.filter((post) => post.scheduledDate && isSameDay(post.scheduledDate, new Date())).length;
+  plannerTotalCount.textContent = `${todayCount} queued`;
   plannerScheduledCount.textContent = `${scheduledCount} scheduled`;
-  plannerAttentionCount.textContent = `${attentionCount} need attention`;
+  plannerDraftCount.textContent = `${draftCount} draft${draftCount === 1 ? "" : "s"}`;
+  plannerAttentionCount.textContent = `${attentionCount} blocked`;
 }
 
 function renderPlanner() {

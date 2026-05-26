@@ -3038,7 +3038,7 @@ body[data-ui-mode="dark"] .mobile-bottom-nav-create {
 
 .planner-workspace-layout {
     display: grid;
-    grid-template-columns: minmax(0, 2.1fr) minmax(18rem, 0.95fr);
+    grid-template-columns: minmax(34rem, 734fr) minmax(20rem, 336fr);
     gap: 0.95rem;
     align-items: start;
 }
@@ -3046,7 +3046,23 @@ body[data-ui-mode="dark"] .mobile-bottom-nav-create {
 .planner-calendar-surface,
 .planner-board-surface,
 .planner-selected-surface {
-    padding: 1rem;
+    padding: 1.45rem 1.65rem;
+}
+
+.planner-stat-grid .figma-stat-card:nth-child(1) .figma-stat-accent {
+    background: #e0004d;
+}
+
+.planner-stat-grid .figma-stat-card:nth-child(2) .figma-stat-accent {
+    background: #ff8a00;
+}
+
+.planner-stat-grid .figma-stat-card:nth-child(3) .figma-stat-accent {
+    background: #008f39;
+}
+
+.planner-stat-grid .figma-stat-card:nth-child(4) .figma-stat-accent {
+    background: #244aa5;
 }
 
 .planner-range-panel {
@@ -3054,7 +3070,10 @@ body[data-ui-mode="dark"] .mobile-bottom-nav-create {
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
-    margin: 1rem 0;
+    margin: 0.15rem 0 1rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
 }
 
 .planner-board-surface {
@@ -3065,23 +3084,198 @@ body[data-ui-mode="dark"] .mobile-bottom-nav-create {
 .planner-board-surface .scheduled-kanban-board {
     display: flex;
     flex-direction: column;
-    gap: 0.72rem;
+    gap: 0.75rem;
     overflow: visible;
     padding: 0;
 }
 
 .planner-board-surface .scheduled-kanban-lane {
-    min-height: 0;
-    padding: 0.8rem;
+    position: relative;
+    gap: 0.35rem;
+    min-height: 4.4rem;
+    padding: 0.78rem 0.95rem;
 }
 
 .planner-board-surface .scheduled-kanban-lane-header {
     align-items: center;
 }
 
-.planner-board-surface .planner-card,
-.planner-board-surface .scheduled-kanban-card {
-    padding: 0.68rem;
+.planner-board-surface .scheduled-kanban-lane-header .small {
+    display: none;
+}
+
+.planner-board-surface .scheduled-kanban-lane::before {
+    content: "";
+    width: 2.1rem;
+    height: 0.28rem;
+    border-radius: 999px;
+    background: #7b8aa5;
+}
+
+.planner-board-surface [data-kanban-bucket="drafts"]::before {
+    background: #ff8a00;
+}
+
+.planner-board-surface [data-kanban-bucket="scheduled"]::before {
+    background: #008f39;
+}
+
+.planner-board-surface [data-kanban-bucket="running"]::before {
+    background: #244aa5;
+}
+
+.planner-board-surface [data-kanban-bucket="attention"]::before {
+    background: #c23a52;
+}
+
+.planner-board-surface [data-kanban-bucket="done"]::before {
+    background: #6f7f98;
+}
+
+.planner-board-lane-summary {
+    color: var(--lp-ink-soft);
+    font-size: 0.78rem;
+    line-height: 1.35;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.planner-board-mini-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    max-height: 2.15rem;
+    overflow: hidden;
+}
+
+.planner-board-mini-card {
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    padding: 0.28rem 0.5rem;
+    border: 1px solid rgba(117, 136, 173, 0.18);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.68);
+    color: var(--lp-ink);
+    font-size: 0.72rem;
+    font-weight: 650;
+    line-height: 1.1;
+    text-decoration: none;
+    box-shadow: none;
+}
+
+.planner-board-mini-card span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.planner-board-surface .scheduled-kanban-list-summary {
+    margin-top: 0.1rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    justify-content: flex-end;
+}
+
+.planner-board-surface .scheduled-kanban-list-summary > span {
+    display: none;
+}
+
+.planner-calendar-surface .scheduled-calendar-weekdays.d-none {
+    display: none !important;
+}
+
+.planner-calendar-surface .scheduled-calendar-grid.is-week {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 0.5rem;
+}
+
+.planner-calendar-surface .scheduled-calendar-grid.is-month {
+    gap: 0.5rem;
+}
+
+.planner-calendar-surface .scheduled-calendar-column {
+    min-height: 14rem;
+    padding: 0.78rem;
+    border-color: rgba(117, 136, 173, 0.18);
+    background: rgba(245, 248, 253, 0.74);
+}
+
+.planner-calendar-surface .scheduled-calendar-column.is-today {
+    border-color: transparent;
+    background:
+        linear-gradient(rgba(255, 245, 248, 0.86), rgba(255, 245, 248, 0.86)) padding-box,
+        var(--lp-pride-border) border-box;
+}
+
+.scheduled-calendar-weekday-inline {
+    color: var(--lp-ink-soft);
+    font-size: 0.74rem;
+    font-weight: 740;
+}
+
+.planner-calendar-surface .scheduled-calendar-day-number {
+    margin-top: 0.25rem;
+    font-size: 1.45rem;
+    line-height: 1;
+}
+
+.planner-calendar-surface .scheduled-calendar-column-events,
+.planner-calendar-surface .scheduled-calendar-cell-events {
+    gap: 0.48rem;
+}
+
+.planner-calendar-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.18rem;
+    min-height: 2.65rem;
+    padding: 0.42rem 0.48rem;
+    border-color: rgba(117, 136, 173, 0.18);
+    background: rgba(255, 255, 255, 0.82);
+    color: var(--lp-ink);
+    box-shadow: none;
+}
+
+.planner-calendar-card-accent {
+    display: block;
+    width: 1.55rem;
+    height: 0.22rem;
+    border-radius: 999px;
+    background: var(--lp-pride-border);
+}
+
+.planner-calendar-card-time {
+    color: var(--lp-ink);
+    font-size: 0.68rem;
+    font-weight: 780;
+    line-height: 1.1;
+}
+
+.planner-calendar-card-title {
+    display: -webkit-box;
+    color: var(--lp-ink);
+    font-size: 0.68rem;
+    font-weight: 680;
+    line-height: 1.12;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+}
+
+.planner-calendar-surface .scheduled-calendar-placeholder {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.25rem;
+    padding: 0.35rem 0.65rem;
+    border: 1px solid rgba(117, 136, 173, 0.18);
+    border-radius: var(--lp-control-radius);
+    background: rgba(255, 255, 255, 0.72);
+    font-size: 0.72rem;
+    font-weight: 700;
 }
 
 .planner-selected-surface {
@@ -3213,6 +3407,30 @@ body[data-ui-mode="dark"] .composer-media-card .bg-light {
     background: rgba(18, 25, 38, 0.72) !important;
 }
 
+body[data-ui-mode="dark"] .planner-board-mini-card,
+body[data-ui-mode="dark"] .planner-calendar-card,
+body[data-ui-mode="dark"] .planner-calendar-surface .scheduled-calendar-placeholder {
+    background: rgba(18, 25, 38, 0.72);
+    border-color: rgba(136, 152, 184, 0.22);
+    color: #eef3fb;
+}
+
+body[data-ui-mode="dark"] .planner-calendar-surface .scheduled-calendar-column {
+    background: rgba(18, 25, 38, 0.58);
+}
+
+body[data-ui-mode="dark"] .planner-calendar-surface .scheduled-calendar-column.is-today {
+    background:
+        linear-gradient(rgba(31, 41, 59, 0.9), rgba(31, 41, 59, 0.9)) padding-box,
+        var(--lp-pride-border) border-box;
+}
+
+body[data-ui-mode="dark"] .planner-calendar-card-time,
+body[data-ui-mode="dark"] .planner-calendar-card-title,
+body[data-ui-mode="dark"] .planner-calendar-surface .scheduled-calendar-day-number {
+    color: #eef3fb;
+}
+
 @media (max-width: 1279.98px) {
     .planner-workspace-layout,
     .composer-design-grid {
@@ -3224,8 +3442,8 @@ body[data-ui-mode="dark"] .composer-media-card .bg-light {
     }
 
     .planner-board-surface .scheduled-kanban-board {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        display: flex;
+        flex-direction: column;
     }
 }
 
@@ -3248,6 +3466,16 @@ body[data-ui-mode="dark"] .composer-media-card .bg-light {
     .composer-control-grid,
     .composer-schedule-grid {
         grid-template-columns: 1fr;
+    }
+
+    .planner-calendar-surface .scheduled-calendar-grid.is-week,
+    .planner-calendar-surface .scheduled-calendar-grid.is-month {
+        grid-template-columns: 1fr;
+    }
+
+    .planner-calendar-surface .scheduled-calendar-column,
+    .planner-calendar-surface .scheduled-calendar-cell {
+        min-height: auto;
     }
 
     .planner-range-panel {
