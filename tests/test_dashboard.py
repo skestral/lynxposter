@@ -347,6 +347,29 @@ def test_dashboard_route_renders_persona_names_for_alerts_and_run_events(monkeyp
         engine.dispose()
 
 
+def test_scheduled_post_planner_dedicated_pages_render(monkeypatch, tmp_path):
+    engine, SessionLocal = _install_dashboard_test_app(monkeypatch, tmp_path)
+
+    try:
+        with SessionLocal() as session:
+            _create_persona(session, name="Savannah", slug="savannah-planner-pages")
+            session.commit()
+
+        with TestClient(app) as client:
+            month_response = client.get("/scheduled-posts/calendar/page")
+            board_response = client.get("/scheduled-posts/board/page")
+
+        assert month_response.status_code == 200
+        assert "Month Calendar" in month_response.text
+        assert 'const plannerInitialView = "month";' in month_response.text
+        assert board_response.status_code == 200
+        assert "Full Board" in board_response.text
+        assert 'const plannerInitialView = "board";' in board_response.text
+    finally:
+        Base.metadata.drop_all(engine)
+        engine.dispose()
+
+
 def test_dashboard_v2_route_renders_ops_health_for_admin(monkeypatch, tmp_path):
     engine, SessionLocal = _install_dashboard_test_app(monkeypatch, tmp_path)
 

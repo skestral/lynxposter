@@ -1,16 +1,27 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="planner-workspace-page">
+{% set active_planner_view = planner_view | default("workspace", true) %}
+<div class="planner-workspace-page planner-view-{{ active_planner_view }}">
     <section class="figma-page-header">
         <div>
             <div class="section-kicker mb-2">Planner Workspace</div>
-            <h1 class="h3 mb-1">Planner Workspace</h1>
-            <p class="text-secondary mb-0">Calendar, board lanes, and quick reschedule details in one workspace.</p>
+            <h1 class="h3 mb-1">
+                {% if active_planner_view == "month" %}Month Calendar{% elif active_planner_view == "board" %}Full Board{% else %}Planner Workspace{% endif %}
+            </h1>
+            <p class="text-secondary mb-0">
+                {% if active_planner_view == "month" %}
+                See the full monthly publishing rhythm and reschedule posts by day.
+                {% elif active_planner_view == "board" %}
+                Work every lane at full size with the same drag-and-drop controls.
+                {% else %}
+                Calendar, board lanes, and quick reschedule details in one workspace.
+                {% endif %}
+            </p>
         </div>
         <div class="figma-page-actions">
-            <button class="btn btn-outline-secondary active" type="button" id="planner-top-calendar-button">Calendar</button>
-            <a class="btn btn-outline-secondary" href="#planner-board-panel">Board</a>
-            <a class="btn btn-outline-secondary" href="#kanban-lane-running">Queue</a>
+            <a class="btn btn-outline-secondary {% if active_planner_view == 'workspace' %}active{% endif %}" href="/scheduled-posts/page" id="planner-top-calendar-button">Calendar</a>
+            <a class="btn btn-outline-secondary {% if active_planner_view == 'month' %}active{% endif %}" href="/scheduled-posts/calendar/page">Month</a>
+            <a class="btn btn-outline-secondary {% if active_planner_view == 'board' %}active{% endif %}" href="/scheduled-posts/board/page">Board</a>
             <a class="btn btn-primary" href="/scheduled-posts/new/page">New</a>
         </div>
     </section>
@@ -46,8 +57,14 @@
         <div class="planner-calendar-surface">
             <div class="planner-surface-header">
                 <div>
-                    <h2 class="h4 mb-1">Calendar Week</h2>
-                    <p class="text-secondary mb-0">Drop cards onto a day, then pick the exact time in the quick edit sheet.</p>
+                    <h2 class="h4 mb-1">{% if active_planner_view == "month" %}Month Calendar{% else %}Calendar Week{% endif %}</h2>
+                    <p class="text-secondary mb-0">
+                        {% if active_planner_view == "month" %}
+                        Review the whole month and drop cards onto the right day.
+                        {% else %}
+                        Drop cards onto a day, then pick the exact time in the quick edit sheet.
+                        {% endif %}
+                    </p>
                 </div>
                 <div class="planner-surface-controls">
                     <span class="badge text-bg-light border rounded-pill px-3 py-2">{{ timezone_indicator() }}</span>
@@ -55,13 +72,15 @@
                         <button class="btn btn-outline-secondary active" type="button" id="calendar-view-week" data-calendar-view="week">Calendar</button>
                         <button class="btn btn-outline-secondary" type="button" id="calendar-view-month" data-calendar-view="month">Month</button>
                     </div>
-                    <button class="btn btn-outline-secondary" type="button" id="calendar-prev-button">Prev</button>
-                    <button class="btn btn-outline-secondary" type="button" id="calendar-today-button">Today</button>
-                    <button class="btn btn-outline-secondary" type="button" id="calendar-next-button">Next</button>
+                    <div class="btn-group planner-date-nav" role="group" aria-label="Calendar date navigation">
+                        <button class="btn btn-outline-secondary" type="button" id="calendar-prev-button">Prev</button>
+                        <button class="btn btn-outline-secondary" type="button" id="calendar-today-button">Today</button>
+                        <button class="btn btn-outline-secondary" type="button" id="calendar-next-button">Next</button>
+                    </div>
                 </div>
             </div>
             <div class="surface-panel-soft planner-range-panel">
-                <div>
+                <div class="planner-range-copy">
                     <div class="fw-semibold" id="calendar-range-label">Loading calendar...</div>
                     <div class="small text-secondary">Scheduled posts appear here, including drafts that are still being refined on the board.</div>
                 </div>
@@ -223,6 +242,9 @@
 <script>
 const personaNameById = {{ persona_name_by_id | tojson }};
 const plannerTimezoneName = {{ timezone_name() | tojson }};
+const plannerInitialView = {{ planner_view | default("workspace", true) | tojson }};
+const plannerIsFullBoard = plannerInitialView === "board";
+const plannerIsMonthPage = plannerInitialView === "month";
 const scheduledPostsPlannerData = [
 {% for post in posts %}
   {
@@ -288,7 +310,7 @@ const kanbanCountIds = {
 };
 const kanbanCollapsedLimit = 3;
 const plannerState = {
-  viewMode: "week",
+  viewMode: plannerIsMonthPage ? "month" : "week",
   anchorDate: new Date(),
 };
 const kanbanExpandedBuckets = new Set();
@@ -603,10 +625,14 @@ function plannerBoardMiniCardMarkup(post) {
 
 function setCalendarView(mode) {
   plannerState.viewMode = mode;
-  calendarViewButtons.forEach((button) => {
-    button.classList.toggle("active", button.dataset.calendarView === mode);
-  });
+  syncCalendarViewButtons();
   renderCalendar();
+}
+
+function syncCalendarViewButtons() {
+  calendarViewButtons.forEach((button) => {
+    button.classList.toggle("active", button.dataset.calendarView === plannerState.viewMode);
+  });
 }
 
 function moveCalendar(direction) {
@@ -692,6 +718,7 @@ function renderWeekCalendar() {
 }
 
 function renderCalendar() {
+  syncCalendarViewButtons();
   const visibleScheduled = plannerPosts.filter((post) => isCalendarPost(post));
   const visibleGiveaways = visibleScheduled.filter((post) => post.postType === "giveaway");
   calendarSummaryTotal.textContent = `${visibleScheduled.length} scheduled`;
@@ -750,17 +777,26 @@ function renderKanbanBoard() {
       `
       : "";
     count.textContent = String(items.length);
+    if (plannerIsFullBoard) {
+      lane.innerHTML = items.length
+        ? `${visibleItems.map((post) => plannerCardMarkup(post)).join("")}${toggleMarkup}`
+        : `<div class="scheduled-kanban-empty">${bucket === "attention" || bucket === "done" ? "Nothing to show here." : "Drop a card here."}</div>`;
+      return;
+    }
     const summaryText = visibleItems.length
       ? visibleItems.map((post) => summarizeBody(post.body)).join(" / ")
       : bucket === "attention" || bucket === "done"
         ? "Nothing to show here."
         : "Drop a card here.";
+    const snapshotToggleMarkup = hasHiddenCards
+      ? toggleMarkup
+      : '<div class="scheduled-kanban-list-summary is-placeholder" aria-hidden="true"><span>Showing 0 of 0</span><button class="btn btn-sm btn-outline-secondary scheduled-kanban-toggle" type="button" tabindex="-1">Display all</button></div>';
     lane.innerHTML = `
       <div class="planner-board-lane-summary">${escapeHtml(summaryText)}</div>
       <div class="planner-board-mini-list">
         ${visibleItems.map((post) => plannerBoardMiniCardMarkup(post)).join("")}
       </div>
-      ${toggleMarkup}
+      ${snapshotToggleMarkup}
     `;
   });
   bindPlannerInteractions();

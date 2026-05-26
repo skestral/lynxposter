@@ -376,12 +376,19 @@ def test_scheduled_post_templates_render_attachment_previews():
     assert 'planner-board-surface' in planner_html
     assert 'calendar-view-month' in planner_html
     assert 'calendar-view-week' in planner_html
+    assert 'planner-date-nav' in planner_html
+    assert 'planner-range-copy' in planner_html
+    assert 'href="/scheduled-posts/calendar/page"' in planner_html
+    assert 'href="/scheduled-posts/board/page"' in planner_html
     assert 'scheduled-calendar-grid' in planner_html
     assert 'scheduled-kanban-board' in planner_html
     assert 'kanban-lane-drafts' in planner_html
     assert 'kanban-lane-attention' in planner_html
     assert 'const kanbanCollapsedLimit = 3;' in planner_html
     assert 'const kanbanExpandedBuckets = new Set();' in planner_html
+    assert 'const plannerInitialView = "workspace";' in planner_html
+    assert 'plannerIsFullBoard' in planner_html
+    assert 'plannerIsMonthPage' in planner_html
     assert 'planner-card-layout' in planner_html
     assert 'planner-card-main' in planner_html
     assert 'planner-card-open' in planner_html
@@ -643,6 +650,39 @@ def test_scheduled_posts_planner_renders_generic_giveaway_data():
     assert "reply_or_quote_present" in html
     assert "pool_mode" in html
     assert "normalizeGiveawayConfig" in html
+
+
+def test_scheduled_posts_template_has_dedicated_month_and_board_modes():
+    base_context = {
+        "request": _request_with_principal(),
+        "current_principal": SimpleNamespace(
+            is_authenticated=True,
+            is_user=True,
+            is_admin=False,
+            user_id="user-1",
+            display_name="Lynx",
+            role="user",
+            timezone="UTC",
+        ),
+        "auth_enabled": False,
+        "personas": [],
+        "posts": [],
+        "persona_targets": {},
+        "persona_name_by_id": {},
+        "service_post_guidance": service_composer_constraints_context(),
+    }
+
+    month_html = templates.env.get_template("scheduled_posts.html").render(**base_context, planner_view="month")
+    board_html = templates.env.get_template("scheduled_posts.html").render(**base_context, planner_view="board")
+
+    assert "planner-view-month" in month_html
+    assert "Month Calendar" in month_html
+    assert 'const plannerInitialView = "month";' in month_html
+    assert 'viewMode: plannerIsMonthPage ? "month" : "week"' in month_html
+    assert "planner-view-board" in board_html
+    assert "Full Board" in board_html
+    assert 'const plannerInitialView = "board";' in board_html
+    assert "plannerIsFullBoard" in board_html
 
 
 def test_dashboard_template_shows_recent_scheduled_post_errors():

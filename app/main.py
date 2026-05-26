@@ -1040,8 +1040,7 @@ def persona_detail_page(persona_id: str, request: Request) -> HTMLResponse:
         )
 
 
-@app.get("/scheduled-posts/page", response_class=HTMLResponse)
-def scheduled_posts_page(request: Request) -> HTMLResponse:
+def _scheduled_posts_page_response(request: Request, *, planner_view: str = "workspace") -> HTMLResponse | RedirectResponse:
     guarded = _page_guard(request, role="user")
     if isinstance(guarded, RedirectResponse):
         return guarded
@@ -1061,8 +1060,24 @@ def scheduled_posts_page(request: Request) -> HTMLResponse:
                 persona_targets=_persona_targets_context(personas),
                 persona_name_by_id={persona.id: persona.name for persona in personas},
                 service_post_guidance=service_composer_constraints_context(),
+                planner_view=planner_view,
             ),
         )
+
+
+@app.get("/scheduled-posts/page", response_class=HTMLResponse)
+def scheduled_posts_page(request: Request) -> HTMLResponse:
+    return _scheduled_posts_page_response(request, planner_view="workspace")
+
+
+@app.get("/scheduled-posts/calendar/page", response_class=HTMLResponse)
+def scheduled_posts_month_page(request: Request) -> HTMLResponse:
+    return _scheduled_posts_page_response(request, planner_view="month")
+
+
+@app.get("/scheduled-posts/board/page", response_class=HTMLResponse)
+def scheduled_posts_board_page(request: Request) -> HTMLResponse:
+    return _scheduled_posts_page_response(request, planner_view="board")
 
 
 @app.get("/scheduled-posts/new/page", response_class=HTMLResponse)
