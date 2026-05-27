@@ -14,7 +14,28 @@
         </div>
     </section>
 
-    <form id="scheduled-post-form" class="composer-form-shell composer-v2-shell">
+    <form id="scheduled-post-form" class="composer-form-shell composer-v2-shell" data-active-composer-tab="compose">
+        <div class="composer-mobile-tabbar composer-tabbar" role="tablist" aria-label="Mobile composer sections">
+            <button class="composer-tab is-active" id="composer-mobile-tab-compose-button" type="button" role="tab" aria-selected="true" data-composer-tab-target="compose">
+                <span>Compose</span>
+            </button>
+            <button class="composer-tab" id="composer-mobile-tab-media-button" type="button" role="tab" aria-selected="false" data-composer-tab-target="media">
+                <span>Media</span>
+                <span class="composer-tab-count" id="mobile-snapshot-attachments">0</span>
+            </button>
+            <button class="composer-tab" id="composer-mobile-tab-destinations-button" type="button" role="tab" aria-selected="false" data-composer-tab-target="destinations">
+                <span>Destinations</span>
+                <span class="composer-tab-count" id="mobile-snapshot-targets">0</span>
+            </button>
+            <button class="composer-tab" id="composer-mobile-tab-giveaway-button" type="button" role="tab" aria-selected="false" data-composer-tab-target="giveaway">
+                <span>Giveaway</span>
+                <span class="composer-tab-count" id="mobile-giveaway-tab-status">Off</span>
+            </button>
+            <button class="composer-tab" id="composer-mobile-tab-preview-button" type="button" role="tab" aria-selected="false" data-composer-tab-target="preview">
+                <span>Preview</span>
+            </button>
+        </div>
+
         <section class="composer-design-grid composer-v3-grid">
             <div class="composer-editor-surface composer-v3-compose-panel">
                 <div class="composer-surface-header composer-v2-panel-header">
@@ -182,6 +203,10 @@
                 </div>
             </section>
         </section>
+        <div class="composer-mobile-actionbar">
+            <a class="btn btn-outline-secondary" href="/scheduled-posts/page">Cancel</a>
+            <button class="btn btn-primary" type="submit">Save Post</button>
+        </div>
     </form>
 </div>
 {% else %}
@@ -216,6 +241,8 @@ const bodyLengthIndicator = document.getElementById("body-length-indicator");
 const snapshotBodyLength = document.getElementById("snapshot-body-length");
 const snapshotAttachments = document.getElementById("snapshot-attachments");
 const snapshotTargets = document.getElementById("snapshot-targets");
+const mobileSnapshotAttachments = document.getElementById("mobile-snapshot-attachments");
+const mobileSnapshotTargets = document.getElementById("mobile-snapshot-targets");
 const postTypeSelect = document.getElementById("post-type-select");
 const statusSelect = document.getElementById("status-select");
 const scheduledForInput = document.getElementById("scheduled-for-input");
@@ -233,11 +260,14 @@ const previewStatusPill = document.getElementById("preview-status-pill");
 const composerTabButtons = Array.from(document.querySelectorAll("[data-composer-tab-target]"));
 const composerTabPanels = Array.from(document.querySelectorAll("[data-composer-tab-panel]"));
 const giveawayTabStatus = document.getElementById("giveaway-tab-status");
+const mobileGiveawayTabStatus = document.getElementById("mobile-giveaway-tab-status");
+const scheduledPostForm = document.getElementById("scheduled-post-form");
 let selectedUploads = [];
 let uploadPreviewUrls = [];
 let draggedUploadIndex = null;
 
 function activateComposerTab(tabName) {
+  scheduledPostForm.dataset.activeComposerTab = tabName;
   composerTabButtons.forEach((button) => {
     const active = button.dataset.composerTabTarget === tabName;
     button.classList.toggle("is-active", active);
@@ -471,6 +501,9 @@ function refreshGiveawayState() {
   if (giveawayTabStatus) {
     giveawayTabStatus.textContent = isGiveaway ? "Enabled" : "Off";
   }
+  if (mobileGiveawayTabStatus) {
+    mobileGiveawayTabStatus.textContent = isGiveaway ? "On" : "Off";
+  }
   syncGiveawayTargets();
   if (isGiveaway) {
     const validation = giveawayBuilder.validate();
@@ -683,6 +716,12 @@ function refreshPostGuidance() {
   snapshotBodyLength.textContent = `${bodyTextarea.value.length} chars`;
   snapshotAttachments.textContent = `${snapshot.total} attachment${snapshot.total === 1 ? "" : "s"}`;
   snapshotTargets.textContent = `${selectedTargets} target${selectedTargets === 1 ? "" : "s"}`;
+  if (mobileSnapshotAttachments) {
+    mobileSnapshotAttachments.textContent = String(snapshot.total);
+  }
+  if (mobileSnapshotTargets) {
+    mobileSnapshotTargets.textContent = String(selectedTargets);
+  }
   refreshComposerPreview();
 
   targetAccountList.querySelectorAll(".composer-destination-wrapper[data-account-service]").forEach((wrapper) => {
@@ -738,7 +777,7 @@ bindMediaDropzone();
 renderUploadPreviews();
 refreshPostGuidance();
 
-document.getElementById("scheduled-post-form").addEventListener("submit", async (event) => {
+scheduledPostForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
   const payload = new FormData();

@@ -3679,6 +3679,11 @@ body[data-ui-mode="dark"] .form-select option {
     gap: 0.9rem;
 }
 
+.composer-mobile-tabbar,
+.composer-mobile-actionbar {
+    display: none;
+}
+
 .composer-tabbar {
     display: flex;
     flex: 0 0 auto;
@@ -3972,6 +3977,11 @@ body[data-ui-mode="dark"] .composer-tab-count {
     border-color: rgba(136, 152, 184, 0.22);
 }
 
+body[data-ui-mode="dark"] .composer-mobile-actionbar {
+    background: rgba(18, 25, 38, 0.88);
+    border-color: rgba(136, 152, 184, 0.22);
+}
+
 body[data-ui-mode="dark"] .composer-tab {
     color: #c4cce0;
 }
@@ -4091,6 +4101,198 @@ body[data-ui-mode="dark"] .planner-calendar-surface .scheduled-calendar-day-numb
     .composer-media-actions {
         grid-column: 1 / -1;
         justify-content: flex-start;
+    }
+
+    .composer-workspace-page.composer-v2-page {
+        gap: 0.55rem;
+        padding-bottom: 8.75rem;
+    }
+
+    .composer-v2-header {
+        margin-bottom: 0.35rem;
+    }
+
+    .composer-v2-header .section-kicker,
+    .composer-v2-header p,
+    .composer-v2-header .figma-page-actions {
+        display: none;
+    }
+
+    .composer-v2-header h1 {
+        margin-bottom: 0 !important;
+        font-size: 1.38rem;
+        line-height: 1.1;
+    }
+
+    .composer-mobile-tabbar {
+        position: sticky;
+        top: 0.45rem;
+        z-index: 20;
+        display: flex;
+        flex-wrap: nowrap;
+        gap: 0.42rem;
+        margin: 0 -0.2rem 0.2rem;
+        overflow-x: auto;
+        padding: 0.32rem;
+        scrollbar-width: none;
+    }
+
+    .composer-mobile-tabbar::-webkit-scrollbar {
+        display: none;
+    }
+
+    .composer-workbench-surface > .composer-tabbar {
+        display: none;
+    }
+
+    .composer-mobile-tabbar .composer-tab {
+        flex: 0 0 auto;
+        min-height: 2.45rem;
+        padding: 0.28rem 0.7rem;
+        font-size: 0.84rem;
+    }
+
+    .composer-mobile-tabbar .composer-tab-count {
+        min-height: 1.35rem;
+        padding-inline: 0.42rem;
+        font-size: 0.68rem;
+    }
+
+    .composer-v3-grid {
+        display: block;
+    }
+
+    .composer-editor-surface,
+    .composer-workbench-surface,
+    .composer-platform-surface,
+    .composer-schedule-surface {
+        padding: 0.82rem;
+    }
+
+    .composer-v3-compose-panel,
+    .composer-v3-workbench,
+    .composer-v3-preview-panel {
+        margin: 0;
+    }
+
+    #scheduled-post-form[data-active-composer-tab="compose"] .composer-workbench-surface,
+    #scheduled-post-form[data-active-composer-tab="compose"] .composer-v3-preview-panel,
+    #scheduled-post-form[data-active-composer-tab="preview"] .composer-workbench-surface,
+    #scheduled-post-form[data-active-composer-tab="preview"] .composer-v3-compose-panel > .composer-surface-header,
+    #scheduled-post-form[data-active-composer-tab="preview"] .composer-control-grid,
+    #scheduled-post-form[data-active-composer-tab="preview"] .composer-caption-field,
+    #scheduled-post-form[data-active-composer-tab="preview"] .composer-inline-schedule,
+    #scheduled-post-form[data-active-composer-tab="media"] .composer-v3-compose-panel,
+    #scheduled-post-form[data-active-composer-tab="destinations"] .composer-v3-compose-panel,
+    #scheduled-post-form[data-active-composer-tab="giveaway"] .composer-v3-compose-panel {
+        display: none !important;
+    }
+
+    #scheduled-post-form[data-active-composer-tab="preview"] .composer-v3-compose-panel {
+        display: block;
+        border: 0;
+        padding: 0;
+        background: transparent;
+        box-shadow: none;
+        backdrop-filter: none;
+    }
+
+    #scheduled-post-form[data-active-composer-tab="preview"] .composer-v3-preview-panel {
+        display: block;
+    }
+
+    #scheduled-post-form[data-active-composer-tab="media"] .composer-workbench-surface,
+    #scheduled-post-form[data-active-composer-tab="destinations"] .composer-workbench-surface,
+    #scheduled-post-form[data-active-composer-tab="giveaway"] .composer-workbench-surface {
+        display: block;
+    }
+
+    .composer-tab-panels {
+        min-height: 0;
+    }
+
+    .composer-tab-panel.is-active {
+        max-height: none;
+        overflow: visible;
+        padding-right: 0;
+    }
+
+    .composer-surface-header {
+        gap: 0.35rem;
+    }
+
+    .composer-surface-header h2,
+    .composer-surface-header h3 {
+        font-size: 1rem;
+    }
+
+    .composer-surface-header p {
+        font-size: 0.82rem;
+        line-height: 1.28;
+    }
+
+    .composer-control-grid {
+        gap: 0.55rem;
+        margin: 0.75rem 0;
+    }
+
+    .composer-caption-field {
+        margin-top: 0.72rem;
+    }
+
+    .composer-v3-compose-panel .composer-caption-field textarea,
+    .composer-caption-field textarea {
+        min-height: clamp(9rem, 38vh, 15rem);
+    }
+
+    .composer-inline-schedule {
+        margin-top: 0.72rem;
+        padding: 0.72rem;
+    }
+
+    .composer-schedule-grid {
+        gap: 0.55rem;
+    }
+
+    .composer-media-dropzone {
+        min-height: 4.8rem;
+        margin-top: 0.7rem;
+        padding: 0.75rem;
+    }
+
+    .composer-media-list,
+    .composer-destination-rows {
+        gap: 0.58rem;
+    }
+
+    .composer-media-card,
+    .composer-destination-card {
+        padding: 0.68rem;
+    }
+
+    .composer-preview-phone {
+        margin-top: 0.72rem !important;
+    }
+
+    .composer-mobile-actionbar {
+        position: fixed;
+        right: 1rem;
+        bottom: calc(4.85rem + env(safe-area-inset-bottom, 0px));
+        left: 1rem;
+        z-index: 1039;
+        display: grid;
+        grid-template-columns: minmax(0, 0.72fr) minmax(0, 1fr);
+        gap: 0.55rem;
+        padding: 0.55rem;
+        border: 1px solid rgba(117, 136, 173, 0.2);
+        border-radius: calc(var(--lp-container-radius) + 4px);
+        background: rgba(255, 255, 255, 0.88);
+        box-shadow: 0 14px 34px rgba(31, 42, 68, 0.16);
+        backdrop-filter: blur(18px);
+    }
+
+    .composer-mobile-actionbar .btn {
+        min-height: 2.65rem;
     }
 
     .persona-share-invite {
