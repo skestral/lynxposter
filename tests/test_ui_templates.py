@@ -507,6 +507,10 @@ def test_scheduled_post_templates_render_attachment_previews():
     assert 'preview-persona-name' in create_html
     assert 'Save Post' in create_html
     assert 'planner-workspace-layout' in planner_html
+    assert 'planner-mobile-tabbar' in planner_html
+    assert 'data-planner-panel="overview"' in planner_html
+    assert 'data-planner-panel="calendar"' in planner_html
+    assert 'data-planner-panel="board"' in planner_html
     assert 'planner-calendar-surface' in planner_html
     assert 'planner-board-surface' in planner_html
     assert 'calendar-view-month' in planner_html
@@ -520,6 +524,7 @@ def test_scheduled_post_templates_render_attachment_previews():
     assert 'kanban-lane-drafts' in planner_html
     assert 'kanban-lane-attention' in planner_html
     assert 'const kanbanCollapsedLimit = 3;' in planner_html
+    assert 'const kanbanSnapshotLimit = 2;' in planner_html
     assert 'const kanbanExpandedBuckets = new Set();' in planner_html
     assert 'const plannerInitialView = "workspace";' in planner_html
     assert 'plannerIsFullBoard' in planner_html
@@ -529,9 +534,15 @@ def test_scheduled_post_templates_render_attachment_previews():
     assert 'planner-card-open' in planner_html
     assert 'planner-board-mini-title' in planner_html
     assert 'planner-board-mini-meta' in planner_html
+    assert 'planner-lane-modal' in planner_html
+    assert 'planner-board-count-button' in planner_html
+    assert 'data-kanban-modal="drafts"' in planner_html
+    assert 'function openPlannerLaneModal(bucket)' in planner_html
     assert 'items.slice(-kanbanCollapsedLimit)' in planner_html
+    assert 'items.slice(-kanbanSnapshotLimit)' in planner_html
     assert 'data-kanban-toggle="${bucket}"' in planner_html
     assert 'Display all ${items.length}' in planner_html
+    assert 'View lane' in planner_html
     assert 'planner-board-lane-empty' in planner_html
     assert 'planner-move-modal' in planner_html
     assert 'document.body.appendChild(plannerMoveModalElement)' in planner_html
@@ -559,7 +570,7 @@ def test_scheduled_post_templates_render_attachment_previews():
     assert 'Partial Failure' in detail_html
     assert 'Instagram session expired.' in planner_html
     assert 'Queue Now' in planner_html
-    assert 'Drag cards between editable lanes' in planner_html
+    assert 'Use a count to inspect everything in a lane' in planner_html
 
 
 def test_scheduled_post_templates_render_generic_giveaway_controls():
@@ -815,10 +826,12 @@ def test_scheduled_posts_template_has_dedicated_month_and_board_modes():
 
     assert "planner-view-month" in month_html
     assert "Month Calendar" in month_html
+    assert 'data-active-planner-tab="calendar"' in month_html
     assert 'const plannerInitialView = "month";' in month_html
     assert 'viewMode: plannerIsMonthPage ? "month" : "week"' in month_html
     assert "planner-view-board" in board_html
     assert "Full Board" in board_html
+    assert 'data-active-planner-tab="board"' in board_html
     assert 'const plannerInitialView = "board";' in board_html
     assert "plannerIsFullBoard" in board_html
 

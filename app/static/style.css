@@ -3371,6 +3371,78 @@ body[data-ui-mode="dark"] .form-select option {
     font-weight: 600;
 }
 
+.planner-board-count-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2rem;
+    min-height: 2rem;
+    padding: 0.2rem 0.55rem;
+    cursor: pointer;
+}
+
+.planner-board-count-button:hover,
+.planner-board-count-button:focus-visible {
+    border-color: transparent !important;
+    background:
+        linear-gradient(var(--lp-theme-active-fill), var(--lp-theme-active-fill)) padding-box,
+        var(--lp-theme-border) border-box !important;
+}
+
+.planner-board-modal-summary {
+    align-items: center;
+    margin-top: 0.04rem;
+}
+
+.planner-lane-modal-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.planner-lane-modal-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+}
+
+.planner-lane-modal-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    min-width: 0;
+    padding: 0.85rem 0.9rem;
+    border: 1px solid rgba(117, 136, 173, 0.18);
+    border-radius: var(--lp-container-radius);
+    background: rgba(255, 255, 255, 0.68);
+}
+
+.planner-lane-modal-card-main {
+    min-width: 0;
+}
+
+.planner-mobile-tabbar {
+    display: none;
+}
+
+.planner-mobile-tab {
+    border: 1px solid rgba(117, 136, 173, 0.24);
+    border-radius: var(--lp-control-radius);
+    background: rgba(255, 255, 255, 0.76);
+    color: var(--lp-ink-soft);
+    font-weight: 760;
+}
+
+.planner-mobile-tab.active {
+    border-color: transparent;
+    background:
+        linear-gradient(var(--lp-theme-active-fill), var(--lp-theme-active-fill)) padding-box,
+        var(--lp-theme-border) border-box;
+    color: var(--lp-ink);
+}
+
 .planner-board-surface .scheduled-kanban-list-summary {
     margin-top: 0.04rem;
     padding: 0;
@@ -3993,11 +4065,18 @@ body[data-ui-mode="dark"] .composer-tab.is-active .composer-tab-count {
 }
 
 body[data-ui-mode="dark"] .planner-board-mini-card,
+body[data-ui-mode="dark"] .planner-lane-modal-card,
+body[data-ui-mode="dark"] .planner-mobile-tab,
 body[data-ui-mode="dark"] .planner-calendar-card,
 body[data-ui-mode="dark"] .planner-calendar-surface .scheduled-calendar-placeholder {
     background: rgba(18, 25, 38, 0.72);
     border-color: rgba(136, 152, 184, 0.22);
     color: #eef3fb;
+}
+
+body[data-ui-mode="dark"] .planner-mobile-tabbar {
+    background: rgba(18, 25, 38, 0.86);
+    border-color: rgba(136, 152, 184, 0.22);
 }
 
 body[data-ui-mode="dark"] .planner-calendar-surface .scheduled-calendar-column {
@@ -4074,6 +4153,212 @@ body[data-ui-mode="dark"] .planner-calendar-surface .scheduled-calendar-day-numb
     }
 
     .planner-range-panel {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .planner-workspace-page {
+        gap: 0.62rem;
+        padding-bottom: 5.75rem;
+    }
+
+    .planner-workspace-page .figma-page-header {
+        gap: 0.55rem;
+        margin-bottom: 0;
+    }
+
+    .planner-workspace-page .figma-page-header .section-kicker,
+    .planner-workspace-page .figma-page-header p {
+        display: none;
+    }
+
+    .planner-workspace-page .figma-page-header h1 {
+        margin-bottom: 0 !important;
+        font-size: 1.42rem;
+        line-height: 1.1;
+    }
+
+    .planner-workspace-page .figma-page-actions {
+        flex-wrap: nowrap;
+        width: 100%;
+        overflow-x: auto;
+        padding-bottom: 0.2rem;
+        scrollbar-width: none;
+    }
+
+    .planner-workspace-page .figma-page-actions::-webkit-scrollbar,
+    .planner-mobile-tabbar::-webkit-scrollbar,
+    .planner-calendar-surface .planner-surface-controls::-webkit-scrollbar,
+    .planner-calendar-surface .scheduled-calendar-grid.is-week::-webkit-scrollbar {
+        display: none;
+    }
+
+    .planner-workspace-page .figma-page-actions .btn {
+        flex: 0 0 auto;
+        min-height: 2.35rem;
+        padding: 0.38rem 0.72rem;
+        font-size: 0.86rem;
+    }
+
+    .planner-mobile-tabbar {
+        position: sticky;
+        top: 0.45rem;
+        z-index: 20;
+        display: flex;
+        gap: 0.42rem;
+        margin: 0 -0.2rem 0.15rem;
+        overflow-x: auto;
+        padding: 0.32rem;
+        border: 1px solid rgba(117, 136, 173, 0.18);
+        border-radius: calc(var(--lp-container-radius) + 4px);
+        background: rgba(255, 255, 255, 0.84);
+        box-shadow: 0 12px 28px rgba(31, 42, 68, 0.08);
+        backdrop-filter: blur(18px);
+        scrollbar-width: none;
+    }
+
+    .planner-mobile-tab {
+        flex: 1 0 auto;
+        min-height: 2.42rem;
+        padding: 0.32rem 0.7rem;
+        font-size: 0.84rem;
+        white-space: nowrap;
+    }
+
+    .planner-workspace-page[data-active-planner-tab="overview"] [data-planner-panel]:not([data-planner-panel="overview"]),
+    .planner-workspace-page[data-active-planner-tab="calendar"] [data-planner-panel]:not([data-planner-panel="calendar"]),
+    .planner-workspace-page[data-active-planner-tab="board"] [data-planner-panel]:not([data-planner-panel="board"]),
+    .planner-workspace-page[data-active-planner-tab="details"] [data-planner-panel]:not([data-planner-panel="details"]) {
+        display: none !important;
+    }
+
+    .planner-stat-grid.figma-stat-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.55rem;
+        margin-bottom: 0;
+    }
+
+    .planner-stat-grid .figma-stat-card {
+        min-height: 6.25rem;
+        padding: 0.78rem;
+    }
+
+    .planner-calendar-surface,
+    .planner-board-surface,
+    .planner-selected-surface {
+        padding: 0.82rem;
+    }
+
+    .planner-calendar-surface .planner-surface-header {
+        gap: 0.55rem;
+    }
+
+    .planner-calendar-surface .planner-surface-header p,
+    .planner-board-surface .planner-surface-header p {
+        font-size: 0.84rem;
+        line-height: 1.28;
+    }
+
+    .planner-calendar-surface .planner-surface-controls {
+        gap: 0.35rem;
+        overflow-x: auto;
+        padding-bottom: 0.18rem;
+        scrollbar-width: none;
+    }
+
+    .planner-calendar-surface .planner-surface-controls .badge,
+    .planner-calendar-surface .planner-surface-controls .btn {
+        min-height: 2.24rem;
+        padding: 0.34rem 0.58rem !important;
+        font-size: 0.8rem;
+    }
+
+    .planner-range-panel {
+        gap: 0.45rem;
+        margin-bottom: 0.7rem;
+    }
+
+    .planner-range-copy .small {
+        display: none;
+    }
+
+    .planner-calendar-surface .scheduled-calendar-grid.is-week {
+        display: grid;
+        grid-auto-columns: minmax(13rem, 78vw);
+        grid-auto-flow: column;
+        grid-template-columns: none;
+        gap: 0.55rem;
+        overflow-x: auto;
+        padding-bottom: 0.12rem;
+        scroll-snap-type: x proximity;
+        scrollbar-width: none;
+    }
+
+    .planner-calendar-surface .scheduled-calendar-column {
+        min-height: clamp(13rem, 48vh, 20rem);
+        max-height: clamp(13rem, 48vh, 20rem);
+        overflow-y: auto;
+        scroll-snap-align: start;
+    }
+
+    .planner-calendar-surface .scheduled-calendar-grid.is-month {
+        grid-template-columns: repeat(7, minmax(2.35rem, 1fr));
+        gap: 0.35rem;
+        overflow-x: visible;
+    }
+
+    .planner-calendar-surface .scheduled-calendar-weekdays {
+        grid-template-columns: repeat(7, minmax(2.35rem, 1fr));
+        gap: 0.35rem;
+    }
+
+    .planner-calendar-surface .scheduled-calendar-weekday {
+        padding: 0.4rem 0.2rem;
+        text-align: center;
+        font-size: 0.62rem;
+    }
+
+    .planner-calendar-surface .scheduled-calendar-cell {
+        min-height: 4.7rem;
+        padding: 0.4rem;
+    }
+
+    .planner-calendar-surface .scheduled-calendar-cell-head {
+        margin-bottom: 0.35rem;
+    }
+
+    .planner-calendar-surface .scheduled-calendar-cell .planner-calendar-card {
+        display: none;
+    }
+
+    .planner-calendar-surface .scheduled-calendar-day-number {
+        font-size: 1rem;
+    }
+
+    .planner-board-surface .scheduled-kanban-board {
+        gap: 0.55rem;
+    }
+
+    .planner-board-surface .scheduled-kanban-lane {
+        min-height: auto;
+        padding: 0.72rem;
+    }
+
+    .planner-board-mini-list {
+        gap: 0.35rem;
+    }
+
+    .planner-board-mini-card {
+        min-height: 2.45rem;
+        padding: 0.42rem 0.52rem;
+    }
+
+    .planner-board-modal-summary {
+        justify-content: space-between;
+    }
+
+    .planner-lane-modal-card,
+    .planner-lane-modal-summary {
         align-items: stretch;
         flex-direction: column;
     }

@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 {% block content %}
 {% set active_planner_view = planner_view | default("workspace", true) %}
-<div class="planner-workspace-page planner-view-{{ active_planner_view }}">
+{% set active_planner_mobile_tab = "board" if active_planner_view == "board" else ("calendar" if active_planner_view == "month" else "overview") %}
+<div class="planner-workspace-page planner-view-{{ active_planner_view }}" data-active-planner-tab="{{ active_planner_mobile_tab }}">
     <section class="figma-page-header">
         <div>
             <div class="section-kicker mb-2">Planner Workspace</div>
@@ -26,7 +27,14 @@
         </div>
     </section>
 
-    <section class="figma-stat-grid planner-stat-grid" aria-label="Planner summary">
+    <nav class="planner-mobile-tabbar" aria-label="Planner sections">
+        <button class="planner-mobile-tab active" type="button" data-planner-mobile-tab="overview">Overview</button>
+        <button class="planner-mobile-tab" type="button" data-planner-mobile-tab="calendar">Calendar</button>
+        <button class="planner-mobile-tab" type="button" data-planner-mobile-tab="board">Board</button>
+        <button class="planner-mobile-tab" type="button" data-planner-mobile-tab="details">Details</button>
+    </nav>
+
+    <section class="figma-stat-grid planner-stat-grid" aria-label="Planner summary" data-planner-panel="overview">
         <div class="figma-stat-card">
             <div class="figma-stat-accent"></div>
             <div class="figma-stat-label">Today</div>
@@ -54,7 +62,7 @@
     </section>
 
     <section class="planner-workspace-layout">
-        <div class="planner-calendar-surface">
+        <div class="planner-calendar-surface" data-planner-panel="calendar">
             <div class="planner-surface-header">
                 <div>
                     <h2 class="h4 mb-1">{% if active_planner_view == "month" %}Month Calendar{% else %}Calendar Week{% endif %}</h2>
@@ -101,12 +109,21 @@
             </div>
         </div>
 
-        <aside class="planner-board-surface" id="planner-board-panel">
+        <aside class="planner-board-surface" id="planner-board-panel" data-planner-panel="board">
             <div class="planner-surface-header">
                 <div>
-                    <h2 class="h5 mb-1">Board Snapshot</h2>
-                    <p class="text-secondary mb-0">Drag cards between editable lanes. Last three cards per lane, with display all for longer lanes.</p>
+                    <h2 class="h5 mb-1">{% if active_planner_view == "board" %}Full Board{% else %}Board Snapshot{% endif %}</h2>
+                    <p class="text-secondary mb-0">
+                        {% if active_planner_view == "board" %}
+                        Drag cards between editable lanes with all visible workspace.
+                        {% else %}
+                        Drag cards between editable lanes. Use a count to inspect everything in a lane, or open the full board for deeper work.
+                        {% endif %}
+                    </p>
                 </div>
+                {% if active_planner_view != "board" %}
+                <a class="btn btn-outline-secondary btn-sm" href="/scheduled-posts/board/page">Full board</a>
+                {% endif %}
             </div>
             <div class="scheduled-kanban-board" id="scheduled-kanban-board">
                 <div class="scheduled-kanban-lane" data-kanban-bucket="drafts">
@@ -115,7 +132,7 @@
                             <div class="fw-semibold">Drafts</div>
                             <div class="small text-secondary">Posts still taking shape.</div>
                         </div>
-                        <span class="badge text-bg-light border" id="kanban-count-drafts">0</span>
+                        <button class="badge text-bg-light border planner-board-count-button" type="button" id="kanban-count-drafts" data-kanban-modal="drafts">0</button>
                     </div>
                     <div class="scheduled-kanban-list planner-drop-zone" id="kanban-lane-drafts" data-drop-type="bucket" data-drop-bucket="drafts"></div>
                 </div>
@@ -125,7 +142,7 @@
                             <div class="fw-semibold">Scheduled</div>
                             <div class="small text-secondary">Ready and waiting for send time.</div>
                         </div>
-                        <span class="badge text-bg-light border" id="kanban-count-scheduled">0</span>
+                        <button class="badge text-bg-light border planner-board-count-button" type="button" id="kanban-count-scheduled" data-kanban-modal="scheduled">0</button>
                     </div>
                     <div class="scheduled-kanban-list planner-drop-zone" id="kanban-lane-scheduled" data-drop-type="bucket" data-drop-bucket="scheduled"></div>
                 </div>
@@ -135,7 +152,7 @@
                             <div class="fw-semibold">Queue Now</div>
                             <div class="small text-secondary">Nudge the next cycle.</div>
                         </div>
-                        <span class="badge text-bg-light border" id="kanban-count-running">0</span>
+                        <button class="badge text-bg-light border planner-board-count-button" type="button" id="kanban-count-running" data-kanban-modal="running">0</button>
                     </div>
                     <div class="scheduled-kanban-list planner-drop-zone" id="kanban-lane-running" data-drop-type="bucket" data-drop-bucket="running"></div>
                 </div>
@@ -145,7 +162,7 @@
                             <div class="fw-semibold">Needs Attention</div>
                             <div class="small text-secondary">Failures and cancelled work.</div>
                         </div>
-                        <span class="badge text-bg-light border" id="kanban-count-attention">0</span>
+                        <button class="badge text-bg-light border planner-board-count-button" type="button" id="kanban-count-attention" data-kanban-modal="attention">0</button>
                     </div>
                     <div class="scheduled-kanban-list" id="kanban-lane-attention"></div>
                 </div>
@@ -155,7 +172,7 @@
                             <div class="fw-semibold">Completed</div>
                             <div class="small text-secondary">Delivered successfully.</div>
                         </div>
-                        <span class="badge text-bg-light border" id="kanban-count-done">0</span>
+                        <button class="badge text-bg-light border planner-board-count-button" type="button" id="kanban-count-done" data-kanban-modal="done">0</button>
                     </div>
                     <div class="scheduled-kanban-list" id="kanban-lane-done"></div>
                 </div>
@@ -163,7 +180,7 @@
         </aside>
     </section>
 
-    <section class="planner-selected-surface">
+    <section class="planner-selected-surface" data-planner-panel="details">
         <div>
             <div class="section-kicker mb-2">Selected Post</div>
             <h2 class="h5 mb-1">Open any card for composer details</h2>
@@ -171,6 +188,31 @@
         </div>
         <a class="btn btn-outline-primary" href="/scheduled-posts/new/page">Open composer</a>
 </section>
+</div>
+
+<div class="modal fade" id="planner-lane-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <div class="section-kicker mb-2">Board Lane</div>
+                    <h2 class="h5 mb-0" id="planner-lane-modal-title">Lane details</h2>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="surface-panel-soft planner-lane-modal-summary">
+                    <div class="fw-semibold" id="planner-lane-modal-count">0 cards</div>
+                    <div class="small text-secondary">Use the full board when you need drag-and-drop space or a longer review.</div>
+                </div>
+                <div class="planner-lane-modal-list mt-3" id="planner-lane-modal-list"></div>
+            </div>
+            <div class="modal-footer">
+                <a class="btn btn-outline-secondary" href="/scheduled-posts/board/page">Open Full Board</a>
+                <button class="btn btn-primary" type="button" data-bs-dismiss="modal">Done</button>
+            </div>
+        </div>
+    </div>
 </div>
 
 <div class="modal fade" id="planner-move-modal" tabindex="-1" aria-hidden="true">
@@ -308,12 +350,30 @@ const kanbanCountIds = {
   attention: "kanban-count-attention",
   done: "kanban-count-done",
 };
+const kanbanLabels = {
+  drafts: "Drafts",
+  scheduled: "Scheduled",
+  running: "Queue Now",
+  attention: "Needs Attention",
+  done: "Completed",
+};
 const kanbanCollapsedLimit = 3;
+const kanbanSnapshotLimit = 2;
 const plannerState = {
   viewMode: plannerIsMonthPage ? "month" : "week",
   anchorDate: new Date(),
 };
 const kanbanExpandedBuckets = new Set();
+const plannerPage = document.querySelector(".planner-workspace-page");
+const plannerMobileTabs = Array.from(document.querySelectorAll("[data-planner-mobile-tab]"));
+const plannerLaneModalElement = document.getElementById("planner-lane-modal");
+if (plannerLaneModalElement && plannerLaneModalElement.parentElement !== document.body) {
+  document.body.appendChild(plannerLaneModalElement);
+}
+const plannerLaneModal = new bootstrap.Modal(plannerLaneModalElement);
+const plannerLaneModalTitle = document.getElementById("planner-lane-modal-title");
+const plannerLaneModalCount = document.getElementById("planner-lane-modal-count");
+const plannerLaneModalList = document.getElementById("planner-lane-modal-list");
 const plannerMoveModalElement = document.getElementById("planner-move-modal");
 if (plannerMoveModalElement && plannerMoveModalElement.parentElement !== document.body) {
   document.body.appendChild(plannerMoveModalElement);
@@ -631,6 +691,50 @@ function plannerBoardMiniCardMarkup(post) {
   `;
 }
 
+function plannerLaneModalCardMarkup(post) {
+  const deliveryNote = post.failureCount
+    ? `${post.failureCount} failed`
+    : post.successCount
+      ? `${post.successCount} delivered`
+      : `${post.targetCount} target${post.targetCount === 1 ? "" : "s"}`;
+  return `
+    <article class="planner-lane-modal-card">
+      <div class="planner-lane-modal-card-main">
+        <div class="d-flex gap-1 flex-wrap mb-2">
+          <span class="badge ${statusBadgeClass(post.displayStatus)}">${escapeHtml(statusLabel(post.displayStatus))}</span>
+          ${post.postType === "giveaway" ? '<span class="badge text-bg-warning-subtle border text-dark">Giveaway</span>' : ""}
+        </div>
+        <div class="planner-board-mini-title">${escapeHtml(summarizeBody(post.body))}</div>
+        <div class="planner-board-mini-meta">${escapeHtml(post.personaName)} • ${escapeHtml(formatDateTime(post.scheduledDate))} • ${escapeHtml(deliveryNote)}</div>
+      </div>
+      <a class="btn btn-sm btn-outline-primary" href="${post.href}">Open</a>
+    </article>
+  `;
+}
+
+function postsForBucket(bucket) {
+  return plannerPosts.filter((post) => statusBucket(post.displayStatus) === bucket);
+}
+
+function openPlannerLaneModal(bucket) {
+  const items = postsForBucket(bucket);
+  const label = kanbanLabels[bucket] || "Board Lane";
+  plannerLaneModalTitle.textContent = label;
+  plannerLaneModalCount.textContent = `${items.length} card${items.length === 1 ? "" : "s"}`;
+  plannerLaneModalList.innerHTML = items.length
+    ? items.map((post) => plannerLaneModalCardMarkup(post)).join("")
+    : '<div class="planner-board-lane-empty">Nothing to show here.</div>';
+  plannerLaneModal.show();
+}
+
+function setPlannerMobileTab(tab) {
+  if (!plannerPage) return;
+  plannerPage.dataset.activePlannerTab = tab;
+  plannerMobileTabs.forEach((button) => {
+    button.classList.toggle("active", button.dataset.plannerMobileTab === tab);
+  });
+}
+
 function setCalendarView(mode) {
   plannerState.viewMode = mode;
   syncCalendarViewButtons();
@@ -765,9 +869,11 @@ function renderKanbanBoard() {
   Object.entries(buckets).forEach(([bucket, items]) => {
     const lane = document.getElementById(kanbanLaneIds[bucket]);
     const count = document.getElementById(kanbanCountIds[bucket]);
-    const isExpanded = kanbanExpandedBuckets.has(bucket);
+    const isExpanded = plannerIsFullBoard && kanbanExpandedBuckets.has(bucket);
     const hasHiddenCards = items.length > kanbanCollapsedLimit;
-    const visibleItems = hasHiddenCards && !isExpanded ? items.slice(-kanbanCollapsedLimit) : items;
+    const visibleItems = plannerIsFullBoard
+      ? (hasHiddenCards && !isExpanded ? items.slice(-kanbanCollapsedLimit) : items)
+      : items.slice(-kanbanSnapshotLimit);
     const toggleLabel = isExpanded ? "Show last 3" : `Display all ${items.length}`;
     const toggleMarkup = hasHiddenCards
       ? `
@@ -784,7 +890,18 @@ function renderKanbanBoard() {
         </div>
       `
       : "";
+    const snapshotSummaryMarkup = items.length
+      ? `
+        <div class="scheduled-kanban-list-summary planner-board-modal-summary">
+          <span>Showing latest ${visibleItems.length} of ${items.length}</span>
+          <button class="btn btn-sm btn-outline-secondary scheduled-kanban-toggle" type="button" data-kanban-modal="${bucket}">
+            View lane
+          </button>
+        </div>
+      `
+      : "";
     count.textContent = String(items.length);
+    count.setAttribute("aria-label", `View ${items.length} ${kanbanLabels[bucket] || bucket} cards`);
     if (plannerIsFullBoard) {
       lane.innerHTML = items.length
         ? `${visibleItems.map((post) => plannerCardMarkup(post)).join("")}${toggleMarkup}`
@@ -800,7 +917,7 @@ function renderKanbanBoard() {
           ? `<div class="planner-board-mini-list">${visibleItems.map((post) => plannerBoardMiniCardMarkup(post)).join("")}</div>`
           : `<div class="planner-board-lane-empty">${escapeHtml(emptyText)}</div>`
       }
-      ${hasHiddenCards ? toggleMarkup : ""}
+      ${snapshotSummaryMarkup}
     `;
   });
   bindPlannerInteractions();
@@ -927,6 +1044,15 @@ function resetDragState() {
 }
 
 function bindPlannerInteractions() {
+  document.querySelectorAll("[data-kanban-modal]").forEach((button) => {
+    if (button.dataset.modalBound === "true") return;
+    button.dataset.modalBound = "true";
+    button.addEventListener("click", () => {
+      const bucket = button.dataset.kanbanModal;
+      if (bucket) openPlannerLaneModal(bucket);
+    });
+  });
+
   document.querySelectorAll("[data-kanban-toggle]").forEach((button) => {
     if (button.dataset.toggleBound === "true") return;
     button.dataset.toggleBound = "true";
@@ -1067,6 +1193,9 @@ plannerMoveModalElement.addEventListener("hidden.bs.modal", () => {
 calendarViewButtons.forEach((button) => {
   button.addEventListener("click", () => setCalendarView(button.dataset.calendarView));
 });
+plannerMobileTabs.forEach((button) => {
+  button.addEventListener("click", () => setPlannerMobileTab(button.dataset.plannerMobileTab));
+});
 calendarPrevButton.addEventListener("click", () => moveCalendar(-1));
 calendarNextButton.addEventListener("click", () => moveCalendar(1));
 calendarTodayButton.addEventListener("click", () => {
@@ -1074,6 +1203,7 @@ calendarTodayButton.addEventListener("click", () => {
   renderCalendar();
 });
 
+setPlannerMobileTab(plannerPage?.dataset.activePlannerTab || "overview");
 renderPlanner();
 </script>
 {% endblock %}
