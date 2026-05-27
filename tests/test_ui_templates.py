@@ -492,6 +492,10 @@ def test_scheduled_post_templates_render_attachment_previews():
     assert 'composer-tabbar' in create_html
     assert 'composer-mobile-tabbar' in create_html
     assert 'composer-mobile-actionbar' in create_html
+    assert 'scheduled-detail-page' in detail_html
+    assert 'scheduled-detail-workbench' in detail_html
+    assert 'scheduled-detail-mobile-actionbar' in detail_html
+    assert 'id="detail-delivery-pane"' in detail_html
     assert 'data-active-composer-tab="compose"' in create_html
     assert 'id="composer-tab-preview"' in create_html
     assert 'id="composer-tab-preview-button"' in create_html
@@ -1447,6 +1451,9 @@ def test_theme_runtime_uses_selected_colorway_tokens():
     assert ".dashboard-v2-actions .btn" in stylesheet
     assert ".dashboard-v2-giveaway-kpi-signals" in stylesheet
     assert ".composer-mobile-tabbar.composer-tabbar {\n        position: sticky;" in stylesheet
+    assert "Edit post plan refresh" in stylesheet
+    assert "scroll-padding-inline: 0.35rem;" in stylesheet
+    assert ".scheduled-detail-giveaway-details" in stylesheet
     assert "var(--lp-pride-border)" not in stylesheet
     assert "linear-gradient(100deg, #e6007a" not in stylesheet
 

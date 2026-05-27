@@ -1,392 +1,414 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="card hero-card section-card mb-4">
-    <div class="card-body">
-        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
-            <div>
-                <div class="section-kicker mb-2">Post Plan</div>
-                <h1 class="h3 mb-1">Edit post plan</h1>
-                <div class="small-muted code-ish">{{ post.id }}</div>
-            </div>
-            <div class="d-flex gap-2 flex-wrap">
-                <span class="badge soft-badge rounded-pill px-3 py-2">{{ post.display_status|replace('_', ' ')|title }}</span>
-                <span class="badge soft-badge rounded-pill px-3 py-2">{{ post.target_account_ids|length }} destinations</span>
-            </div>
+<div class="composer-workspace-page composer-v2-page scheduled-detail-page">
+    <section class="figma-page-header composer-v2-header scheduled-detail-header">
+        <div>
+            <div class="section-kicker mb-2">Post Plan</div>
+            <h1 class="h3 mb-1">Edit Post Plan</h1>
+            <p class="text-secondary mb-0">Tune copy, media, destinations, giveaway rules, and delivery state in one workspace.</p>
+            <div class="small-muted code-ish mt-2">{{ post.id }}</div>
         </div>
+        <div class="figma-page-actions">
+            <span class="badge soft-badge rounded-pill px-3 py-2">{{ post.display_status|replace('_', ' ')|title }}</span>
+            <span class="badge soft-badge rounded-pill px-3 py-2">{{ post.target_account_ids|length }} destinations</span>
+            <a class="btn btn-outline-secondary" href="/scheduled-posts/page">Cancel</a>
+            <button class="btn btn-primary" type="submit" form="scheduled-post-update-form">Save Post Plan</button>
+        </div>
+    </section>
+
+    {% if post.last_error %}
+    <div class="alert alert-danger scheduled-detail-alert">
+        <div class="fw-semibold">Last delivery hiccup</div>
+        <div class="mb-0">{{ post.last_error }}</div>
     </div>
-</div>
+    {% endif %}
 
-<div class="row g-4">
-    <div class="col-12 {% if not post.giveaway %}col-xl-8{% endif %}">
-        <div class="card section-card">
-            <div class="card-body">
-                {% if post.last_error %}
-                <div class="alert alert-danger">
-                    <div class="fw-semibold">Last delivery hiccup</div>
-                    <div class="mb-0">{{ post.last_error }}</div>
+    <form id="scheduled-post-update-form" class="composer-form-shell composer-v2-shell scheduled-detail-shell">
+        <section class="composer-workbench-surface composer-v3-workbench scheduled-detail-workbench">
+            <div class="scheduled-detail-tabs-wrap">
+                <ul class="nav nav-pills glass-tabs scheduled-detail-tabs" id="scheduled-detail-tabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="detail-basics-tab" data-bs-toggle="tab" data-bs-target="#detail-basics-pane" type="button" role="tab">Basics</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="detail-media-tab" data-bs-toggle="tab" data-bs-target="#detail-media-pane" type="button" role="tab">Media</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="detail-targets-tab" data-bs-toggle="tab" data-bs-target="#detail-targets-pane" type="button" role="tab">Targets</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="detail-giveaway-tab" data-bs-toggle="tab" data-bs-target="#detail-giveaway-pane" type="button" role="tab">Giveaway</button>
+                    </li>
+                    {% if post.giveaway %}
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="detail-giveaway-details-tab" data-bs-toggle="tab" data-bs-target="#detail-giveaway-details-pane" type="button" role="tab">Giveaway Details</button>
+                    </li>
+                    {% endif %}
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="detail-delivery-tab" data-bs-toggle="tab" data-bs-target="#detail-delivery-pane" type="button" role="tab">Delivery</button>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="tab-content tab-pane-stack scheduled-detail-tab-content">
+                <div class="tab-pane fade show active" id="detail-basics-pane" role="tabpanel" aria-labelledby="detail-basics-tab" tabindex="0">
+                    <div class="surface-panel scheduled-detail-section">
+                        <div class="composer-surface-header composer-v2-panel-header">
+                            <div>
+                                <h2 class="h5 mb-1">Basics</h2>
+                                <p class="text-secondary mb-0">Caption, status, schedule, and source details.</p>
+                            </div>
+                            <span class="badge soft-badge rounded-pill px-3 py-2">{{ post.display_status|replace('_', ' ')|title }}</span>
+                        </div>
+                        <div class="row g-3 mt-1">
+                            <div class="col-12 col-lg-4">
+                                <label class="form-label">Persona</label>
+                                <div class="lp-static-field">{{ persona.name }}</div>
+                            </div>
+                            <div class="col-12">
+                                <div class="d-flex justify-content-between align-items-center gap-3">
+                                    <label class="form-label mb-0">Body</label>
+                                    <span class="small text-secondary" id="body-length-indicator">{{ post.body|length }} chars</span>
+                                </div>
+                                <textarea class="form-control scheduled-detail-body" name="body" rows="6">{{ post.body }}</textarea>
+                            </div>
+                            <div class="col-md-6 col-xl-3">
+                                <label class="form-label">Post Type</label>
+                                <select class="form-select" name="post_type" id="post-type-select">
+                                    <option value="standard" {% if post.post_type == "standard" %}selected{% endif %}>Standard Post</option>
+                                    <option value="giveaway" {% if post.post_type == "giveaway" %}selected{% endif %}>Giveaway</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 col-xl-3">
+                                <label class="form-label">Status</label>
+                                <select class="form-select" name="status">
+                                    <option value="draft" {% if post.status == "draft" %}selected{% endif %}>Draft</option>
+                                    <option value="scheduled" {% if post.status == "scheduled" %}selected{% endif %}>Scheduled</option>
+                                    <option value="queued" {% if post.status == "queued" %}selected{% endif %}>Queued</option>
+                                    {% if post.status not in ["draft", "scheduled", "queued"] %}
+                                    <option value="{{ post.status }}" selected>{{ post.status|replace('_', ' ')|title }}</option>
+                                    {% endif %}
+                                </select>
+                            </div>
+                            <div class="col-md-6 col-xl-3">
+                                <label class="form-label d-flex align-items-center gap-2 flex-wrap">
+                                    <span>Scheduled For</span>
+                                    <span class="badge text-bg-light border rounded-pill">{{ timezone_indicator() }}</span>
+                                </label>
+                                <input class="form-control" name="scheduled_for" type="datetime-local" value="{{ post.scheduled_for|datetime_local_input if post.scheduled_for else '' }}">
+                            </div>
+                            <div class="col-md-6 col-xl-3">
+                                <label class="form-label">Visibility</label>
+                                <select class="form-select" name="visibility">
+                                    {% set visibility = post.metadata_json.get('visibility', '') %}
+                                    <option value="" {% if not visibility %}selected{% endif %}>Use persona default</option>
+                                    <option value="public" {% if visibility == "public" %}selected{% endif %}>Public</option>
+                                    <option value="unlisted" {% if visibility == "unlisted" %}selected{% endif %}>Unlisted</option>
+                                    <option value="private" {% if visibility == "private" %}selected{% endif %}>Private</option>
+                                    <option value="direct" {% if visibility == "direct" %}selected{% endif %}>Direct</option>
+                                </select>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label">Original Link</label>
+                                <input class="form-control" name="source_link" value="{{ post.metadata_json.get('link', '') }}">
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                {% endif %}
-                <form id="scheduled-post-update-form" class="tab-pane-stack">
-                    <ul class="nav nav-pills glass-tabs" id="scheduled-detail-tabs" role="tablist">
-                        <li class="nav-item" role="presentation">
-                            <button class="nav-link active" id="detail-basics-tab" data-bs-toggle="tab" data-bs-target="#detail-basics-pane" type="button" role="tab">Basics</button>
-                        </li>
-                        <li class="nav-item" role="presentation">
-                            <button class="nav-link" id="detail-giveaway-tab" data-bs-toggle="tab" data-bs-target="#detail-giveaway-pane" type="button" role="tab">Giveaway</button>
-                        </li>
-                        {% if post.giveaway %}
-                        <li class="nav-item" role="presentation">
-                            <button class="nav-link" id="detail-giveaway-details-tab" data-bs-toggle="tab" data-bs-target="#detail-giveaway-details-pane" type="button" role="tab">Giveaway Details</button>
-                        </li>
-                        {% endif %}
-                        <li class="nav-item" role="presentation">
-                            <button class="nav-link" id="detail-media-tab" data-bs-toggle="tab" data-bs-target="#detail-media-pane" type="button" role="tab">Media</button>
-                        </li>
-                        <li class="nav-item" role="presentation">
-                            <button class="nav-link" id="detail-targets-tab" data-bs-toggle="tab" data-bs-target="#detail-targets-pane" type="button" role="tab">Targets</button>
-                        </li>
-                    </ul>
 
-                    <div class="tab-content tab-pane-stack">
-                        <div class="tab-pane fade show active" id="detail-basics-pane" role="tabpanel" aria-labelledby="detail-basics-tab" tabindex="0">
-                            <div class="surface-panel">
-                                <div class="row g-3">
-                                    <div class="col-12">
-                                        <label class="form-label">Persona</label>
-                                        <div class="lp-static-field">{{ persona.name }}</div>
-                                    </div>
-                                    <div class="col-12">
-                                        <div class="d-flex justify-content-between align-items-center gap-3">
-                                            <label class="form-label mb-0">Body</label>
-                                            <span class="small text-secondary" id="body-length-indicator">{{ post.body|length }} chars</span>
-                                        </div>
-                                        <textarea class="form-control" name="body" rows="6">{{ post.body }}</textarea>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label">Post Type</label>
-                                        <select class="form-select" name="post_type" id="post-type-select">
-                                            <option value="standard" {% if post.post_type == "standard" %}selected{% endif %}>Standard Post</option>
-                                            <option value="giveaway" {% if post.post_type == "giveaway" %}selected{% endif %}>Giveaway</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label">Status</label>
-                                        <select class="form-select" name="status">
-                                            <option value="draft" {% if post.status == "draft" %}selected{% endif %}>Draft</option>
-                                            <option value="scheduled" {% if post.status == "scheduled" %}selected{% endif %}>Scheduled</option>
-                                            <option value="queued" {% if post.status == "queued" %}selected{% endif %}>Queued</option>
-                                            {% if post.status not in ["draft", "scheduled", "queued"] %}
-                                            <option value="{{ post.status }}" selected>{{ post.status|replace('_', ' ')|title }}</option>
-                                            {% endif %}
-                                        </select>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label d-flex align-items-center gap-2 flex-wrap">
-                                            <span>Scheduled For</span>
-                                            <span class="badge text-bg-light border rounded-pill">{{ timezone_indicator() }}</span>
-                                        </label>
-                                        <input class="form-control" name="scheduled_for" type="datetime-local" value="{{ post.scheduled_for|datetime_local_input if post.scheduled_for else '' }}">
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label">Original Link</label>
-                                        <input class="form-control" name="source_link" value="{{ post.metadata_json.get('link', '') }}">
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label">Visibility</label>
-                                        <select class="form-select" name="visibility">
-                                            {% set visibility = post.metadata_json.get('visibility', '') %}
-                                            <option value="" {% if not visibility %}selected{% endif %}>Use persona default</option>
-                                            <option value="public" {% if visibility == "public" %}selected{% endif %}>Public</option>
-                                            <option value="unlisted" {% if visibility == "unlisted" %}selected{% endif %}>Unlisted</option>
-                                            <option value="private" {% if visibility == "private" %}selected{% endif %}>Private</option>
-                                            <option value="direct" {% if visibility == "direct" %}selected{% endif %}>Direct</option>
-                                        </select>
-                                    </div>
+                <div class="tab-pane fade" id="detail-media-pane" role="tabpanel" aria-labelledby="detail-media-tab" tabindex="0">
+                    <div class="scheduled-detail-section-stack">
+                        <div class="surface-panel scheduled-detail-section">
+                            <div class="composer-surface-header composer-v2-panel-header">
+                                <div>
+                                    <h2 class="h5 mb-1">Saved Media</h2>
+                                    <p class="text-secondary mb-0">Move saved attachments into publish order, add alt text, or mark old media for removal.</p>
+                                </div>
+                                <span class="badge text-bg-light border" id="saved-media-count">{{ post.attachments|length }} saved</span>
+                            </div>
+                            <div id="saved-attachment-list" class="d-flex flex-column gap-3 mt-3"></div>
+                            <div id="saved-attachment-empty" class="small text-secondary {% if post.attachments %}d-none{% endif %}">No saved media yet.</div>
+                        </div>
+                        <div class="surface-panel scheduled-detail-section">
+                            <label class="form-label">Add Uploads</label>
+                            <input class="form-control" name="uploads" type="file" multiple>
+                            <div class="form-text" id="upload-summary">Choose more images or videos to add to this post plan.</div>
+                            <div id="upload-preview-list" class="row g-3 mt-1"></div>
+                        </div>
+                        <div class="surface-panel-soft scheduled-detail-section">
+                            <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+                                <div>
+                                    <div class="fw-semibold">Post Snapshot</div>
+                                    <div class="small text-secondary">Live counts for the current body, saved attachments, pending uploads, and selected destinations.</div>
+                                </div>
+                                <div class="d-flex gap-2 flex-wrap">
+                                    <span class="badge text-bg-light border" id="snapshot-body-length">{{ post.body|length }} chars</span>
+                                    <span class="badge text-bg-light border" id="snapshot-attachments">{{ post.attachments|length }} attachments</span>
+                                    <span class="badge text-bg-light border" id="snapshot-targets">{{ post.target_account_ids|length }} targets</span>
                                 </div>
                             </div>
                         </div>
+                    </div>
+                </div>
 
-                        <div class="tab-pane fade" id="detail-giveaway-pane" role="tabpanel" aria-labelledby="detail-giveaway-tab" tabindex="0">
-                            <div class="surface-panel {% if post.post_type != 'giveaway' %}d-none{% endif %}" id="giveaway-config-panel">
-                                <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
-                                    <div>
-                                        <div class="fw-semibold">Giveaway Builder</div>
-                                        <div class="small text-secondary">Edit Instagram and Bluesky qualifying rules, channel targets, and draw mode from one place.</div>
+                <div class="tab-pane fade" id="detail-targets-pane" role="tabpanel" aria-labelledby="detail-targets-tab" tabindex="0">
+                    <div class="surface-panel scheduled-detail-section">
+                        <div class="composer-surface-header composer-v2-panel-header">
+                            <div>
+                                <h2 class="h5 mb-1">Destination Accounts</h2>
+                                <p class="text-secondary mb-0">Set delivery targets, destination-specific text, and media overrides.</p>
+                            </div>
+                        </div>
+                        <div class="row g-2 mt-2" id="target-account-list">
+                            {% for account in accounts %}
+                            <div class="col-12" data-account-service="{{ account.service }}">
+                                {% set account_override = post.publish_overrides_json.get(account.id) or post.publish_overrides_json.get(account.service) %}
+                                {% set override_body = account_override.get('body', '') if account_override is mapping else (account_override if account_override is string else '') %}
+                                {% set override_attachment_ids = account_override.get('attachment_ids') if account_override is mapping and account_override.get('attachment_ids') is not none else none %}
+                                <div class="composer-destination-card scheduled-detail-target-card">
+                                    <div class="form-check">
+                                        <input class="form-check-input target-checkbox" type="checkbox" value="{{ account.id }}" id="target-{{ account.id }}" {% if account.id in post.target_account_ids %}checked{% endif %}>
+                                        <label class="form-check-label fw-semibold" for="target-{{ account.id }}">{{ account.label }}</label>
+                                        <span class="small-muted ms-2">{{ account.service }}</span>
                                     </div>
-                                    {% if post.giveaway %}
-                                    <span class="badge text-bg-light border">{{ post.giveaway.status|replace('_', ' ')|title }}</span>
-                                    {% endif %}
+                                    <div class="small text-secondary mt-2 post-guidance-summary"></div>
+                                    <div class="mt-2">
+                                        <label class="form-label small-muted mb-1">Optional override body</label>
+                                        <textarea class="form-control override-body" data-account-id="{{ account.id }}" rows="2">{{ override_body }}</textarea>
+                                    </div>
+                                    <div class="destination-media-override border rounded p-2 bg-body-tertiary mt-3">
+                                        <div class="form-check">
+                                            <input
+                                                class="form-check-input destination-media-custom"
+                                                type="checkbox"
+                                                id="target-media-custom-{{ account.id }}"
+                                                data-account-id="{{ account.id }}"
+                                                {% if override_attachment_ids is not none %}checked{% endif %}
+                                            >
+                                            <label class="form-check-label small fw-semibold" for="target-media-custom-{{ account.id }}">Use custom media for this destination</label>
+                                        </div>
+                                        <div class="destination-media-list mt-2">
+                                            {% for attachment in post.attachments %}
+                                            <label class="destination-media-item">
+                                                <input
+                                                    class="form-check-input override-attachment"
+                                                    type="checkbox"
+                                                    data-account-id="{{ account.id }}"
+                                                    data-attachment-id="{{ attachment.id }}"
+                                                    {% if override_attachment_ids is none or attachment.id in override_attachment_ids %}checked{% endif %}
+                                                >
+                                                <span>{{ loop.index }}. {{ attachment.alt_text or attachment.mime_type }}</span>
+                                            </label>
+                                            {% else %}
+                                            <div class="small text-secondary">Save media on this post before setting destination media.</div>
+                                            {% endfor %}
+                                        </div>
+                                        <div class="form-text">Leave custom media off to use the global media queue and ordering.</div>
+                                    </div>
+                                    <div class="post-guidance-panel border rounded p-2 bg-body-tertiary mt-3" data-account-id="{{ account.id }}">
+                                        <div class="fw-semibold small">Delivery Notes</div>
+                                        <div class="small mt-2 post-guidance-status"></div>
+                                    </div>
                                 </div>
-                                <div id="giveaway-builder-root"></div>
-                                <div class="small text-secondary mt-3" id="giveaway-target-hint">Giveaway destinations sync directly from the enabled channels.</div>
                             </div>
-                            {% if post.post_type != 'giveaway' %}
-                            <div class="surface-panel-soft">
-                                <div class="small text-secondary">Switch the post type to <strong>Giveaway</strong> to edit the giveaway rules here.</div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tab-pane fade" id="detail-giveaway-pane" role="tabpanel" aria-labelledby="detail-giveaway-tab" tabindex="0">
+                    <div class="surface-panel scheduled-detail-section {% if post.post_type != 'giveaway' %}d-none{% endif %}" id="giveaway-config-panel">
+                        <div class="composer-surface-header composer-v2-panel-header">
+                            <div>
+                                <h2 class="h5 mb-1">Giveaway Builder</h2>
+                                <p class="text-secondary mb-0">Edit Instagram and Bluesky qualifying rules, channel targets, and draw mode from one place.</p>
                             </div>
+                            {% if post.giveaway %}
+                            <span class="badge text-bg-light border">{{ post.giveaway.status|replace('_', ' ')|title }}</span>
                             {% endif %}
                         </div>
+                        <div id="giveaway-builder-root" class="mt-3"></div>
+                        <div class="small text-secondary mt-3" id="giveaway-target-hint">Giveaway destinations sync directly from the enabled channels.</div>
+                    </div>
+                    {% if post.post_type != 'giveaway' %}
+                    <div class="surface-panel-soft scheduled-detail-section">
+                        <div class="small text-secondary">Switch the post type to <strong>Giveaway</strong> to edit the giveaway rules here.</div>
+                    </div>
+                    {% endif %}
+                </div>
 
-                        {% if post.giveaway %}
-                        <div class="tab-pane fade" id="detail-giveaway-details-pane" role="tabpanel" aria-labelledby="detail-giveaway-details-tab" tabindex="0">
-                            {% include "_scheduled_giveaway_details.html" %}
-                        </div>
-                        {% endif %}
+                {% if post.giveaway %}
+                <div class="tab-pane fade" id="detail-giveaway-details-pane" role="tabpanel" aria-labelledby="detail-giveaway-details-tab" tabindex="0">
+                    <div class="scheduled-detail-giveaway-details">
+                        {% include "_scheduled_giveaway_details.html" %}
+                    </div>
+                </div>
+                {% endif %}
 
-                        <div class="tab-pane fade" id="detail-media-pane" role="tabpanel" aria-labelledby="detail-media-tab" tabindex="0">
-                            <div class="surface-panel">
-                                <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
+                <div class="tab-pane fade" id="detail-delivery-pane" role="tabpanel" aria-labelledby="detail-delivery-tab" tabindex="0">
+                    <div class="scheduled-detail-section-grid">
+                        <div class="surface-panel scheduled-detail-section">
+                            <h2 class="h5">Delivery Outcome</h2>
+                            {% if post.delivery_breakdown.succeeded %}
+                            <div class="mb-3">
+                                <div class="fw-semibold text-success">Succeeded</div>
+                                <div class="small mt-1">
+                                    {% for delivery in post.delivery_breakdown.succeeded %}
                                     <div>
-                                        <label class="form-label mb-1">Saved Media</label>
-                                        <div class="small text-secondary">Move saved attachments into the order they should publish, or mark old media for removal.</div>
-                                    </div>
-                                    <span class="badge text-bg-light border" id="saved-media-count">{{ post.attachments|length }} saved</span>
-                                </div>
-                                <div id="saved-attachment-list" class="d-flex flex-column gap-3"></div>
-                                <div id="saved-attachment-empty" class="small text-secondary {% if post.attachments %}d-none{% endif %}">No saved media yet.</div>
-                            </div>
-                            <div class="surface-panel">
-                                <label class="form-label">Add Uploads</label>
-                                <input class="form-control" name="uploads" type="file" multiple>
-                                <div class="form-text" id="upload-summary">Choose more images or videos to add to this post plan.</div>
-                                <div id="upload-preview-list" class="row g-3 mt-1"></div>
-                            </div>
-                            <div class="surface-panel-soft">
-                                <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
-                                    <div>
-                                        <div class="fw-semibold">Post Snapshot</div>
-                                        <div class="small text-secondary">Live counts for the current body, saved attachments, pending uploads, and selected destinations.</div>
-                                    </div>
-                                    <div class="d-flex gap-2 flex-wrap">
-                                        <span class="badge text-bg-light border" id="snapshot-body-length">{{ post.body|length }} chars</span>
-                                        <span class="badge text-bg-light border" id="snapshot-attachments">{{ post.attachments|length }} attachments</span>
-                                        <span class="badge text-bg-light border" id="snapshot-targets">{{ post.target_account_ids|length }} targets</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="tab-pane fade" id="detail-targets-pane" role="tabpanel" aria-labelledby="detail-targets-tab" tabindex="0">
-                            <div class="surface-panel">
-                                <label class="form-label">Destination Accounts</label>
-                                <div class="row g-2" id="target-account-list">
-                                    {% for account in accounts %}
-                                    <div class="col-12" data-account-service="{{ account.service }}">
-                                        {% set account_override = post.publish_overrides_json.get(account.id) or post.publish_overrides_json.get(account.service) %}
-                                        {% set override_body = account_override.get('body', '') if account_override is mapping else (account_override if account_override is string else '') %}
-                                        {% set override_attachment_ids = account_override.get('attachment_ids') if account_override is mapping and account_override.get('attachment_ids') is not none else none %}
-                                        <div class="border rounded p-3 bg-white">
-                                            <div class="form-check">
-                                                <input class="form-check-input target-checkbox" type="checkbox" value="{{ account.id }}" id="target-{{ account.id }}" {% if account.id in post.target_account_ids %}checked{% endif %}>
-                                                <label class="form-check-label fw-semibold" for="target-{{ account.id }}">{{ account.label }}</label>
-                                                <span class="small-muted ms-2">{{ account.service }}</span>
-                                            </div>
-                                            <div class="small text-secondary mt-2 post-guidance-summary"></div>
-                                            <div class="mt-2">
-                                                <label class="form-label small-muted mb-1">Optional override body</label>
-                                                <textarea class="form-control override-body" data-account-id="{{ account.id }}" rows="2">{{ override_body }}</textarea>
-                                            </div>
-                                            <div class="destination-media-override border rounded p-2 bg-body-tertiary mt-3">
-                                                <div class="form-check">
-                                                    <input
-                                                        class="form-check-input destination-media-custom"
-                                                        type="checkbox"
-                                                        id="target-media-custom-{{ account.id }}"
-                                                        data-account-id="{{ account.id }}"
-                                                        {% if override_attachment_ids is not none %}checked{% endif %}
-                                                    >
-                                                    <label class="form-check-label small fw-semibold" for="target-media-custom-{{ account.id }}">Use custom media for this destination</label>
-                                                </div>
-                                                <div class="destination-media-list mt-2">
-                                                    {% for attachment in post.attachments %}
-                                                    <label class="destination-media-item">
-                                                        <input
-                                                            class="form-check-input override-attachment"
-                                                            type="checkbox"
-                                                            data-account-id="{{ account.id }}"
-                                                            data-attachment-id="{{ attachment.id }}"
-                                                            {% if override_attachment_ids is none or attachment.id in override_attachment_ids %}checked{% endif %}
-                                                        >
-                                                        <span>{{ loop.index }}. {{ attachment.alt_text or attachment.mime_type }}</span>
-                                                    </label>
-                                                    {% else %}
-                                                    <div class="small text-secondary">Save media on this post before setting destination media.</div>
-                                                    {% endfor %}
-                                                </div>
-                                                <div class="form-text">Leave custom media off to use the global media queue and ordering.</div>
-                                            </div>
-                                            <div class="post-guidance-panel border rounded p-2 bg-body-tertiary mt-3" data-account-id="{{ account.id }}">
-                                                <div class="fw-semibold small">Delivery Notes</div>
-                                                <div class="small mt-2 post-guidance-status"></div>
-                                            </div>
-                                        </div>
+                                        {{ delivery.label }}
+                                        {% if delivery.external_url %}
+                                        <a href="{{ delivery.external_url }}" target="_blank" rel="noreferrer">Open</a>
+                                        {% endif %}
                                     </div>
                                     {% endfor %}
                                 </div>
                             </div>
-                        </div>
-                    </div>
-
-                    <div class="d-flex gap-2 flex-wrap">
-                        <button class="btn btn-primary" type="submit">Save Post Plan</button>
-                        {% if post.can_delete|default(false, true) %}
-                        <button class="btn btn-outline-danger" type="button" id="delete-post-button">Delete Post</button>
-                        {% endif %}
-                        {% if post.giveaway %}
-                        <button class="btn btn-outline-secondary" type="button" id="recalculate-giveaway-button">Recalculate Entries</button>
-                        {% endif %}
-                        {% if post.giveaway and post.giveaway.status in ["winner_selected", "winner_confirmed", "review_required", "failed"] %}
-                        <button class="btn btn-outline-warning" type="button" id="rerun-giveaway-button">Rerun Raffle</button>
-                        <button class="btn btn-outline-primary" type="button" id="reopen-giveaway-toggle-button">Reopen Giveaway</button>
-                        {% endif %}
-                        {% if post.giveaway and post.giveaway.status in ["scheduled", "collecting"] %}
-                        <button class="btn btn-outline-warning" type="button" id="end-giveaway-button">End Giveaway</button>
-                        {% endif %}
-                        <button class="btn btn-outline-primary" type="button" id="send-now-button">Publish Now</button>
-                        <a class="btn btn-outline-secondary" href="/sandbox/page?post_id={{ post.id }}">Open In Preview Studio</a>
-                    </div>
-                    {% if post.giveaway and post.giveaway.status in ["winner_selected", "winner_confirmed", "review_required", "failed"] %}
-                    <div class="surface-panel-soft mt-3 d-none" id="reopen-giveaway-panel">
-                        <div class="row g-3 align-items-end">
-                            <div class="col-12 col-md-6">
-                                <label class="form-label d-flex align-items-center gap-2 flex-wrap" for="reopen-giveaway-end-at">
-                                    <span>New Giveaway End</span>
-                                    <span class="badge text-bg-light border rounded-pill">{{ timezone_indicator() }}</span>
-                                </label>
-                                <input class="form-control" id="reopen-giveaway-end-at" type="datetime-local" value="{{ post.giveaway.giveaway_end_at|datetime_local_input if post.giveaway.giveaway_end_at else '' }}">
+                            {% endif %}
+                            {% if post.delivery_breakdown.failed %}
+                            <div class="mb-3">
+                                <div class="fw-semibold text-danger">Failed</div>
+                                <div class="small mt-1">
+                                    {% for delivery in post.delivery_breakdown.failed %}
+                                    <div>{{ delivery.label }}{% if delivery.last_error %}: {{ delivery.last_error }}{% endif %}</div>
+                                    {% endfor %}
+                                </div>
                             </div>
-                            <div class="col-12 col-md-auto d-flex gap-2 flex-wrap">
-                                <button class="btn btn-primary" type="button" id="reopen-giveaway-submit-button">Reopen Giveaway</button>
-                                <button class="btn btn-outline-secondary" type="button" id="reopen-giveaway-cancel-button">Cancel</button>
+                            {% endif %}
+                            {% if post.delivery_breakdown.cancelled %}
+                            <div class="mb-3">
+                                <div class="fw-semibold text-secondary">Not Sent</div>
+                                <div class="small mt-1">
+                                    {% for delivery in post.delivery_breakdown.cancelled %}
+                                    <div>{{ delivery.label }}{% if delivery.last_error %}: {{ delivery.last_error }}{% endif %}</div>
+                                    {% endfor %}
+                                </div>
                             </div>
-                        </div>
-                    </div>
-                    {% endif %}
-                </form>
-            </div>
-        </div>
-    </div>
-    <div class="col-12 {% if not post.giveaway %}col-xl-4{% endif %}">
-        <div class="card section-card mb-4">
-            <div class="card-body">
-                <h2 class="h5">Delivery Outcome</h2>
-                {% if post.delivery_breakdown.succeeded %}
-                <div class="mb-3">
-                    <div class="fw-semibold text-success">Succeeded</div>
-                    <div class="small mt-1">
-                        {% for delivery in post.delivery_breakdown.succeeded %}
-                        <div>
-                            {{ delivery.label }}
-                            {% if delivery.external_url %}
-                            <a href="{{ delivery.external_url }}" target="_blank" rel="noreferrer">Open</a>
+                            {% endif %}
+                            {% if post.delivery_breakdown.pending %}
+                            <div>
+                                <div class="fw-semibold text-secondary">Pending</div>
+                                <div class="small mt-1">
+                                    {% for delivery in post.delivery_breakdown.pending %}
+                                    <div>{{ delivery.label }}: {{ delivery.status }}</div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% endif %}
+                            {% if not post.deliveries %}
+                            <div class="text-secondary">No delivery jobs yet.</div>
                             {% endif %}
                         </div>
-                        {% endfor %}
-                    </div>
-                </div>
-                {% endif %}
-                {% if post.delivery_breakdown.failed %}
-                <div class="mb-3">
-                    <div class="fw-semibold text-danger">Failed</div>
-                    <div class="small mt-1">
-                        {% for delivery in post.delivery_breakdown.failed %}
-                        <div>{{ delivery.label }}{% if delivery.last_error %}: {{ delivery.last_error }}{% endif %}</div>
-                        {% endfor %}
-                    </div>
-                </div>
-                {% endif %}
-                {% if post.delivery_breakdown.cancelled %}
-                <div class="mb-3">
-                    <div class="fw-semibold text-secondary">Not Sent</div>
-                    <div class="small mt-1">
-                        {% for delivery in post.delivery_breakdown.cancelled %}
-                        <div>{{ delivery.label }}{% if delivery.last_error %}: {{ delivery.last_error }}{% endif %}</div>
-                        {% endfor %}
-                    </div>
-                </div>
-                {% endif %}
-                {% if post.delivery_breakdown.pending %}
-                <div>
-                    <div class="fw-semibold text-secondary">Pending</div>
-                    <div class="small mt-1">
-                        {% for delivery in post.delivery_breakdown.pending %}
-                        <div>{{ delivery.label }}: {{ delivery.status }}</div>
-                        {% endfor %}
-                    </div>
-                </div>
-                {% endif %}
-                {% if not post.deliveries %}
-                <div class="text-secondary">No delivery jobs yet.</div>
-                {% endif %}
-            </div>
-        </div>
-        <div class="card section-card mb-4">
-            <div class="card-body">
-                <h2 class="h5">Delivery State</h2>
-                <div class="table-responsive">
-                    <table class="table align-middle mb-0">
-                        <thead>
-                            <tr><th>Account</th><th>Status</th></tr>
-                        </thead>
-                        <tbody>
-                            {% for delivery in post.deliveries.values() %}
-                            <tr>
-                                <td>{{ delivery.label }}</td>
-                                <td>
-                                    <div>{{ delivery.status }}</div>
-                                    {% if delivery.last_error %}
-                                    <div class="small text-danger mt-1">{{ delivery.last_error }}</div>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            {% else %}
-                            <tr><td colspan="2" class="text-secondary">No delivery jobs yet.</td></tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-        <div class="card section-card">
-            <div class="card-body">
-                <h2 class="h5">Attachments</h2>
-                <div class="list-group list-group-flush">
-                    {% for attachment in post.attachments %}
-                    <div class="list-group-item px-0">
-                        <div class="row g-3 align-items-center">
-                            <div class="col-md-5">
-                                {% if attachment.mime_type.startswith('image/') %}
-                                <a href="/media/attachments/{{ attachment.id }}" target="_blank" rel="noreferrer">
-                                    <img
-                                        src="/media/attachments/{{ attachment.id }}"
-                                        alt="{{ attachment.alt_text or 'Attachment preview' }}"
-                                        class="img-fluid rounded border"
-                                        style="max-height: 220px;"
-                                    >
-                                </a>
-                                {% else %}
-                                <div class="border rounded bg-light px-3 py-4 text-secondary text-center">
-                                    {{ attachment.mime_type }}
-                                </div>
-                                {% endif %}
+
+                        <div class="surface-panel scheduled-detail-section">
+                            <h2 class="h5">Delivery State</h2>
+                            <div class="table-responsive">
+                                <table class="table align-middle mb-0">
+                                    <thead>
+                                        <tr><th>Account</th><th>Status</th></tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for delivery in post.deliveries.values() %}
+                                        <tr>
+                                            <td>{{ delivery.label }}</td>
+                                            <td>
+                                                <div>{{ delivery.status }}</div>
+                                                {% if delivery.last_error %}
+                                                <div class="small text-danger mt-1">{{ delivery.last_error }}</div>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                        {% else %}
+                                        <tr><td colspan="2" class="text-secondary">No delivery jobs yet.</td></tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
                             </div>
-                            <div class="col-md-7">
-                                <div class="fw-semibold">{{ attachment.mime_type }}</div>
-                                {% if attachment.alt_text %}
-                                <div class="small text-secondary mb-1">Alt text: {{ attachment.alt_text }}</div>
-                                {% endif %}
-                                <div class="small text-secondary">Size: {{ attachment.size_bytes }} bytes</div>
-                                <div class="small-muted code-ish mt-2">{{ attachment.storage_path }}</div>
+                        </div>
+
+                        <div class="surface-panel scheduled-detail-section scheduled-detail-attachments-panel">
+                            <h2 class="h5">Attachments</h2>
+                            <div class="list-group list-group-flush">
+                                {% for attachment in post.attachments %}
+                                <div class="list-group-item px-0">
+                                    <div class="row g-3 align-items-center">
+                                        <div class="col-md-5">
+                                            {% if attachment.mime_type.startswith('image/') %}
+                                            <a href="/media/attachments/{{ attachment.id }}" target="_blank" rel="noreferrer">
+                                                <img
+                                                    src="/media/attachments/{{ attachment.id }}"
+                                                    alt="{{ attachment.alt_text or 'Attachment preview' }}"
+                                                    class="img-fluid rounded border"
+                                                    style="max-height: 220px;"
+                                                >
+                                            </a>
+                                            {% else %}
+                                            <div class="border rounded bg-light px-3 py-4 text-secondary text-center">
+                                                {{ attachment.mime_type }}
+                                            </div>
+                                            {% endif %}
+                                        </div>
+                                        <div class="col-md-7">
+                                            <div class="fw-semibold">{{ attachment.mime_type }}</div>
+                                            {% if attachment.alt_text %}
+                                            <div class="small text-secondary mb-1">Alt text: {{ attachment.alt_text }}</div>
+                                            {% endif %}
+                                            <div class="small text-secondary">Size: {{ attachment.size_bytes }} bytes</div>
+                                            <div class="small-muted code-ish mt-2">{{ attachment.storage_path }}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% else %}
+                                <div class="list-group-item px-0 text-secondary">No attachments.</div>
+                                {% endfor %}
                             </div>
                         </div>
                     </div>
-                    {% else %}
-                    <div class="list-group-item px-0 text-secondary">No attachments.</div>
-                    {% endfor %}
                 </div>
             </div>
+
+            <div class="scheduled-detail-actions d-flex gap-2 flex-wrap">
+                <button class="btn btn-primary" type="submit">Save Post Plan</button>
+                {% if post.can_delete|default(false, true) %}
+                <button class="btn btn-outline-danger" type="button" id="delete-post-button">Delete Post</button>
+                {% endif %}
+                {% if post.giveaway %}
+                <button class="btn btn-outline-secondary" type="button" id="recalculate-giveaway-button">Recalculate Entries</button>
+                {% endif %}
+                {% if post.giveaway and post.giveaway.status in ["winner_selected", "winner_confirmed", "review_required", "failed"] %}
+                <button class="btn btn-outline-warning" type="button" id="rerun-giveaway-button">Rerun Raffle</button>
+                <button class="btn btn-outline-primary" type="button" id="reopen-giveaway-toggle-button">Reopen Giveaway</button>
+                {% endif %}
+                {% if post.giveaway and post.giveaway.status in ["scheduled", "collecting"] %}
+                <button class="btn btn-outline-warning" type="button" id="end-giveaway-button">End Giveaway</button>
+                {% endif %}
+                <button class="btn btn-outline-primary" type="button" id="send-now-button">Publish Now</button>
+                <a class="btn btn-outline-secondary" href="/sandbox/page?post_id={{ post.id }}">Open In Preview Studio</a>
+            </div>
+
+            {% if post.giveaway and post.giveaway.status in ["winner_selected", "winner_confirmed", "review_required", "failed"] %}
+            <div class="surface-panel-soft scheduled-detail-section d-none" id="reopen-giveaway-panel">
+                <div class="row g-3 align-items-end">
+                    <div class="col-12 col-md-6">
+                        <label class="form-label d-flex align-items-center gap-2 flex-wrap" for="reopen-giveaway-end-at">
+                            <span>New Giveaway End</span>
+                            <span class="badge text-bg-light border rounded-pill">{{ timezone_indicator() }}</span>
+                        </label>
+                        <input class="form-control" id="reopen-giveaway-end-at" type="datetime-local" value="{{ post.giveaway.giveaway_end_at|datetime_local_input if post.giveaway.giveaway_end_at else '' }}">
+                    </div>
+                    <div class="col-12 col-md-auto d-flex gap-2 flex-wrap">
+                        <button class="btn btn-primary" type="button" id="reopen-giveaway-submit-button">Reopen Giveaway</button>
+                        <button class="btn btn-outline-secondary" type="button" id="reopen-giveaway-cancel-button">Cancel</button>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </section>
+
+        <div class="composer-mobile-actionbar scheduled-detail-mobile-actionbar">
+            <a class="btn btn-outline-secondary" href="/scheduled-posts/page">Cancel</a>
+            <button class="btn btn-primary" type="submit">Save Plan</button>
         </div>
-    </div>
+    </form>
 </div>
 {% endblock %}
 

@@ -5658,3 +5658,183 @@ body[data-ui-mode="dark"] .mobile-bottom-nav-create {
         font-size: 0.98rem;
     }
 }
+
+/* Edit post plan refresh: align detail views with the composer shell. */
+.glass-tabs {
+    box-sizing: border-box;
+    overflow-x: auto;
+    overflow-y: visible;
+    padding: 0.35rem;
+    scroll-padding-inline: 0.35rem;
+}
+
+.glass-tabs .nav-item {
+    flex: 0 0 auto;
+}
+
+.glass-tabs .nav-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.65rem;
+    border-radius: var(--lp-control-radius) !important;
+}
+
+.scheduled-detail-page {
+    --composer-panel-height: calc(100vh - 12.5rem);
+}
+
+.scheduled-detail-alert {
+    margin: 0;
+    border-radius: var(--lp-container-radius);
+}
+
+.scheduled-detail-workbench {
+    gap: 0.9rem;
+    min-height: var(--composer-panel-height);
+    padding: clamp(0.85rem, 1.4vw, 1.2rem);
+}
+
+.scheduled-detail-tabs-wrap {
+    min-width: 0;
+    overflow: visible;
+}
+
+.scheduled-detail-tabs {
+    align-items: center;
+    flex-wrap: nowrap;
+    margin-bottom: 0.15rem;
+}
+
+.scheduled-detail-tab-content {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+}
+
+.scheduled-detail-tab-content > .tab-pane {
+    min-width: 0;
+}
+
+@media (min-width: 1280px) {
+    .scheduled-detail-tab-content > .tab-pane.active {
+        max-height: calc(var(--composer-panel-height) - 5.9rem);
+        overflow-y: auto;
+        padding-right: 0.2rem;
+    }
+}
+
+.scheduled-detail-section,
+.scheduled-detail-target-card,
+.scheduled-detail-attachments-panel .list-group-item {
+    border-radius: var(--lp-container-radius);
+}
+
+.scheduled-detail-section-stack,
+.scheduled-detail-giveaway-details,
+.scheduled-detail-section-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+}
+
+.scheduled-detail-giveaway-details > * + * {
+    margin-top: 0 !important;
+}
+
+.scheduled-detail-giveaway-details .surface-panel,
+.scheduled-detail-giveaway-details .surface-panel-soft {
+    padding: clamp(0.9rem, 1.3vw, 1.15rem);
+}
+
+.scheduled-detail-giveaway-details .row {
+    row-gap: 0.9rem;
+}
+
+.scheduled-detail-section-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.scheduled-detail-attachments-panel {
+    grid-column: 1 / -1;
+}
+
+.scheduled-detail-actions {
+    align-items: center;
+    padding-top: 0.9rem;
+    border-top: 1px solid var(--lp-border-soft);
+}
+
+.scheduled-detail-body {
+    min-height: clamp(10rem, 24vh, 16rem);
+    resize: vertical;
+}
+
+body[data-ui-mode="dark"] .scheduled-detail-alert {
+    background: rgba(86, 30, 40, 0.4);
+    border-color: rgba(244, 120, 134, 0.28);
+    color: #ffdce1;
+}
+
+@media (max-width: 991.98px) {
+    .scheduled-detail-section-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 767.98px) {
+    .scheduled-detail-page {
+        padding-bottom: 8.75rem;
+    }
+
+    .scheduled-detail-workbench {
+        min-height: 0;
+        padding: 0.72rem;
+    }
+
+    .scheduled-detail-tabs-wrap {
+        position: sticky;
+        top: 0.45rem;
+        z-index: 20;
+        margin: -0.15rem -0.15rem 0.25rem;
+        overflow: visible;
+    }
+
+    .scheduled-detail-tabs {
+        gap: 0.42rem;
+        flex-wrap: nowrap;
+        padding: 0.32rem;
+        scrollbar-width: none;
+    }
+
+    .scheduled-detail-tabs::-webkit-scrollbar {
+        display: none;
+    }
+
+    .scheduled-detail-tabs .nav-link {
+        min-height: 2.45rem;
+        padding: 0.28rem 0.72rem;
+        font-size: 0.84rem;
+    }
+
+    .scheduled-detail-tab-content > .tab-pane.active {
+        max-height: none;
+        overflow: visible;
+        padding-right: 0;
+    }
+
+    .scheduled-detail-section,
+    .scheduled-detail-giveaway-details .surface-panel,
+    .scheduled-detail-giveaway-details .surface-panel-soft {
+        padding: 0.78rem;
+    }
+
+    .scheduled-detail-actions {
+        display: none !important;
+    }
+
+    .scheduled-detail-body {
+        min-height: clamp(9rem, 34vh, 14rem);
+    }
+}
