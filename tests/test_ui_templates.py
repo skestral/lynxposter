@@ -1271,6 +1271,9 @@ def test_dashboard_v2_template_renders_mobile_friendly_tab_shell():
     assert "Likes" in html
     assert "dashboard-v2-giveaway-kpi-card" in html
     assert "dashboard-v2-giveaway-tally-panel" not in html
+    assert "dashboard-v2-automation-panel" in html
+    assert "dashboard-v2-delivery-panel" in html
+    assert "dashboard-v2-open-giveaway-panel" in html
     assert "dashboard-v2-manual-run-button" in html
     assert "registerLiveUpdates" in html
 
@@ -1424,6 +1427,11 @@ def test_theme_runtime_uses_selected_colorway_tokens():
     assert ".theme-option input:checked + .theme-option-card" in stylesheet
     assert ".composer-mobile-tabbar.composer-tabbar {\n    display: none;" in stylesheet
     assert "@media (max-width: 767.98px)" in stylesheet
+    assert "Dashboard mobile app pass" in stylesheet
+    assert ".app-page:has(.dashboard-v2-shell)" in stylesheet
+    assert "scroll-snap-type: x proximity" in stylesheet
+    assert ".dashboard-v2-actions .btn" in stylesheet
+    assert ".dashboard-v2-giveaway-kpi-signals" in stylesheet
     assert ".composer-mobile-tabbar.composer-tabbar {\n        position: sticky;" in stylesheet
     assert "var(--lp-pride-border)" not in stylesheet
     assert "linear-gradient(100deg, #e6007a" not in stylesheet
