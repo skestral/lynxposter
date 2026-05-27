@@ -53,11 +53,24 @@ def _local_date(value: datetime | None, timezone_name: str | None) -> Any:
 
 def _scheduled_for(post: Any) -> datetime | None:
     value = _read(post, "scheduled_for")
-    return value if isinstance(value, datetime) else None
+    if not isinstance(value, datetime):
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
 def _post_status(post: Any) -> str:
     return str(_read(post, "display_status", None) or _read(post, "status", "draft") or "draft")
+
+
+def _raw_post_status(post: Any) -> str:
+    return str(_read(post, "status", "draft") or "draft")
+
+
+def _is_upcoming_scheduled_post(post: Any, now: datetime) -> bool:
+    scheduled_for = _scheduled_for(post)
+    return scheduled_for is not None and _raw_post_status(post) == "scheduled" and _post_status(post) == "scheduled" and scheduled_for >= now
 
 
 def _post_preview(post: Any, *, limit: int = 86) -> str:
@@ -112,13 +125,14 @@ def build_dashboard_v2_view_model(
 ) -> dict[str, Any]:
     now = datetime.now(timezone.utc)
     today = now.astimezone(_tzinfo(timezone_name)).date()
+    upcoming_scheduled_posts = [post for post in posts if _is_upcoming_scheduled_post(post, now)]
     scheduled_today = [
         post
-        for post in posts
-        if _scheduled_for(post) is not None and _local_date(_scheduled_for(post), timezone_name) == today
+        for post in upcoming_scheduled_posts
+        if _local_date(_scheduled_for(post), timezone_name) == today
     ]
     upcoming_posts = sorted(
-        [post for post in posts if _scheduled_for(post) is not None],
+        upcoming_scheduled_posts,
         key=lambda post: _scheduled_for(post) or datetime.max.replace(tzinfo=timezone.utc),
     )[:5]
     recent_posts = posts[:5]
@@ -174,7 +188,7 @@ def build_dashboard_v2_view_model(
 
     overview_metrics = [
         _metric("Autorun", automation_label, "Next pass queued" if automation_enabled else "Automation is paused", automation_tone, "/settings/page"),
-        _metric("Scheduled", str(len(posts)), f"{len(scheduled_today)} due today", "blue", "/scheduled-posts/page"),
+        _metric("Scheduled", str(len(upcoming_scheduled_posts)), f"{len(scheduled_today)} due today", "blue", "/scheduled-posts/page"),
         _metric("Giveaways", str(giveaway_metrics.get("campaigns", 0)), f"{giveaway_metrics.get('entrants', 0)} tracked entrants", "pink", "/scheduled-posts/page"),
         _metric("Alerts", str(len(alert_events)), "Needs review" if alert_events else "All clear", "red" if alert_events else "green", "/logs/page"),
         _metric("Delivery", f"{delivery_success_pct}%" if delivery_total else "No data", f"{delivery_total} recent delivery states", "green" if delivery_success_pct >= 90 or not delivery_total else "amber", "/logs/page"),

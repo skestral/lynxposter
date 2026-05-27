@@ -231,6 +231,11 @@ def _list_open_campaigns(
     )
 
 
+def _campaign_has_launched_post(campaign: GiveawayCampaign) -> bool:
+    post_status = str(getattr(campaign.post, "status", "") or "").strip()
+    return post_status != "draft"
+
+
 def _percent(value: int, total: int) -> int:
     if total <= 0:
         return 0
@@ -306,9 +311,14 @@ def build_dashboard_giveaway_metric_tally(
         access_user_id=access_user_id,
         persona_id=persona_id,
     )
-    active_campaigns = [campaign for campaign in all_campaigns if campaign.status in OPEN_GIVEAWAY_STATUSES]
+    launched_campaigns = [campaign for campaign in all_campaigns if _campaign_has_launched_post(campaign)]
+    active_campaigns = [
+        campaign
+        for campaign in launched_campaigns
+        if campaign.status in OPEN_GIVEAWAY_STATUSES
+    ]
     active = _summarize_giveaway_campaigns(active_campaigns)
-    all_time = _summarize_giveaway_campaigns(all_campaigns)
+    all_time = _summarize_giveaway_campaigns(launched_campaigns)
 
     signal_rows = []
     for key, label in SIGNAL_METRIC_DEFINITIONS:
@@ -368,12 +378,16 @@ def build_dashboard_giveaway_activity_monitor(
         "service": str((filters or {}).get("service") or "").strip() or None,
         "event_type": str((filters or {}).get("event_type") or "").strip() or None,
     }
-    campaigns = _list_open_campaigns(
-        session,
-        owner_user_id=owner_user_id,
-        access_user_id=access_user_id,
-        persona_id=selected_filters["persona_id"],
-    )
+    campaigns = [
+        campaign
+        for campaign in _list_open_campaigns(
+            session,
+            owner_user_id=owner_user_id,
+            access_user_id=access_user_id,
+            persona_id=selected_filters["persona_id"],
+        )
+        if _campaign_has_launched_post(campaign)
+    ]
 
     available_services: set[str] = set()
     available_event_types: set[str] = set()

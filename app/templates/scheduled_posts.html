@@ -38,8 +38,8 @@
         <div class="figma-stat-card">
             <div class="figma-stat-accent"></div>
             <div class="figma-stat-label">Today</div>
-            <div class="figma-stat-value" id="planner-total-count">0 queued</div>
-            <div class="figma-stat-detail">Queued today</div>
+            <div class="figma-stat-value" id="planner-total-count">0 due</div>
+            <div class="figma-stat-detail">Scheduled today</div>
         </div>
         <div class="figma-stat-card">
             <div class="figma-stat-accent"></div>
@@ -554,7 +554,7 @@ function isCalendarPost(post) {
 }
 
 function isProperlyScheduledPost(post) {
-  return isCalendarPost(post) && statusBucket(post.displayStatus) === "scheduled";
+  return isCalendarPost(post) && post.status === "scheduled" && statusBucket(post.displayStatus) === "scheduled";
 }
 
 function isUpcomingScheduledPost(post, now = new Date()) {
@@ -908,7 +908,7 @@ function renderPlannerSummary() {
   const attentionCount = plannerPosts.filter((post) => statusBucket(post.displayStatus) === "attention").length;
   const draftCount = plannerPosts.filter((post) => statusBucket(post.displayStatus) === "drafts").length;
   const todayCount = plannerPosts.filter((post) => isUpcomingScheduledPost(post, now) && isSameDay(post.scheduledDate, now)).length;
-  plannerTotalCount.textContent = `${todayCount} queued`;
+  plannerTotalCount.textContent = `${todayCount} due`;
   plannerScheduledCount.textContent = `${scheduledCount} scheduled`;
   plannerDraftCount.textContent = `${draftCount} draft${draftCount === 1 ? "" : "s"}`;
   plannerAttentionCount.textContent = `${attentionCount} blocked`;

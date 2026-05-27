@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 from starlette.requests import Request
@@ -23,6 +24,8 @@ from app.models import (
     RunEvent,
 )
 from app.services.auth import Principal
+from app.services.dashboard_v2 import build_dashboard_v2_view_model
+from app.services.giveaway_activity import build_dashboard_giveaway_activity_monitor, build_dashboard_giveaway_metric_tally
 from app.main import _visible_dashboard_alerts
 
 
@@ -368,6 +371,121 @@ def test_scheduled_post_planner_dedicated_pages_render(monkeypatch, tmp_path):
     finally:
         Base.metadata.drop_all(engine)
         engine.dispose()
+
+
+def test_dashboard_v2_scheduled_metrics_ignore_drafts_and_completed_posts():
+    now = datetime.now(timezone.utc)
+    scheduled_post = SimpleNamespace(
+        id="scheduled-post",
+        status="scheduled",
+        display_status="scheduled",
+        scheduled_for=now + timedelta(hours=2),
+        body="Ready for later today",
+        delivery_breakdown=None,
+    )
+    draft_post = SimpleNamespace(
+        id="draft-post",
+        status="draft",
+        display_status="draft",
+        scheduled_for=now + timedelta(hours=1),
+        body="Still only a draft",
+        delivery_breakdown=None,
+    )
+    completed_post = SimpleNamespace(
+        id="completed-post",
+        status="posted",
+        display_status="success",
+        scheduled_for=now - timedelta(hours=2),
+        body="Already posted",
+        delivery_breakdown=None,
+    )
+
+    model = build_dashboard_v2_view_model(
+        personas=[],
+        posts=[draft_post, completed_post, scheduled_post],
+        run_groups=[],
+        alert_events=[],
+        scheduler_status=SimpleNamespace(automation_enabled=False, cycle_in_progress=False),
+        giveaway_activity_monitor={},
+        giveaway_metric_tally={},
+        instagram_webhook_observability=None,
+        timezone_name="UTC",
+    )
+
+    scheduled_metric = next(metric for metric in model["overview_metrics"] if metric["label"] == "Scheduled")
+
+    assert scheduled_metric["value"] == "1"
+    assert scheduled_metric["detail"] == "1 due today"
+    assert model["scheduled_today_count"] == 1
+    assert [card["post"].id for card in model["upcoming_post_cards"]] == ["scheduled-post"]
+
+
+def test_dashboard_giveaway_metrics_ignore_draft_campaigns(session):
+    persona = _create_persona(session, name="Savannah", slug="savannah-dashboard-draft-giveaway")
+    account = _create_account(session, persona, service="instagram", label="Instagram", handle="savannah.ig")
+    draft_post = CanonicalPost(
+        persona_id=persona.id,
+        origin_kind="composer",
+        post_type="giveaway",
+        status="draft",
+        body="Draft giveaway",
+        publish_overrides_json={},
+        metadata_json={},
+        scheduled_for=None,
+    )
+    scheduled_post = CanonicalPost(
+        persona_id=persona.id,
+        origin_kind="composer",
+        post_type="giveaway",
+        status="scheduled",
+        body="Scheduled giveaway",
+        publish_overrides_json={},
+        metadata_json={},
+        scheduled_for=datetime.now(timezone.utc) + timedelta(hours=2),
+    )
+    session.add_all([draft_post, scheduled_post])
+    session.flush()
+    draft_campaign = GiveawayCampaign(
+        post_id=draft_post.id,
+        giveaway_end_at=datetime.now(timezone.utc) + timedelta(days=3),
+        pool_mode="combined",
+        status="scheduled",
+    )
+    scheduled_campaign = GiveawayCampaign(
+        post_id=scheduled_post.id,
+        giveaway_end_at=datetime.now(timezone.utc) + timedelta(days=3),
+        pool_mode="combined",
+        status="scheduled",
+    )
+    session.add_all([draft_campaign, scheduled_campaign])
+    session.flush()
+    session.add_all(
+        [
+            GiveawayChannel(
+                campaign_id=draft_campaign.id,
+                service="instagram",
+                account_id=account.id,
+                rules_json={"kind": "all", "children": []},
+                status="scheduled",
+            ),
+            GiveawayChannel(
+                campaign_id=scheduled_campaign.id,
+                service="instagram",
+                account_id=account.id,
+                rules_json={"kind": "all", "children": []},
+                status="scheduled",
+            ),
+        ]
+    )
+    session.flush()
+
+    monitor = build_dashboard_giveaway_activity_monitor(session)
+    tally = build_dashboard_giveaway_metric_tally(session)
+
+    assert monitor["metrics"]["campaigns"] == 1
+    assert monitor["open_giveaways"][0]["label"] == "Scheduled giveaway"
+    assert tally["active"]["campaign_count"] == 1
+    assert tally["all_time"]["campaign_count"] == 1
 
 
 def test_dashboard_v2_route_renders_ops_health_for_admin(monkeypatch, tmp_path):
