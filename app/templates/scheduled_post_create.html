@@ -111,30 +111,6 @@
                     </div>
                 </section>
 
-                <section class="composer-platform-surface composer-v3-preview-panel">
-                    <div class="composer-surface-header composer-v2-panel-header">
-                        <div>
-                            <h2 class="h5 mb-1">Preview</h2>
-                            <p class="text-secondary mb-0">Fast read on how this plan is shaping up.</p>
-                        </div>
-                    </div>
-                    <div class="composer-preview-phone">
-                        <div class="composer-preview-header">
-                            <div>
-                                <div class="fw-semibold" id="preview-persona-name">{{ personas[0].name }}</div>
-                                <div class="small text-secondary" id="preview-schedule-label">Not scheduled yet</div>
-                            </div>
-                            <div class="small text-secondary">lynxposter</div>
-                        </div>
-                        <div class="composer-preview-body" id="preview-body-copy">Your post preview appears here as you type.</div>
-                        <div class="composer-preview-media" id="preview-media-summary">No media selected yet.</div>
-                        <div class="composer-preview-footer">
-                            <span id="preview-target-count">0 targets</span>
-                            <span id="preview-attachment-count">0 attachments</span>
-                            <span id="snapshot-body-length">0 chars</span>
-                        </div>
-                    </div>
-                </section>
             </div>
 
             <section class="composer-workbench-surface composer-v3-workbench">
@@ -150,6 +126,9 @@
                     <button class="composer-tab" id="composer-tab-giveaway-button" type="button" role="tab" aria-selected="false" aria-controls="composer-tab-giveaway" data-composer-tab-target="giveaway">
                         <span>Giveaway</span>
                         <span class="composer-tab-count" id="giveaway-tab-status">Off</span>
+                    </button>
+                    <button class="composer-tab" id="composer-tab-preview-button" type="button" role="tab" aria-selected="false" aria-controls="composer-tab-preview" data-composer-tab-target="preview">
+                        <span>Preview</span>
                     </button>
                 </div>
 
@@ -198,6 +177,31 @@
                         <div class="surface-panel-soft" id="giveaway-standby-panel">
                             <div class="fw-semibold">Giveaway rules</div>
                             <div class="small text-secondary">Switch the post type to Giveaway to define channels and requirements.</div>
+                        </div>
+                    </section>
+
+                    <section class="composer-tab-panel composer-v3-preview-panel" id="composer-tab-preview" role="tabpanel" aria-labelledby="composer-tab-preview-button" data-composer-tab-panel="preview" hidden>
+                        <div class="composer-surface-header composer-v2-panel-header">
+                            <div>
+                                <h2 class="h5 mb-1">Preview</h2>
+                                <p class="text-secondary mb-0">Fast read on how this plan is shaping up.</p>
+                            </div>
+                        </div>
+                        <div class="composer-preview-phone">
+                            <div class="composer-preview-header">
+                                <div>
+                                    <div class="fw-semibold" id="preview-persona-name">{{ personas[0].name }}</div>
+                                    <div class="small text-secondary" id="preview-schedule-label">Not scheduled yet</div>
+                                </div>
+                                <div class="small text-secondary">lynxposter</div>
+                            </div>
+                            <div class="composer-preview-body" id="preview-body-copy">Your post preview appears here as you type.</div>
+                            <div class="composer-preview-media" id="preview-media-summary">No media selected yet.</div>
+                            <div class="composer-preview-footer">
+                                <span id="preview-target-count">0 targets</span>
+                                <span id="preview-attachment-count">0 attachments</span>
+                                <span id="snapshot-body-length">0 chars</span>
+                            </div>
                         </div>
                     </section>
                 </div>

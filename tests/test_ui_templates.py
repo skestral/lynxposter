@@ -424,6 +424,8 @@ def test_scheduled_post_templates_render_attachment_previews():
     assert 'composer-mobile-tabbar' in create_html
     assert 'composer-mobile-actionbar' in create_html
     assert 'data-active-composer-tab="compose"' in create_html
+    assert 'id="composer-tab-preview"' in create_html
+    assert 'id="composer-tab-preview-button"' in create_html
     assert 'data-composer-tab-target="preview"' in create_html
     assert 'data-composer-tab-target="giveaway"' in create_html
     assert 'giveaway-tab-status' in create_html

@@ -3628,10 +3628,6 @@ body[data-ui-mode="dark"] .form-select option {
     padding-right: 0.1rem;
 }
 
-.composer-v3-preview-panel {
-    margin-top: 0.9rem;
-}
-
 .composer-surface-header.is-compact {
     align-items: flex-start;
 }
@@ -3659,7 +3655,8 @@ body[data-ui-mode="dark"] .form-select option {
 
 .composer-caption-field,
 .composer-media-queue,
-.composer-platform-surface .composer-preview-phone {
+.composer-platform-surface .composer-preview-phone,
+.composer-v3-preview-panel .composer-preview-phone {
     margin-top: 1rem;
 }
 
@@ -4176,34 +4173,17 @@ body[data-ui-mode="dark"] .planner-calendar-surface .scheduled-calendar-day-numb
     }
 
     #scheduled-post-form[data-active-composer-tab="compose"] .composer-workbench-surface,
-    #scheduled-post-form[data-active-composer-tab="compose"] .composer-v3-preview-panel,
-    #scheduled-post-form[data-active-composer-tab="preview"] .composer-workbench-surface,
-    #scheduled-post-form[data-active-composer-tab="preview"] .composer-v3-compose-panel > .composer-surface-header,
-    #scheduled-post-form[data-active-composer-tab="preview"] .composer-control-grid,
-    #scheduled-post-form[data-active-composer-tab="preview"] .composer-caption-field,
-    #scheduled-post-form[data-active-composer-tab="preview"] .composer-inline-schedule,
     #scheduled-post-form[data-active-composer-tab="media"] .composer-v3-compose-panel,
     #scheduled-post-form[data-active-composer-tab="destinations"] .composer-v3-compose-panel,
-    #scheduled-post-form[data-active-composer-tab="giveaway"] .composer-v3-compose-panel {
-        display: none !important;
-    }
-
+    #scheduled-post-form[data-active-composer-tab="giveaway"] .composer-v3-compose-panel,
     #scheduled-post-form[data-active-composer-tab="preview"] .composer-v3-compose-panel {
-        display: block;
-        border: 0;
-        padding: 0;
-        background: transparent;
-        box-shadow: none;
-        backdrop-filter: none;
-    }
-
-    #scheduled-post-form[data-active-composer-tab="preview"] .composer-v3-preview-panel {
-        display: block;
+        display: none !important;
     }
 
     #scheduled-post-form[data-active-composer-tab="media"] .composer-workbench-surface,
     #scheduled-post-form[data-active-composer-tab="destinations"] .composer-workbench-surface,
-    #scheduled-post-form[data-active-composer-tab="giveaway"] .composer-workbench-surface {
+    #scheduled-post-form[data-active-composer-tab="giveaway"] .composer-workbench-surface,
+    #scheduled-post-form[data-active-composer-tab="preview"] .composer-workbench-surface {
         display: block;
     }
 
