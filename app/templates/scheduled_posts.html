@@ -117,7 +117,7 @@
                         {% if active_planner_view == "board" %}
                         Drag cards between editable lanes with all visible workspace.
                         {% else %}
-                        Drag cards between editable lanes. Use a count to inspect everything in a lane, or open the full board for deeper work.
+                        Quick lane counts for the current publishing pipeline. Open a lane or jump to the full board for details.
                         {% endif %}
                     </p>
                 </div>
@@ -134,7 +134,7 @@
                         </div>
                         <button class="badge text-bg-light border planner-board-count-button" type="button" id="kanban-count-drafts" data-kanban-modal="drafts">0</button>
                     </div>
-                    <div class="scheduled-kanban-list planner-drop-zone" id="kanban-lane-drafts" data-drop-type="bucket" data-drop-bucket="drafts"></div>
+                    <div class="scheduled-kanban-list{% if active_planner_view == 'board' %} planner-drop-zone{% endif %}" id="kanban-lane-drafts"{% if active_planner_view == "board" %} data-drop-type="bucket" data-drop-bucket="drafts"{% endif %}></div>
                 </div>
                 <div class="scheduled-kanban-lane" data-kanban-bucket="scheduled">
                     <div class="scheduled-kanban-lane-header">
@@ -144,7 +144,7 @@
                         </div>
                         <button class="badge text-bg-light border planner-board-count-button" type="button" id="kanban-count-scheduled" data-kanban-modal="scheduled">0</button>
                     </div>
-                    <div class="scheduled-kanban-list planner-drop-zone" id="kanban-lane-scheduled" data-drop-type="bucket" data-drop-bucket="scheduled"></div>
+                    <div class="scheduled-kanban-list{% if active_planner_view == 'board' %} planner-drop-zone{% endif %}" id="kanban-lane-scheduled"{% if active_planner_view == "board" %} data-drop-type="bucket" data-drop-bucket="scheduled"{% endif %}></div>
                 </div>
                 <div class="scheduled-kanban-lane" data-kanban-bucket="running">
                     <div class="scheduled-kanban-lane-header">
@@ -154,7 +154,7 @@
                         </div>
                         <button class="badge text-bg-light border planner-board-count-button" type="button" id="kanban-count-running" data-kanban-modal="running">0</button>
                     </div>
-                    <div class="scheduled-kanban-list planner-drop-zone" id="kanban-lane-running" data-drop-type="bucket" data-drop-bucket="running"></div>
+                    <div class="scheduled-kanban-list{% if active_planner_view == 'board' %} planner-drop-zone{% endif %}" id="kanban-lane-running"{% if active_planner_view == "board" %} data-drop-type="bucket" data-drop-bucket="running"{% endif %}></div>
                 </div>
                 <div class="scheduled-kanban-lane is-readonly" data-kanban-bucket="attention">
                     <div class="scheduled-kanban-lane-header">
@@ -869,7 +869,6 @@ function renderKanbanBoard() {
     const snapshotSummaryMarkup = items.length
       ? `
         <div class="scheduled-kanban-list-summary planner-board-modal-summary">
-          <span>${items.length} card${items.length === 1 ? "" : "s"} in this lane</span>
           <button class="btn btn-sm btn-outline-secondary scheduled-kanban-toggle" type="button" data-kanban-modal="${bucket}">
             View lane
           </button>
@@ -884,12 +883,7 @@ function renderKanbanBoard() {
         : `<div class="scheduled-kanban-empty">${bucket === "attention" || bucket === "done" ? "Nothing to show here." : "Drop a card here."}</div>`;
       return;
     }
-    const emptyText = bucket === "attention" || bucket === "done"
-      ? "Nothing to show here."
-      : "Drop a card here.";
-    lane.innerHTML = `
-      ${items.length ? snapshotSummaryMarkup : `<div class="planner-board-lane-empty">${escapeHtml(emptyText)}</div>`}
-    `;
+    lane.innerHTML = items.length ? snapshotSummaryMarkup : "";
   });
   bindPlannerInteractions();
 }

@@ -3429,6 +3429,47 @@ body[data-ui-mode="dark"] .form-select option {
     padding-inline: 0.72rem;
 }
 
+.planner-view-workspace .planner-board-surface .scheduled-kanban-board {
+    gap: 0.5rem;
+}
+
+.planner-view-workspace .planner-board-surface .scheduled-kanban-lane {
+    display: grid;
+    grid-template-columns: 2.25rem minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.55rem;
+    min-height: 0;
+    padding: 0.65rem 0.72rem;
+}
+
+.planner-view-workspace .planner-board-surface .scheduled-kanban-lane::before {
+    grid-column: 1;
+    margin: 0;
+}
+
+.planner-view-workspace .planner-board-surface .scheduled-kanban-lane-header {
+    grid-column: 2;
+    width: 100%;
+    min-height: 0;
+}
+
+.planner-view-workspace .planner-board-surface .scheduled-kanban-list {
+    grid-column: 3;
+}
+
+.planner-view-workspace .planner-board-modal-summary {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+}
+
+.planner-view-workspace .planner-board-modal-summary .scheduled-kanban-toggle {
+    min-height: 2rem;
+    padding: 0.28rem 0.68rem;
+    font-size: 0.78rem;
+}
+
 .planner-board-surface .scheduled-kanban-list-summary > span {
     display: none;
 }

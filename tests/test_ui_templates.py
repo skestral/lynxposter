@@ -541,7 +541,8 @@ def test_scheduled_post_templates_render_attachment_previews():
     assert 'data-kanban-toggle="${bucket}"' in planner_html
     assert 'Display all ${items.length}' in planner_html
     assert 'View lane' in planner_html
-    assert 'in this lane' in planner_html
+    assert 'Quick lane counts for the current publishing pipeline' in planner_html
+    assert 'class="scheduled-kanban-list" id="kanban-lane-drafts"' in planner_html
     assert 'planner-board-lane-empty' in planner_html
     assert 'planner-move-modal' in planner_html
     assert 'document.body.appendChild(plannerMoveModalElement)' in planner_html
@@ -569,7 +570,7 @@ def test_scheduled_post_templates_render_attachment_previews():
     assert 'Partial Failure' in detail_html
     assert 'Instagram session expired.' in planner_html
     assert 'Queue Now' in planner_html
-    assert 'Use a count to inspect everything in a lane' in planner_html
+    assert 'Quick lane counts for the current publishing pipeline' in planner_html
 
 
 def test_scheduled_post_templates_render_generic_giveaway_controls():
