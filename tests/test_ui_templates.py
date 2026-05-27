@@ -1269,6 +1269,8 @@ def test_dashboard_v2_template_renders_mobile_friendly_tab_shell():
     assert "Active meter" in html
     assert "All-time meter" in html
     assert "Likes" in html
+    assert "dashboard-v2-giveaway-kpi-card" in html
+    assert "dashboard-v2-giveaway-tally-panel" not in html
     assert "dashboard-v2-manual-run-button" in html
     assert "registerLiveUpdates" in html
 
