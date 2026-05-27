@@ -553,6 +553,19 @@ function isCalendarPost(post) {
   return Boolean(post.scheduledDate);
 }
 
+function isProperlyScheduledPost(post) {
+  return isCalendarPost(post) && statusBucket(post.displayStatus) === "scheduled";
+}
+
+function isUpcomingScheduledPost(post, now = new Date()) {
+  return isProperlyScheduledPost(post) && post.scheduledDate >= now;
+}
+
+function isUpcomingScheduledWithinDays(post, days, now = new Date()) {
+  const end = addDays(now, days);
+  return isUpcomingScheduledPost(post, now) && post.scheduledDate < end;
+}
+
 function postsForDay(day) {
   return plannerPosts.filter((post) => isCalendarPost(post) && isSameDay(post.scheduledDate, day));
 }
@@ -810,8 +823,9 @@ function renderWeekCalendar() {
 function renderCalendar() {
   syncCalendarViewButtons();
   const visibleScheduled = plannerPosts.filter((post) => isCalendarPost(post));
-  const visibleGiveaways = visibleScheduled.filter((post) => post.postType === "giveaway");
-  calendarSummaryTotal.textContent = `${visibleScheduled.length} scheduled`;
+  const visibleProperlyScheduled = visibleScheduled.filter((post) => isProperlyScheduledPost(post));
+  const visibleGiveaways = visibleProperlyScheduled.filter((post) => post.postType === "giveaway");
+  calendarSummaryTotal.textContent = `${visibleProperlyScheduled.length} scheduled`;
   calendarSummaryGiveaways.textContent = `${visibleGiveaways.length} giveaways`;
 
   if (!visibleScheduled.length) {
@@ -889,10 +903,11 @@ function renderKanbanBoard() {
 }
 
 function renderPlannerSummary() {
-  const scheduledCount = plannerPosts.filter((post) => isCalendarPost(post)).length;
+  const now = new Date();
+  const scheduledCount = plannerPosts.filter((post) => isUpcomingScheduledWithinDays(post, 14, now)).length;
   const attentionCount = plannerPosts.filter((post) => statusBucket(post.displayStatus) === "attention").length;
   const draftCount = plannerPosts.filter((post) => statusBucket(post.displayStatus) === "drafts").length;
-  const todayCount = plannerPosts.filter((post) => post.scheduledDate && isSameDay(post.scheduledDate, new Date())).length;
+  const todayCount = plannerPosts.filter((post) => isUpcomingScheduledPost(post, now) && isSameDay(post.scheduledDate, now)).length;
   plannerTotalCount.textContent = `${todayCount} queued`;
   plannerScheduledCount.textContent = `${scheduledCount} scheduled`;
   plannerDraftCount.textContent = `${draftCount} draft${draftCount === 1 ? "" : "s"}`;

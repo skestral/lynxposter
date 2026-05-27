@@ -541,6 +541,9 @@ def test_scheduled_post_templates_render_attachment_previews():
     assert 'planner-board-count-button' in planner_html
     assert 'data-kanban-modal="drafts"' in planner_html
     assert 'function openPlannerLaneModal(bucket)' in planner_html
+    assert 'function isProperlyScheduledPost(post)' in planner_html
+    assert 'function isUpcomingScheduledWithinDays(post, days, now = new Date())' in planner_html
+    assert 'isUpcomingScheduledWithinDays(post, 14, now)' in planner_html
     assert 'items.slice(-kanbanCollapsedLimit)' in planner_html
     assert 'data-kanban-toggle="${bucket}"' in planner_html
     assert 'Display all ${items.length}' in planner_html
