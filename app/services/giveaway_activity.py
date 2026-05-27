@@ -185,6 +185,10 @@ def _campaign_label(campaign: GiveawayCampaign) -> str:
     return f"Giveaway post {campaign.post_id}"
 
 
+def _campaign_giveaway_href(campaign: GiveawayCampaign) -> str:
+    return f"/scheduled-posts/{campaign.post_id}/page#giveaway-details"
+
+
 def _list_giveaway_campaigns(
     session: Session,
     *,
@@ -487,7 +491,7 @@ def build_dashboard_giveaway_activity_monitor(
                 "account_label": channel.account.label if channel.account else channel.account_id,
                 "campaign_status": campaign.status,
                 "campaign_label": _campaign_label(campaign),
-                "campaign_href": f"/scheduled-posts/{campaign.post_id}/page",
+                "campaign_href": _campaign_giveaway_href(campaign),
                 "activity_href": activity_href,
                 "activity_href_label": activity_href_label,
                 "detail": _event_detail(event.event_type, payload),
@@ -508,7 +512,7 @@ def build_dashboard_giveaway_activity_monitor(
     ]
     open_giveaways = [
         {
-            "href": f"/scheduled-posts/{campaign.post_id}/page",
+            "href": _campaign_giveaway_href(campaign),
             "label": _campaign_label(campaign),
             "persona_name": campaign.post.persona.name if campaign.post.persona else "No persona",
             "status": campaign.status,

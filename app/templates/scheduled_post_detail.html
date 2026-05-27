@@ -984,6 +984,23 @@ function pendingUploadAltTexts() {
   });
 }
 
+function activateScheduledDetailTabFromHash() {
+  const hash = String(window.location.hash || "").replace(/^#/, "");
+  const targetByHash = {
+    "giveaway-details": "#detail-giveaway-details-pane",
+    "detail-giveaway-details-pane": "#detail-giveaway-details-pane",
+    "giveaway": "#detail-giveaway-pane",
+    "media": "#detail-media-pane",
+    "targets": "#detail-targets-pane",
+    "delivery": "#detail-delivery-pane",
+  };
+  const target = targetByHash[hash];
+  if (!target) return;
+  const tabButton = document.querySelector(`[data-bs-target="${target}"]`);
+  if (!tabButton || !window.bootstrap?.Tab) return;
+  window.bootstrap.Tab.getOrCreateInstance(tabButton).show();
+}
+
 document.getElementById("scheduled-post-update-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
@@ -1040,6 +1057,43 @@ document.querySelectorAll(".giveaway-review-action").forEach((button) => {
       alert(await window.readApiMessage(response));
       return;
     }
+    window.location.reload();
+  });
+});
+
+document.querySelectorAll(".giveaway-entrant-approval-action").forEach((button) => {
+  button.addEventListener("click", async () => {
+    const action = button.dataset.action;
+    const entrantId = button.dataset.entrantId;
+    const label = button.dataset.entrantLabel || "this entrant";
+    if (!entrantId) return;
+    let response;
+    if (action === "approve") {
+      const note = window.prompt(`Approve ${label} for this giveaway? Optional note:`, "Manually approved.");
+      if (note === null) return;
+      button.disabled = true;
+      button.textContent = "Approving...";
+      response = await fetch(`/scheduled-posts/${postId}/giveaway/entrants/${encodeURIComponent(entrantId)}/approve`, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({note}),
+      });
+    } else if (action === "clear") {
+      const confirmed = window.confirm(`Clear manual approval for ${label}?`);
+      if (!confirmed) return;
+      button.disabled = true;
+      button.textContent = "Clearing...";
+      response = await fetch(`/scheduled-posts/${postId}/giveaway/entrants/${encodeURIComponent(entrantId)}/approval`, {method: "DELETE"});
+    } else {
+      return;
+    }
+    if (!response.ok) {
+      alert(await window.readApiMessage(response));
+      button.disabled = false;
+      button.textContent = action === "approve" ? "Approve Entrant" : "Clear Approval";
+      return;
+    }
+    window.location.hash = "giveaway-details";
     window.location.reload();
   });
 });
@@ -1213,5 +1267,7 @@ savedAttachmentList?.addEventListener("input", (event) => {
 renderSavedAttachments();
 renderUploadPreviews();
 refreshPostGuidance();
+activateScheduledDetailTabFromHash();
+window.addEventListener("hashchange", activateScheduledDetailTabFromHash);
 </script>
 {% endblock %}

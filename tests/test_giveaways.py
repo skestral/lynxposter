@@ -30,10 +30,13 @@ from app.services.giveaway_engine import (
     GIVEAWAY_STATUS_COLLECTING,
     GIVEAWAY_STATUS_REVIEW_REQUIRED,
     GIVEAWAY_STATUS_WINNER_SELECTED,
+    approve_giveaway_entrant,
+    clear_giveaway_entrant_approval,
     collect_bluesky_channel_state,
     end_giveaway_campaign,
     evaluate_channel_entrants,
     process_giveaway_lifecycle,
+    recalculate_giveaway_entries,
     refresh_instagram_channel_state,
     scan_instagram_giveaway_channels,
     serialize_giveaway,
@@ -185,6 +188,85 @@ def _mark_posted(post, account_id: str, *, external_id: str, external_url: str |
     job.external_id = external_id
     job.external_url = external_url
     post.published_at = datetime.now(timezone.utc) - timedelta(minutes=5)
+
+
+def test_manual_giveaway_entrant_approval_survives_recalculation(session):
+    persona = _create_persona(session, slug="giveaway-manual-entrant-approval")
+    bluesky = _create_account(session, persona, service="bluesky", label="Bluesky")
+    post = create_scheduled_post(
+        session,
+        _generic_giveaway_payload(
+            persona.id,
+            [bluesky.id],
+            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            channels=[
+                {
+                    "service": "bluesky",
+                    "account_id": bluesky.id,
+                    "rules": {
+                        "kind": "all",
+                        "children": [
+                            {"kind": "atom", "atom": "reply_or_quote_present", "params": {}},
+                            {"kind": "atom", "atom": "like_present", "params": {}},
+                        ],
+                    },
+                }
+            ],
+        ),
+        [],
+    )
+    channel = post.giveaway_campaign.channels[0]
+    entrant = GiveawayEntrant(
+        channel=channel,
+        provider_user_id="did:plc:manual",
+        provider_username="manual.test",
+        display_label="manual.test",
+        signal_state_json={
+            "reply_present": True,
+            "quote_present": False,
+            "like_present": False,
+            "repost_present": False,
+            "follow_present": None,
+            "reply_posts": [{"uri": "at://did:plc:manual/app.bsky.feed.post/reply", "text": "Count me in"}],
+            "quote_posts": [],
+            "reply_or_quote_mention_count": 0,
+        },
+    )
+    channel.entrants.append(entrant)
+    session.flush()
+
+    evaluate_channel_entrants(channel)
+    assert entrant.eligibility_status == ENTRY_STATUS_DISQUALIFIED
+
+    approve_giveaway_entrant(
+        session,
+        post.giveaway_campaign,
+        entrant_id=entrant.id,
+        run_id="run-manual-approval",
+        note="Verified outside the automatic checks.",
+        reviewed_by="Savannah",
+    )
+    session.flush()
+    assert entrant.eligibility_status == ENTRY_STATUS_ELIGIBLE
+    assert entrant.signal_state_json["manual_review"]["status"] == "approved"
+
+    recalculate_giveaway_entries(session, post.giveaway_campaign, run_id="run-recalculate-after-manual")
+    serialized = serialize_giveaway(post.giveaway_campaign)
+    serialized_entrant = serialized.channels[0].entrants[0]
+    assert serialized_entrant.eligibility_status == ENTRY_STATUS_ELIGIBLE
+    assert serialized_entrant.manual_review_status == "approved"
+    assert serialized_entrant.manual_review_note == "Verified outside the automatic checks."
+    assert any(check.atom == "manual_review" and check.status == "passed" for check in serialized_entrant.checks)
+
+    clear_giveaway_entrant_approval(
+        session,
+        post.giveaway_campaign,
+        entrant_id=entrant.id,
+        run_id="run-clear-manual-approval",
+        reviewed_by="Savannah",
+    )
+    assert entrant.eligibility_status == ENTRY_STATUS_DISQUALIFIED
+    assert "manual_review" not in entrant.signal_state_json
 
 
 def test_legacy_instagram_giveaway_requires_exactly_one_instagram_target(session):

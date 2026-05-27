@@ -292,6 +292,7 @@ const scheduledPostsPlannerData = [
   {
     id: {{ post.id|tojson }},
     href: {{ ("/scheduled-posts/" ~ post.id ~ "/page")|tojson }},
+    giveawayHref: {{ ("/scheduled-posts/" ~ post.id ~ "/page#giveaway-details")|tojson if post.giveaway else "null" }},
     personaId: {{ post.persona_id|tojson }},
     personaName: {{ persona_name_by_id.get(post.persona_id, post.persona_id)|tojson }},
     body: {{ post.body|default("", true)|tojson }},
@@ -441,6 +442,7 @@ function normalizeApiPost(post) {
   return normalizePlannerPost({
     id: post.id,
     href: `/scheduled-posts/${post.id}/page`,
+    giveawayHref: post.giveaway ? `/scheduled-posts/${post.id}/page#giveaway-details` : null,
     personaId: post.persona_id,
     personaName: personaNameById[post.persona_id] || post.persona_id,
     body: post.body || "",
@@ -632,6 +634,14 @@ function suggestedGiveawayEndValue(post, scheduledValue) {
   return toDatetimeLocalValue(base);
 }
 
+function postOpenHref(post) {
+  return post.postType === "giveaway" && post.giveawayHref ? post.giveawayHref : post.href;
+}
+
+function postOpenLabel(post) {
+  return post.postType === "giveaway" ? "Details" : "Open";
+}
+
 function plannerCardMarkup(post, compact = false) {
   const scheduledLabel = formatDateTime(post.scheduledDate);
   const deliveryNote = post.failureCount
@@ -641,6 +651,8 @@ function plannerCardMarkup(post, compact = false) {
       : `${post.targetCount} target${post.targetCount === 1 ? "" : "s"}`;
   const compactMeta = `${post.personaName} • ${deliveryNote}`;
   const fullMeta = `${scheduledLabel} • ${post.attachmentCount} attachment${post.attachmentCount === 1 ? "" : "s"} • ${deliveryNote}`;
+  const openHref = postOpenHref(post);
+  const openLabel = postOpenLabel(post);
   return `
     <article
       class="planner-card ${compact ? "planner-card-compact" : ""} ${post.canDrag ? "is-draggable" : "is-locked"}"
@@ -657,7 +669,7 @@ function plannerCardMarkup(post, compact = false) {
           <div class="planner-card-copy">${escapeHtml(compact ? compactMeta : summarizeBody(post.body))}</div>
           <div class="planner-card-meta">${escapeHtml(compact ? fullMeta : fullMeta)}</div>
         </div>
-        <a class="btn btn-sm btn-outline-primary planner-card-open" href="${post.href}">Open</a>
+        <a class="btn btn-sm btn-outline-primary planner-card-open" href="${openHref}">${openLabel}</a>
       </div>
       ${post.lastError ? `<div class="small text-danger mt-2">${escapeHtml(post.lastError)}</div>` : ""}
     </article>
@@ -671,7 +683,7 @@ function plannerCalendarCardMarkup(post) {
   return `
     <a
       class="scheduled-calendar-event planner-card planner-calendar-card ${post.canDrag ? "is-draggable" : "is-locked"}"
-      href="${post.href}"
+      href="${postOpenHref(post)}"
       data-post-id="${post.id}"
       ${post.canDrag ? 'draggable="true"' : ""}
     >
@@ -688,6 +700,8 @@ function plannerLaneModalCardMarkup(post) {
     : post.successCount
       ? `${post.successCount} delivered`
       : `${post.targetCount} target${post.targetCount === 1 ? "" : "s"}`;
+  const openHref = postOpenHref(post);
+  const openLabel = postOpenLabel(post);
   return `
     <article class="planner-lane-modal-card">
       <div class="planner-lane-modal-card-main">
@@ -698,7 +712,7 @@ function plannerLaneModalCardMarkup(post) {
         <div class="planner-board-mini-title">${escapeHtml(summarizeBody(post.body))}</div>
         <div class="planner-board-mini-meta">${escapeHtml(post.personaName)} • ${escapeHtml(formatDateTime(post.scheduledDate))} • ${escapeHtml(deliveryNote)}</div>
       </div>
-      <a class="btn btn-sm btn-outline-primary" href="${post.href}">Open</a>
+      <a class="btn btn-sm btn-outline-primary" href="${openHref}">${openLabel}</a>
     </article>
   `;
 }

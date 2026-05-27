@@ -255,6 +255,30 @@
                         <td>
                             <div>{{ entrant_profile_link(entry, "fw-semibold") }}</div>
                             <div class="small text-secondary">{{ entry.provider_user_id }}</div>
+                            {% if entry.manual_review_status %}
+                            <div class="badge text-bg-success mt-2">Manually Approved</div>
+                            {% endif %}
+                            {% if entry.id %}
+                            <div class="d-flex gap-2 flex-wrap mt-2">
+                                {% if entry.manual_review_status == "approved" %}
+                                <button
+                                    class="btn btn-sm btn-outline-secondary giveaway-entrant-approval-action"
+                                    type="button"
+                                    data-action="clear"
+                                    data-entrant-id="{{ entry.id }}"
+                                    data-entrant-label="{{ entry.display_label or entry.provider_username or entry.provider_user_id }}"
+                                >Clear Approval</button>
+                                {% else %}
+                                <button
+                                    class="btn btn-sm btn-outline-success giveaway-entrant-approval-action"
+                                    type="button"
+                                    data-action="approve"
+                                    data-entrant-id="{{ entry.id }}"
+                                    data-entrant-label="{{ entry.display_label or entry.provider_username or entry.provider_user_id }}"
+                                >Approve Entrant</button>
+                                {% endif %}
+                            </div>
+                            {% endif %}
                         </td>
                         <td class="small">
                             <div class="fw-semibold">{{ entry.activity_total | default(0, true) }} activities</div>

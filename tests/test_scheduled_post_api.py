@@ -650,6 +650,88 @@ def test_recalculate_giveaway_api_applies_updated_rules(api_stack):
     assert checks["like_present"]["status"] == "failed"
 
 
+def test_manual_giveaway_entrant_approval_api_overrides_checks(api_stack):
+    api_client, SessionLocal = api_stack
+    giveaway_end_at = datetime(2026, 5, 16, 20, 0, tzinfo=timezone.utc)
+    with SessionLocal() as session:
+        persona = _create_persona(session, slug="scheduled-post-api-manual-approval")
+        bluesky = _create_destination_account(session, persona, service="bluesky", label="Bluesky")
+        post = create_scheduled_post(
+            session,
+            ScheduledPostCreate.model_validate(
+                {
+                    "persona_id": persona.id,
+                    "body": "Approve this entrant",
+                    "post_type": "giveaway",
+                    "status": "draft",
+                    "target_account_ids": [bluesky.id],
+                    "publish_overrides_json": {},
+                    "metadata_json": {},
+                    "scheduled_for": None,
+                    "giveaway": {
+                        "giveaway_end_at": giveaway_end_at,
+                        "pool_mode": "combined",
+                        "channels": [
+                            {
+                                "service": "bluesky",
+                                "account_id": bluesky.id,
+                                "rules": {
+                                    "kind": "all",
+                                    "children": [
+                                        {"kind": "atom", "atom": "reply_or_quote_present", "params": {}},
+                                        {"kind": "atom", "atom": "like_present", "params": {}},
+                                    ],
+                                },
+                            }
+                        ],
+                    },
+                }
+            ),
+            [],
+        )
+        channel = post.giveaway_campaign.channels[0]
+        entrant = GiveawayEntrant(
+            channel=channel,
+            provider_user_id="did:plc:entrant",
+            provider_username="entrant.test",
+            display_label="entrant.test",
+            signal_state_json={
+                "reply_present": True,
+                "quote_present": False,
+                "like_present": False,
+                "repost_present": False,
+                "follow_present": None,
+                "reply_posts": [{"uri": "at://did:plc:entrant/app.bsky.feed.post/reply", "text": "Count me in"}],
+                "quote_posts": [],
+                "reply_or_quote_mention_count": 0,
+            },
+        )
+        channel.entrants.append(entrant)
+        session.flush()
+        post_id = post.id
+        entrant_id = entrant.id
+        session.commit()
+
+    approve_response = api_client.post(
+        f"/scheduled-posts/{post_id}/giveaway/entrants/{entrant_id}/approve",
+        json={"note": "Verified manually."},
+    )
+
+    assert approve_response.status_code == 200
+    approved_entrant = approve_response.json()["channels"][0]["entrants"][0]
+    assert approved_entrant["eligibility_status"] == "eligible"
+    assert approved_entrant["manual_review_status"] == "approved"
+    assert approved_entrant["manual_review_note"] == "Verified manually."
+    assert any(check["atom"] == "manual_review" for check in approved_entrant["checks"])
+
+    clear_response = api_client.delete(f"/scheduled-posts/{post_id}/giveaway/entrants/{entrant_id}/approval")
+
+    assert clear_response.status_code == 200
+    cleared_entrant = clear_response.json()["channels"][0]["entrants"][0]
+    assert cleared_entrant["eligibility_status"] == "disqualified"
+    assert cleared_entrant["manual_review_status"] is None
+
+
 def test_rerun_giveaway_api_selects_new_winner_from_current_evidence(api_stack, monkeypatch):
     api_client, SessionLocal = api_stack
     giveaway_end_at = datetime(2026, 5, 16, 20, 0, tzinfo=timezone.utc)

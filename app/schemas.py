@@ -341,6 +341,9 @@ class GiveawayEntrantRead(BaseModel):
     eligibility_status: str = "pending"
     inconclusive_reasons: list[str] = Field(default_factory=list)
     disqualification_reasons: list[str] = Field(default_factory=list)
+    manual_review_status: str | None = None
+    manual_review_note: str | None = None
+    manual_reviewed_at: datetime | None = None
 
 
 class GiveawayRuleCheckRead(BaseModel):

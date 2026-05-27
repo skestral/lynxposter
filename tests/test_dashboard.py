@@ -379,7 +379,7 @@ def test_dashboard_v2_scheduled_metrics_ignore_drafts_and_completed_posts():
         id="scheduled-post",
         status="scheduled",
         display_status="scheduled",
-        scheduled_for=now + timedelta(hours=2),
+        scheduled_for=now + timedelta(minutes=15),
         body="Ready for later today",
         delivery_breakdown=None,
     )
@@ -387,7 +387,7 @@ def test_dashboard_v2_scheduled_metrics_ignore_drafts_and_completed_posts():
         id="draft-post",
         status="draft",
         display_status="draft",
-        scheduled_for=now + timedelta(hours=1),
+        scheduled_for=now + timedelta(minutes=10),
         body="Still only a draft",
         delivery_breakdown=None,
     )
@@ -484,6 +484,7 @@ def test_dashboard_giveaway_metrics_ignore_draft_campaigns(session):
 
     assert monitor["metrics"]["campaigns"] == 1
     assert monitor["open_giveaways"][0]["label"] == "Scheduled giveaway"
+    assert monitor["open_giveaways"][0]["href"].endswith("#giveaway-details")
     assert tally["active"]["campaign_count"] == 1
     assert tally["all_time"]["campaign_count"] == 1
 

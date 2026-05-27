@@ -75,6 +75,9 @@ ENTRY_STATUS_ELIGIBLE = "eligible"
 ENTRY_STATUS_PROVISIONAL = "provisional"
 ENTRY_STATUS_DISQUALIFIED = "disqualified"
 
+MANUAL_REVIEW_STATUS_APPROVED = "approved"
+MANUAL_REVIEW_SIGNAL_KEY = "manual_review"
+
 RULE_STATUS_UNKNOWN = "unknown"
 RULE_STATUS_VERIFIED = "verified"
 RULE_STATUS_MISSING = "missing"
@@ -763,6 +766,55 @@ def _entry_profile_url(channel: GiveawayChannel, entrant: GiveawayEntrant) -> st
     return None
 
 
+def _parse_manual_reviewed_at(value: Any) -> datetime | None:
+    raw_value = str(value or "").strip()
+    if not raw_value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw_value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _entrant_manual_review(entrant: GiveawayEntrant) -> dict[str, Any] | None:
+    state = dict(entrant.signal_state_json or {})
+    review = state.get(MANUAL_REVIEW_SIGNAL_KEY)
+    if not isinstance(review, dict):
+        return None
+    if str(review.get("status") or "").strip().lower() != MANUAL_REVIEW_STATUS_APPROVED:
+        return None
+    return dict(review)
+
+
+def _manual_review_detail(review: dict[str, Any] | None) -> str:
+    note = str((review or {}).get("note") or "").strip()
+    if note:
+        return note
+    return "Entrant was manually approved for this giveaway."
+
+
+def _apply_manual_review_override(entrant: GiveawayEntrant) -> bool:
+    review = _entrant_manual_review(entrant)
+    if review is None:
+        return False
+    detail = dict(entrant.rule_match_details_json or {})
+    detail["manual_review"] = {
+        "kind": "manual_review",
+        "status": MANUAL_REVIEW_STATUS_APPROVED,
+        "note": _manual_review_detail(review),
+        "reviewed_at": review.get("reviewed_at"),
+        "reviewed_by": review.get("reviewed_by"),
+    }
+    entrant.rule_match_details_json = detail
+    entrant.eligibility_status = ENTRY_STATUS_ELIGIBLE
+    entrant.inconclusive_reasons_json = []
+    entrant.disqualification_reasons_json = []
+    return True
+
+
 def _normalize_evidence_items(items: list[dict[str, Any]] | None, *, default_source: str) -> list[dict[str, Any]]:
     normalized: list[dict[str, Any]] = []
     for item in items or []:
@@ -1006,6 +1058,18 @@ def _entrant_activity_breakdown(channel: GiveawayChannel, entrant: GiveawayEntra
 def _serialize_entrant(channel: GiveawayChannel, entrant: GiveawayEntrant) -> GiveawayEntrantRead:
     activity_breakdown, activity_total = _entrant_activity_breakdown(channel, entrant)
     checks = _flatten_rule_checks(dict(entrant.rule_match_details_json or {}))
+    manual_review = _entrant_manual_review(entrant)
+    manual_review_note = str(manual_review.get("note") or "").strip() if manual_review else ""
+    if manual_review is not None:
+        checks.append(
+            GiveawayRuleCheckRead(
+                atom="manual_review",
+                label="Manual approval",
+                status="passed",
+                detail=_manual_review_detail(manual_review),
+                params={},
+            )
+        )
     return GiveawayEntrantRead(
         id=entrant.id,
         service=channel.service,
@@ -1021,6 +1085,9 @@ def _serialize_entrant(channel: GiveawayChannel, entrant: GiveawayEntrant) -> Gi
         eligibility_status=entrant.eligibility_status,
         inconclusive_reasons=list(entrant.inconclusive_reasons_json or []),
         disqualification_reasons=list(entrant.disqualification_reasons_json or []),
+        manual_review_status=manual_review.get("status") if manual_review else None,
+        manual_review_note=manual_review_note or None,
+        manual_reviewed_at=_parse_manual_reviewed_at(manual_review.get("reviewed_at")) if manual_review else None,
     )
 
 
@@ -2018,6 +2085,7 @@ def evaluate_channel_entrants(channel: GiveawayChannel, *, allow_instagram_priva
         else:
             entrant.eligibility_status = ENTRY_STATUS_DISQUALIFIED
             entrant.disqualification_reasons_json = list(dict.fromkeys(reason for reason in reasons if reason)) or ["Entrant did not satisfy the giveaway rules."]
+        _apply_manual_review_override(entrant)
 
 
 def _randomize_entries(entries: list[GiveawayEntrant]) -> list[GiveawayEntrant]:
@@ -2105,6 +2173,92 @@ def recalculate_giveaway_entries(
         message=f"Recalculated giveaway entries for post {campaign.post_id}.",
         post_id=campaign.post_id,
         metadata={"campaign_id": campaign.id},
+    )
+    session.flush()
+    return campaign
+
+
+def _find_campaign_entrant(campaign: GiveawayCampaign, entrant_id: str) -> tuple[GiveawayChannel, GiveawayEntrant]:
+    for channel in campaign.channels:
+        for entrant in channel.entrants:
+            if entrant.id == entrant_id:
+                return channel, entrant
+    raise ValueError("Giveaway entrant not found.")
+
+
+def approve_giveaway_entrant(
+    session: Session,
+    campaign: GiveawayCampaign,
+    *,
+    entrant_id: str,
+    run_id: str,
+    note: str | None = None,
+    reviewed_by: str | None = None,
+) -> GiveawayCampaign:
+    channel, entrant = _find_campaign_entrant(campaign, entrant_id)
+    state = dict(entrant.signal_state_json or {})
+    clean_note = str(note or "").strip()
+    state[MANUAL_REVIEW_SIGNAL_KEY] = {
+        "status": MANUAL_REVIEW_STATUS_APPROVED,
+        "note": clean_note or "Manually approved for this giveaway.",
+        "reviewed_at": utcnow().isoformat(),
+        "reviewed_by": str(reviewed_by or "").strip() or None,
+        "run_id": run_id,
+    }
+    entrant.signal_state_json = state
+    evaluate_channel_entrants(channel, allow_instagram_private_verification=False)
+    campaign.last_evaluated_at = utcnow()
+    log_run_event(
+        session,
+        run_id=run_id,
+        persona_id=campaign.post.persona_id,
+        persona_name=campaign.post.persona.name if campaign.post.persona else None,
+        service="giveaway",
+        operation="giveaway_manual_review",
+        message=f"Manually approved giveaway entrant {_entry_display_label(entrant)} for post {campaign.post_id}.",
+        post_id=campaign.post_id,
+        metadata={
+            "campaign_id": campaign.id,
+            "entrant_id": entrant.id,
+            "channel_id": channel.id,
+            "action": "approve",
+            "reviewed_by": str(reviewed_by or "").strip() or None,
+        },
+    )
+    session.flush()
+    return campaign
+
+
+def clear_giveaway_entrant_approval(
+    session: Session,
+    campaign: GiveawayCampaign,
+    *,
+    entrant_id: str,
+    run_id: str,
+    reviewed_by: str | None = None,
+) -> GiveawayCampaign:
+    channel, entrant = _find_campaign_entrant(campaign, entrant_id)
+    state = dict(entrant.signal_state_json or {})
+    state.pop(MANUAL_REVIEW_SIGNAL_KEY, None)
+    entrant.signal_state_json = state
+    evaluate_channel_entrants(channel, allow_instagram_private_verification=False)
+    campaign.last_evaluated_at = utcnow()
+    log_run_event(
+        session,
+        run_id=run_id,
+        persona_id=campaign.post.persona_id,
+        persona_name=campaign.post.persona.name if campaign.post.persona else None,
+        service="giveaway",
+        operation="giveaway_manual_review",
+        message=f"Cleared manual approval for giveaway entrant {_entry_display_label(entrant)} on post {campaign.post_id}.",
+        post_id=campaign.post_id,
+        metadata={
+            "campaign_id": campaign.id,
+            "entrant_id": entrant.id,
+            "channel_id": channel.id,
+            "action": "clear",
+            "reviewed_by": str(reviewed_by or "").strip() or None,
+        },
     )
     session.flush()
     return campaign

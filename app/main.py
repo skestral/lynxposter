@@ -70,6 +70,8 @@ from app.services.giveaway_activity import build_dashboard_giveaway_activity_mon
 from app.services.giveaway_engine import (
     POST_TYPE_GIVEAWAY,
     advance_giveaway_winner,
+    approve_giveaway_entrant,
+    clear_giveaway_entrant_approval,
     confirm_giveaway_winner,
     end_giveaway_campaign,
     process_giveaway_lifecycle,
@@ -2029,6 +2031,64 @@ def api_advance_giveaway_winner(post_id: str, request: Request):
             raise HTTPException(status_code=404, detail="Giveaway not found.")
         try:
             updated = advance_giveaway_winner(session, post.giveaway_campaign, run_id=new_run_id(), pool_key=pool_key)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        publish_live_update(
+            LIVE_UPDATE_TOPIC_SCHEDULED_POSTS,
+            LIVE_UPDATE_TOPIC_DASHBOARD,
+            LIVE_UPDATE_TOPIC_LOGS,
+        )
+        return serialize_giveaway(updated)
+
+
+@app.post("/scheduled-posts/{post_id}/giveaway/entrants/{entrant_id}/approve")
+async def api_approve_giveaway_entrant(post_id: str, entrant_id: str, request: Request):
+    principal = require_api_access(request, role="user")
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    note = str(payload.get("note") or "").strip() if isinstance(payload, dict) else ""
+    reviewed_by = str(getattr(principal, "display_name", None) or getattr(principal, "user_id", "") or "").strip()
+    with db_session() as session:
+        post = get_post(session, post_id, **_persona_access_kwargs(principal, min_permission="edit"))
+        if not post or post.origin_kind != "composer" or post.giveaway_campaign is None:
+            raise HTTPException(status_code=404, detail="Giveaway not found.")
+        try:
+            updated = approve_giveaway_entrant(
+                session,
+                post.giveaway_campaign,
+                entrant_id=entrant_id,
+                run_id=new_run_id(),
+                note=note,
+                reviewed_by=reviewed_by,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        publish_live_update(
+            LIVE_UPDATE_TOPIC_SCHEDULED_POSTS,
+            LIVE_UPDATE_TOPIC_DASHBOARD,
+            LIVE_UPDATE_TOPIC_LOGS,
+        )
+        return serialize_giveaway(updated)
+
+
+@app.delete("/scheduled-posts/{post_id}/giveaway/entrants/{entrant_id}/approval")
+def api_clear_giveaway_entrant_approval(post_id: str, entrant_id: str, request: Request):
+    principal = require_api_access(request, role="user")
+    reviewed_by = str(getattr(principal, "display_name", None) or getattr(principal, "user_id", "") or "").strip()
+    with db_session() as session:
+        post = get_post(session, post_id, **_persona_access_kwargs(principal, min_permission="edit"))
+        if not post or post.origin_kind != "composer" or post.giveaway_campaign is None:
+            raise HTTPException(status_code=404, detail="Giveaway not found.")
+        try:
+            updated = clear_giveaway_entrant_approval(
+                session,
+                post.giveaway_campaign,
+                entrant_id=entrant_id,
+                run_id=new_run_id(),
+                reviewed_by=reviewed_by,
+            )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         publish_live_update(

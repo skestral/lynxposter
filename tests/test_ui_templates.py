@@ -496,6 +496,7 @@ def test_scheduled_post_templates_render_attachment_previews():
     assert 'scheduled-detail-workbench' in detail_html
     assert 'scheduled-detail-mobile-actionbar' in detail_html
     assert 'id="detail-delivery-pane"' in detail_html
+    assert 'function activateScheduledDetailTabFromHash()' in detail_html
     assert 'data-active-composer-tab="compose"' in create_html
     assert 'id="composer-tab-preview"' in create_html
     assert 'id="composer-tab-preview-button"' in create_html
@@ -605,6 +606,7 @@ def test_scheduled_post_templates_render_generic_giveaway_controls():
                 "target_post_url": "https://instagram.test/p/abc123/",
                 "entrants": [
                     {
+                        "id": "entrant-instagram-1",
                         "display_label": "entrant.one",
                         "provider_user_id": "user-1",
                         "profile_url": "https://www.instagram.com/entrant.one/",
@@ -629,6 +631,7 @@ def test_scheduled_post_templates_render_generic_giveaway_controls():
                 "target_post_url": "https://bsky.app/profile/savannah.test/post/xyz",
                 "entrants": [
                     {
+                        "id": "entrant-bluesky-1",
                         "display_label": "bsky.one",
                         "provider_user_id": "did:plc:user-1",
                         "profile_url": "https://bsky.app/profile/bsky.one",
@@ -730,6 +733,9 @@ def test_scheduled_post_templates_render_generic_giveaway_controls():
     assert 'href="https://bsky.app/profile/bsky.one"' in html
     assert "Confirm Winner" in html
     assert "Advance To Next Candidate" in html
+    assert "Approve Entrant" in html
+    assert "giveaway-entrant-approval-action" in html
+    assert "/giveaway/entrants/${encodeURIComponent(entrantId)}/approve" in html
     assert "End Giveaway" in html
     assert "/giveaway/end-now" in html
     assert "Open published Instagram post" in html
@@ -802,6 +808,7 @@ def test_scheduled_posts_planner_renders_generic_giveaway_data():
     assert "scheduledPostsPlannerData" in html
     assert 'displayStatus: "draft"' in html
     assert 'scheduledFor: "2026-05-14T13:00"' in html
+    assert 'giveawayHref: "/scheduled-posts/post-1/page#giveaway-details"' in html
     assert 'giveaway_end_at: "2026-05-15T13:00"' in html
     assert 'const plannerTimezoneName = "America/Los_Angeles";' in html
     assert "Timezone: America/Los_Angeles" in html
@@ -810,6 +817,8 @@ def test_scheduled_posts_planner_renders_generic_giveaway_data():
     assert "reply_or_quote_present" in html
     assert "pool_mode" in html
     assert "normalizeGiveawayConfig" in html
+    assert "function postOpenHref(post)" in html
+    assert 'post.postType === "giveaway" ? "Details" : "Open"' in html
 
 
 def test_scheduled_posts_template_has_dedicated_month_and_board_modes():
@@ -970,7 +979,7 @@ def test_dashboard_template_shows_recent_scheduled_post_errors():
                     "campaign_status": "collecting",
                     "actor_label": "entrant.one",
                     "entrant_status": "pending",
-                    "campaign_href": "/scheduled-posts/post-1/page",
+                    "campaign_href": "/scheduled-posts/post-1/page#giveaway-details",
                     "campaign_label": "Spring giveaway",
                     "persona_name": "Savannah",
                     "detail": "Count me in @friend",
@@ -985,7 +994,7 @@ def test_dashboard_template_shows_recent_scheduled_post_errors():
                     "campaign_status": "collecting",
                     "actor_label": "bsky.one",
                     "entrant_status": "pending",
-                    "campaign_href": "/scheduled-posts/post-1/page",
+                    "campaign_href": "/scheduled-posts/post-1/page#giveaway-details",
                     "campaign_label": "Spring giveaway",
                     "persona_name": "Savannah",
                     "detail": "ready to join",
@@ -1023,7 +1032,7 @@ def test_dashboard_giveaway_activity_can_expand_long_recent_activity():
             "campaign_status": "collecting",
             "actor_label": f"entrant.{index}",
             "entrant_status": "pending",
-            "campaign_href": "/scheduled-posts/post-1/page",
+            "campaign_href": "/scheduled-posts/post-1/page#giveaway-details",
             "campaign_label": "Spring giveaway",
             "persona_name": "Savannah",
             "detail": f"entry {index}",
@@ -1089,7 +1098,7 @@ def test_dashboard_giveaway_activity_links_to_open_giveaway_details():
             **base_monitor,
             "open_giveaways": [
                 {
-                    "href": "/scheduled-posts/post-1/page",
+                    "href": "/scheduled-posts/post-1/page#giveaway-details",
                     "label": "Spring giveaway",
                     "persona_name": "Savannah",
                     "status": "collecting",
@@ -1106,7 +1115,7 @@ def test_dashboard_giveaway_activity_links_to_open_giveaway_details():
             "metrics": {"campaigns": 2, "channels": 2, "entrants": 0, "activities": 0},
             "open_giveaways": [
                 {
-                    "href": "/scheduled-posts/post-1/page",
+                    "href": "/scheduled-posts/post-1/page#giveaway-details",
                     "label": "Spring giveaway",
                     "persona_name": "Savannah",
                     "status": "collecting",
@@ -1114,7 +1123,7 @@ def test_dashboard_giveaway_activity_links_to_open_giveaway_details():
                     "giveaway_end_at": None,
                 },
                 {
-                    "href": "/scheduled-posts/post-2/page",
+                    "href": "/scheduled-posts/post-2/page#giveaway-details",
                     "label": "Summer giveaway",
                     "persona_name": "Larkyn",
                     "status": "review_required",
@@ -1126,12 +1135,12 @@ def test_dashboard_giveaway_activity_links_to_open_giveaway_details():
     )
 
     assert "Open Giveaway Details" in single_html
-    assert 'href="/scheduled-posts/post-1/page"' in single_html
+    assert 'href="/scheduled-posts/post-1/page#giveaway-details"' in single_html
     assert "dropdown-toggle" not in single_html
     assert "dropdown-toggle" in multiple_html
     assert "Spring giveaway" in multiple_html
     assert "Summer giveaway" in multiple_html
-    assert 'href="/scheduled-posts/post-2/page"' in multiple_html
+    assert 'href="/scheduled-posts/post-2/page#giveaway-details"' in multiple_html
 
 
 def test_dashboard_template_truncates_long_navbar_identity_text():
