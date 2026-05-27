@@ -1391,6 +1391,13 @@ def test_theme_runtime_uses_selected_colorway_tokens():
     assert "--lp-select-icon" in stylesheet
     assert "background-image: var(--lp-select-icon), var(--lp-select-action-bg)" in stylesheet
     assert "body[data-ui-mode=\"dark\"] .form-select" in stylesheet
+    assert "Unified theme pass" in stylesheet
+    assert ".form-check-input:checked[type=\"checkbox\"]" in stylesheet
+    assert ".form-switch .form-check-input:checked[type=\"checkbox\"]" in stylesheet
+    assert ".badge.text-bg-success" in stylesheet
+    assert ".dashboard-v2-chip.is-green" in stylesheet
+    assert ".dropdown-item.active" in stylesheet
+    assert ".theme-option input:checked + .theme-option-card" in stylesheet
     assert ".composer-mobile-tabbar.composer-tabbar {\n    display: none;" in stylesheet
     assert "@media (max-width: 767.98px)" in stylesheet
     assert ".composer-mobile-tabbar.composer-tabbar {\n        position: sticky;" in stylesheet

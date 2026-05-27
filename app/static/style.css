@@ -2988,6 +2988,345 @@ body[data-ui-mode="dark"] .mobile-bottom-nav-create {
         var(--lp-theme-border) border-box;
 }
 
+/* Unified theme pass: one language for pills, toggles, checkboxes, and selected states. */
+:root {
+    --lp-check-icon: url("data:image/svg+xml,%3Csvg width='18' height='18' viewBox='0 0 18 18' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M4 9.2L7.25 12.35L14 5.65' stroke='%231e2b46' stroke-width='2.35' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+:where(
+    .soft-badge,
+    .badge.text-bg-light.border,
+    .badge.text-bg-info-subtle.border,
+    .dashboard-v2-live-pill,
+    .dashboard-v2-chip,
+    .dashboard-v2-panel-link,
+    .webhook-status-pill:not(.is-success),
+    .delivery-summary-pill:not(.is-success):not(.is-failure),
+    .app-version-pill,
+    .app-nav-badge,
+    .scheduled-kanban-toggle,
+    .planner-board-count-button,
+    .planner-mobile-tab,
+    .composer-tab,
+    .composer-tab-count
+) {
+    border: 1px solid transparent !important;
+    background:
+        linear-gradient(var(--lp-theme-active-fill), var(--lp-theme-active-fill)) padding-box,
+        var(--lp-theme-border) border-box !important;
+    color: var(--lp-ink) !important;
+}
+
+:where(
+    .btn-primary,
+    .btn-check:checked + .btn,
+    .nav-pills .nav-link.active,
+    .glass-tabs .nav-link.active,
+    .app-sidebar-link.active,
+    .mobile-bottom-nav-link.active,
+    .mobile-bottom-nav-create,
+    .app-mode-button.is-active,
+    .planner-mobile-tab.active,
+    .composer-tab.is-active,
+    .composer-tab.is-active .composer-tab-count,
+    .theme-option input:checked + .theme-option-card,
+    .dropdown-item.active,
+    .dropdown-item:active
+) {
+    border: 1px solid transparent !important;
+    background:
+        linear-gradient(var(--lp-theme-active-fill), var(--lp-theme-active-fill)) padding-box,
+        var(--lp-theme-border) border-box !important;
+    color: var(--lp-ink) !important;
+}
+
+:where(
+    .btn-outline-primary,
+    .btn-outline-secondary,
+    .btn-outline-success,
+    .btn-outline-warning,
+    .btn-outline-danger,
+    .dashboard-v2-panel-link,
+    .scheduled-kanban-toggle,
+    .planner-board-count-button,
+    .planner-mobile-tab,
+    .composer-tab,
+    .dropdown-item
+) {
+    transition:
+        background var(--lp-transition),
+        border-color var(--lp-transition),
+        color var(--lp-transition),
+        transform var(--lp-transition),
+        box-shadow var(--lp-transition);
+}
+
+:where(
+    .btn-outline-primary,
+    .btn-outline-secondary,
+    .dashboard-v2-panel-link,
+    .scheduled-kanban-toggle,
+    .planner-board-count-button,
+    .planner-mobile-tab,
+    .composer-tab
+):hover,
+:where(
+    .btn-outline-primary,
+    .btn-outline-secondary,
+    .dashboard-v2-panel-link,
+    .scheduled-kanban-toggle,
+    .planner-board-count-button,
+    .planner-mobile-tab,
+    .composer-tab
+):focus-visible {
+    border: 1px solid transparent !important;
+    background:
+        linear-gradient(var(--lp-theme-active-fill), var(--lp-theme-active-fill)) padding-box,
+        var(--lp-theme-border) border-box !important;
+    color: var(--lp-ink) !important;
+}
+
+.badge.text-bg-success,
+.badge.text-bg-success-subtle.border,
+.dashboard-v2-chip.is-green,
+.webhook-status-pill.is-success,
+.delivery-summary-pill.is-success {
+    border: 1px solid rgba(47, 169, 108, 0.26) !important;
+    background: rgba(47, 169, 108, 0.14) !important;
+    color: #176544 !important;
+}
+
+.badge.text-bg-warning,
+.badge.text-bg-warning-subtle.border,
+.dashboard-v2-chip.is-amber {
+    border: 1px solid rgba(216, 138, 20, 0.3) !important;
+    background: rgba(216, 138, 20, 0.14) !important;
+    color: #70460c !important;
+}
+
+.badge.text-bg-danger,
+.badge.text-bg-danger-subtle.border,
+.dashboard-v2-chip.is-red,
+.delivery-summary-pill.is-failure {
+    border: 1px solid rgba(216, 74, 88, 0.3) !important;
+    background: rgba(216, 74, 88, 0.14) !important;
+    color: #8d2430 !important;
+}
+
+.badge.text-bg-primary {
+    border: 1px solid transparent !important;
+    background:
+        linear-gradient(var(--lp-theme-active-fill), var(--lp-theme-active-fill)) padding-box,
+        var(--lp-theme-border) border-box !important;
+    color: var(--lp-ink) !important;
+}
+
+.badge.text-bg-secondary,
+.badge.text-bg-dark,
+.dashboard-v2-chip.is-muted {
+    border: 1px solid rgba(117, 136, 173, 0.24) !important;
+    background: rgba(255, 255, 255, 0.74) !important;
+    color: var(--lp-ink) !important;
+}
+
+.dropdown-menu {
+    border: 1px solid var(--lp-border);
+    border-radius: calc(var(--lp-container-radius) + 2px);
+    background: var(--lp-menu-bg);
+    box-shadow: 0 18px 42px rgba(var(--lp-shadow-rgb), 0.15);
+    backdrop-filter: blur(22px);
+}
+
+.dropdown-item {
+    border: 1px solid transparent;
+    border-radius: calc(var(--lp-control-radius) - 6px);
+    color: var(--lp-ink-soft);
+}
+
+.dropdown-item:hover,
+.dropdown-item:focus-visible {
+    border-color: rgba(117, 136, 173, 0.22);
+    background: rgba(255, 255, 255, 0.68);
+    color: var(--lp-ink);
+}
+
+.form-check {
+    min-width: 0;
+}
+
+.form-check-input {
+    width: 1.18em;
+    height: 1.18em;
+    margin-top: 0.18em;
+    border: 1px solid rgba(117, 136, 173, 0.34) !important;
+    background-color: rgba(255, 255, 255, 0.74) !important;
+    background-image: none !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.38);
+    cursor: pointer;
+    transition:
+        background var(--lp-transition),
+        border-color var(--lp-transition),
+        box-shadow var(--lp-transition),
+        transform var(--lp-transition);
+}
+
+.form-check-input[type="checkbox"] {
+    border-radius: 0.42rem !important;
+}
+
+.form-check-input[type="radio"] {
+    border-radius: 50% !important;
+}
+
+.form-check-input:hover {
+    border-color: var(--lp-theme-outline) !important;
+}
+
+.form-check-input:focus {
+    border-color: transparent !important;
+    box-shadow:
+        0 0 0 0.2rem var(--lp-theme-active-tint),
+        inset 0 1px 0 rgba(255, 255, 255, 0.46);
+}
+
+.form-check-input:checked {
+    border-color: transparent !important;
+    background-color: transparent !important;
+}
+
+.form-check-input:checked[type="checkbox"] {
+    background-image:
+        var(--lp-check-icon),
+        linear-gradient(var(--lp-theme-active-fill), var(--lp-theme-active-fill)),
+        var(--lp-theme-border) !important;
+    background-repeat: no-repeat, no-repeat, no-repeat;
+    background-position: center, center, center;
+    background-size: 0.8em 0.8em, 100% 100%, 100% 100%;
+    background-origin: border-box;
+    background-clip: border-box, padding-box, border-box;
+}
+
+.form-check-input:checked[type="radio"] {
+    background-image:
+        radial-gradient(circle at center, var(--lp-ink) 0 32%, transparent 34%),
+        linear-gradient(var(--lp-theme-active-fill), var(--lp-theme-active-fill)),
+        var(--lp-theme-border) !important;
+    background-repeat: no-repeat, no-repeat, no-repeat;
+    background-position: center, center, center;
+    background-size: 100% 100%, 100% 100%, 100% 100%;
+    background-origin: border-box;
+    background-clip: border-box, padding-box, border-box;
+}
+
+.form-switch .form-check-input {
+    width: 2.72em;
+    height: 1.42em;
+    border-radius: 999px !important;
+    background-image: radial-gradient(circle at center, rgba(95, 111, 142, 0.76) 0 35%, transparent 37%) !important;
+    background-position: left 0.2em center !important;
+    background-repeat: no-repeat !important;
+    background-size: 1.02em 1.02em !important;
+}
+
+.form-switch .form-check-input:checked[type="checkbox"] {
+    background-image:
+        radial-gradient(circle at center, var(--lp-ink) 0 35%, transparent 37%),
+        linear-gradient(var(--lp-theme-active-fill), var(--lp-theme-active-fill)),
+        var(--lp-theme-border) !important;
+    background-position: right 0.2em center, center, center !important;
+    background-size: 1.02em 1.02em, 100% 100%, 100% 100% !important;
+    background-clip: border-box, padding-box, border-box;
+}
+
+.form-check-input:disabled {
+    border-color: var(--lp-disabled-border) !important;
+    background-color: var(--lp-disabled-bg) !important;
+    box-shadow: none;
+}
+
+.theme-option input:checked + .theme-option-card {
+    box-shadow:
+        0 16px 34px rgba(var(--lp-shadow-rgb), 0.12),
+        inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.theme-option input:focus-visible + .theme-option-card {
+    box-shadow:
+        0 0 0 0.22rem var(--lp-theme-active-tint),
+        0 16px 34px rgba(var(--lp-shadow-rgb), 0.12);
+}
+
+body[data-ui-mode="dark"] {
+    --lp-check-icon: url("data:image/svg+xml,%3Csvg width='18' height='18' viewBox='0 0 18 18' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M4 9.2L7.25 12.35L14 5.65' stroke='%23f6f8fc' stroke-width='2.35' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+body[data-ui-mode="dark"] :where(
+    .soft-badge,
+    .badge.text-bg-light.border,
+    .badge.text-bg-info-subtle.border,
+    .dashboard-v2-live-pill,
+    .dashboard-v2-chip,
+    .dashboard-v2-panel-link,
+    .webhook-status-pill:not(.is-success),
+    .delivery-summary-pill:not(.is-success):not(.is-failure),
+    .app-version-pill,
+    .app-nav-badge,
+    .scheduled-kanban-toggle,
+    .planner-board-count-button,
+    .planner-mobile-tab,
+    .composer-tab,
+    .composer-tab-count,
+    .badge.text-bg-secondary,
+    .badge.text-bg-dark
+) {
+    color: #eef3fb !important;
+}
+
+body[data-ui-mode="dark"] .dropdown-menu {
+    background: rgba(18, 25, 38, 0.92);
+    border-color: rgba(136, 152, 184, 0.24);
+}
+
+body[data-ui-mode="dark"] .dropdown-item {
+    color: #c4cce0;
+}
+
+body[data-ui-mode="dark"] .dropdown-item:hover,
+body[data-ui-mode="dark"] .dropdown-item:focus-visible {
+    background: rgba(136, 152, 184, 0.14);
+    color: #f6f8fc;
+}
+
+body[data-ui-mode="dark"] .form-check-input {
+    background-color: rgba(18, 25, 38, 0.72) !important;
+    border-color: rgba(136, 152, 184, 0.28) !important;
+    box-shadow: none;
+}
+
+body[data-ui-mode="dark"] .badge.text-bg-success,
+body[data-ui-mode="dark"] .badge.text-bg-success-subtle.border,
+body[data-ui-mode="dark"] .dashboard-v2-chip.is-green,
+body[data-ui-mode="dark"] .webhook-status-pill.is-success,
+body[data-ui-mode="dark"] .delivery-summary-pill.is-success {
+    background: rgba(47, 169, 108, 0.22) !important;
+    color: #dff8ec !important;
+}
+
+body[data-ui-mode="dark"] .badge.text-bg-warning,
+body[data-ui-mode="dark"] .badge.text-bg-warning-subtle.border,
+body[data-ui-mode="dark"] .dashboard-v2-chip.is-amber {
+    background: rgba(216, 138, 20, 0.22) !important;
+    color: #ffe8bd !important;
+}
+
+body[data-ui-mode="dark"] .badge.text-bg-danger,
+body[data-ui-mode="dark"] .badge.text-bg-danger-subtle.border,
+body[data-ui-mode="dark"] .dashboard-v2-chip.is-red,
+body[data-ui-mode="dark"] .delivery-summary-pill.is-failure {
+    background: rgba(216, 74, 88, 0.22) !important;
+    color: #ffd8de !important;
+}
+
 /* Select controls need their own affordance; shared input backgrounds erase Bootstrap's arrow. */
 .form-select {
     --lp-select-icon: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M5 7.5L10 12.5L15 7.5' stroke='%235e6c87' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
