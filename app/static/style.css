@@ -3692,6 +3692,10 @@ body[data-ui-mode="dark"] .form-select option {
     background: rgba(255, 255, 255, 0.52);
 }
 
+.composer-mobile-tabbar.composer-tabbar {
+    display: none;
+}
+
 .composer-tab {
     display: inline-flex;
     align-items: center;
@@ -4121,7 +4125,7 @@ body[data-ui-mode="dark"] .planner-calendar-surface .scheduled-calendar-day-numb
         line-height: 1.1;
     }
 
-    .composer-mobile-tabbar {
+    .composer-mobile-tabbar.composer-tabbar {
         position: sticky;
         top: 0.45rem;
         z-index: 20;
