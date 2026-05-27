@@ -51,14 +51,14 @@ def test_manual_cycle_logs_and_runs_all_phases(session, monkeypatch):
     result = scheduler.run_manual_cycle()
 
     assert result["status"] == "ok"
-    assert calls == ["poll:manual", "due", "reconcile", "delivery", "giveaways:True", "cleanup"]
+    assert calls == ["poll:manual", "due", "reconcile", "delivery", "giveaways:False", "cleanup"]
     events = session.query(RunEvent).filter(RunEvent.operation == "automation_cycle").order_by(RunEvent.created_at).all()
     assert len(events) == 2
     assert "started" in events[0].message.lower()
     assert "completed" in events[1].message.lower()
 
 
-def test_autorun_cycle_lets_giveaway_engine_apply_private_scan_interval(session, monkeypatch):
+def test_autorun_cycle_keeps_instagram_private_scans_off_by_default(session, monkeypatch):
     scheduler = CrossposterScheduler(AlertDispatcher())
     scheduler._scheduler = FakeScheduler()
 
@@ -73,6 +73,29 @@ def test_autorun_cycle_lets_giveaway_engine_apply_private_scan_interval(session,
         lambda db, alerts, *, run_id=None, allow_instagram_private_scan=False: calls.append(f"giveaways:{allow_instagram_private_scan}"),
     )
     monkeypatch.setattr("app.services.scheduler.cleanup_stale_media_files", lambda db, *, run_id=None: calls.append("cleanup"))
+
+    result = scheduler._run_cycle(trigger="autorun")
+
+    assert result["status"] == "ok"
+    assert calls == ["poll:autorun", "due", "reconcile", "delivery", "giveaways:False", "cleanup"]
+
+
+def test_autorun_cycle_allows_weekly_private_scan_only_when_mode_is_weekly(session, monkeypatch):
+    scheduler = CrossposterScheduler(AlertDispatcher())
+    scheduler._scheduler = FakeScheduler()
+
+    calls: list[str] = []
+    monkeypatch.setattr("app.services.scheduler.db_session", lambda: _session_scope(session))
+    monkeypatch.setattr("app.services.scheduler.poll_sources", lambda db, alerts, *, run_id=None, trigger="manual": calls.append(f"poll:{trigger}"))
+    monkeypatch.setattr("app.services.scheduler.enqueue_due_scheduled_posts", lambda db, *, run_id=None: calls.append("due"))
+    monkeypatch.setattr("app.services.scheduler.reconcile_pending_posts", lambda db, *, run_id=None: calls.append("reconcile"))
+    monkeypatch.setattr("app.services.scheduler.process_delivery_queue", lambda db, alerts, *, run_id=None: calls.append("delivery"))
+    monkeypatch.setattr(
+        "app.services.scheduler.process_instagram_giveaway_lifecycle",
+        lambda db, alerts, *, run_id=None, allow_instagram_private_scan=False: calls.append(f"giveaways:{allow_instagram_private_scan}"),
+    )
+    monkeypatch.setattr("app.services.scheduler.cleanup_stale_media_files", lambda db, *, run_id=None: calls.append("cleanup"))
+    monkeypatch.setattr("app.services.scheduler.instagram_private_scan_mode", lambda: "weekly")
 
     result = scheduler._run_cycle(trigger="autorun")
 

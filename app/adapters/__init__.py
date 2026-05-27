@@ -126,7 +126,7 @@ SERVICE_REGISTRY: dict[str, ServiceDefinition] = {
                 "Private Verification Session ID",
                 input_type="password",
                 help_text=(
-                    "Optional. Used only for manual, due, or end-of-giveaway private verification when likes or follows cannot be confirmed through Graph/webhooks."
+                    "Optional. Used only for intentional private verification. Autorun stays Graph-only unless Instagram safety mode is set to a riskier option."
                 ),
             ),
             AccountFieldDefinition(
@@ -138,7 +138,7 @@ SERVICE_REGISTRY: dict[str, ServiceDefinition] = {
                 "instagrapi_password",
                 "Private Verification Password",
                 input_type="password",
-                help_text="Optional fallback used with Private Verification Username. Not used for normal publishing or 5-minute autorun.",
+                help_text="Optional fallback used with Private Verification Username. Not used for Graph publishing or default autorun.",
             ),
         ),
         source_setting_fields=(AccountFieldDefinition("post_time_limit", "Initial Poll Lookback (hours)", input_type="number"),),

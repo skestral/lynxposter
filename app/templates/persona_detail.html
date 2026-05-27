@@ -345,8 +345,14 @@
                                             <div class="section-kicker mb-2">Credentials</div>
                                             {% if entry.account.service == "instagram" %}
                                             <div class="small text-secondary mb-3">
-                                                Graph credentials power publishing and polling. Private verification fields are optional and only used for manual, due, or end-of-giveaway checks when likes or follows need confirmation.
+                                                Graph credentials power publishing and polling. Private verification fields are optional and only used for intentional manual review or risk-enabled giveaway checks.
                                             </div>
+                                            {% if entry.account.credentials_json.get("instagrapi_sessionid") or (entry.account.credentials_json.get("instagrapi_username") and entry.account.credentials_json.get("instagrapi_password")) %}
+                                            <div class="alert alert-warning py-2">
+                                                <div class="fw-semibold">Private Instagram verification is configured</div>
+                                                <div class="small mb-0">These saved login/session details are not used for Graph publishing or default autorun. Use Check Login and manual giveaway scans sparingly, especially after automation warnings.</div>
+                                            </div>
+                                            {% endif %}
                                             {% endif %}
                                             <div class="row g-3">
                                                 {% for field in entry.definition.credential_fields %}

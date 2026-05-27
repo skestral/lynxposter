@@ -15,6 +15,10 @@ from sqlalchemy import Select, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.adapters.instagram import _authenticated_publish_client, _instagram_destination_dependency_issue
+from app.services.instagram_private_policy import (
+    INSTAGRAM_PRIVATE_REASON_END_OF_GIVEAWAY,
+    instagram_private_access_decision,
+)
 from app.models import (
     Account,
     CanonicalPost,
@@ -761,6 +765,9 @@ def _refresh_giveaway_comment_evidence(giveaway: InstagramGiveaway) -> tuple[str
         return "captured_comment_fallback", [
             "Live comment revalidation was skipped because the Instagram media ID was unavailable.",
         ]
+    decision = instagram_private_access_decision(INSTAGRAM_PRIVATE_REASON_END_OF_GIVEAWAY)
+    if not decision.allowed:
+        return "captured_comment_fallback", [decision.message]
 
     dependency_issue = _instagram_destination_dependency_issue()
     if dependency_issue:
@@ -2049,6 +2056,14 @@ def _verify_like_and_follow(giveaway: InstagramGiveaway, entry: InstagramGiveawa
     like_status = RULE_STATUS_NOT_REQUIRED
     follow_status = RULE_STATUS_NOT_REQUIRED
     if not rules.get("require_like") and not rules.get("require_follow"):
+        return like_status, follow_status, inconclusive, disqualified
+    decision = instagram_private_access_decision(INSTAGRAM_PRIVATE_REASON_END_OF_GIVEAWAY)
+    if not decision.allowed:
+        if rules.get("require_like"):
+            like_status = RULE_STATUS_INCONCLUSIVE
+        if rules.get("require_follow"):
+            follow_status = RULE_STATUS_INCONCLUSIVE
+        inconclusive.append(decision.message)
         return like_status, follow_status, inconclusive, disqualified
 
     dependency_issue = _instagram_destination_dependency_issue()

@@ -543,6 +543,7 @@ async def _read_app_settings_payload(request: Request) -> dict[str, Any]:
         "instagram_webhooks_enabled": str(form.get("instagram_webhooks_enabled", "false")).lower() in {"1", "true", "on", "yes"},
         "instagram_webhook_verify_token": form.get("instagram_webhook_verify_token", ""),
         "instagram_app_secret": form.get("instagram_app_secret", ""),
+        "instagram_private_scan_mode": form.get("instagram_private_scan_mode", "manual_only"),
         "instagram_private_scan_interval_hours": int(form.get("instagram_private_scan_interval_hours", 168)),
         "media_orphan_retention_seconds": int(form.get("media_orphan_retention_seconds", 86400)),
     }
@@ -1247,6 +1248,10 @@ def settings_page(request: Request) -> HTMLResponse:
         webhook_verify_probe = f'curl "{webhook_callback_url}?{verify_query}"'
     with db_session() as session:
         latest_webhook = latest_instagram_webhook_event(session)
+        latest_private_scan = next(
+            iter(list_run_events(session, {"service": "instagram", "operation": "giveaway_private_scan"}, limit=1)),
+            None,
+        )
         return templates.TemplateResponse(
             name="settings.html",
             request=request,
@@ -1261,6 +1266,9 @@ def settings_page(request: Request) -> HTMLResponse:
                 instagram_webhook_callback_url=webhook_callback_url,
                 instagram_webhook_latest_received_at=latest_webhook.created_at if latest_webhook else None,
                 instagram_webhook_latest_event_type=latest_webhook.event_type if latest_webhook else None,
+                instagram_private_scan_latest_at=latest_private_scan.created_at if latest_private_scan else None,
+                instagram_private_scan_latest_message=latest_private_scan.message if latest_private_scan else None,
+                instagram_private_scan_latest_severity=latest_private_scan.severity if latest_private_scan else None,
                 instagram_webhook_required_fields=["comments", "mentions", "messages"],
                 instagram_tunnel_local_target=local_tunnel_target,
                 instagram_tunnel_cloudflared_command=f"cloudflared tunnel --url {local_tunnel_target}",

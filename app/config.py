@@ -106,6 +106,22 @@ def _media_orphan_retention_seconds() -> int:
     return _clamp_int(legacy_days * 86400, minimum=60, maximum=86400)
 
 
+def _instagram_private_scan_mode() -> str:
+    raw_value = _env_str("INSTAGRAM_PRIVATE_SCAN_MODE", "manual_only").lower().replace("-", "_")
+    aliases = {
+        "": "manual_only",
+        "manual": "manual_only",
+        "manual_only": "manual_only",
+        "graph_only": "manual_only",
+        "end": "end_only",
+        "end_only": "end_only",
+        "end_of_giveaway": "end_only",
+        "weekly": "weekly",
+        "weekly_due": "weekly",
+    }
+    return aliases.get(raw_value, "manual_only")
+
+
 @dataclass(frozen=True)
 class Settings:
     project_root: Path
@@ -144,6 +160,7 @@ class Settings:
     instagram_webhooks_enabled: bool
     instagram_webhook_verify_token: str
     instagram_app_secret: str
+    instagram_private_scan_mode: str
     instagram_private_scan_interval_hours: int
     scheduler_automation_interval_seconds: int
     media_orphan_retention_seconds: int
@@ -214,6 +231,7 @@ def get_settings() -> Settings:
         instagram_webhooks_enabled=_env_bool("INSTAGRAM_WEBHOOKS_ENABLED", False),
         instagram_webhook_verify_token=_env_str("INSTAGRAM_WEBHOOK_VERIFY_TOKEN", ""),
         instagram_app_secret=_env_str("INSTAGRAM_APP_SECRET", ""),
+        instagram_private_scan_mode=_instagram_private_scan_mode(),
         instagram_private_scan_interval_hours=_env_int("INSTAGRAM_PRIVATE_SCAN_INTERVAL_HOURS", 168),
         scheduler_automation_interval_seconds=_env_int("SCHEDULER_AUTORUN_INTERVAL_SECONDS", 300),
         media_orphan_retention_seconds=media_orphan_retention_seconds,

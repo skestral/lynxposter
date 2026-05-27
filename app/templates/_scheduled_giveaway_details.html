@@ -40,7 +40,7 @@
                     every {{ instagram_scan.interval_hours }} hour{{ "" if instagram_scan.interval_hours == 1 else "s" }}
                     {% if instagram_scan.due_at %} • next {{ instagram_scan.due_at|datetime_display }}{% endif %}
                 {% else %}
-                    manual only
+                    Graph-only automation; private checks are manual review only
                 {% endif %}
             </div>
             {% endif %}

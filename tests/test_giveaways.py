@@ -19,7 +19,7 @@ from app.config import reload_settings
 from app.database import Base
 from app.main import app
 from app.domain import MediaItem, PublishResult
-from app.models import AlertEvent, GiveawayEntrant, GiveawayEvidenceEvent, InstagramGiveawayWebhookEvent, MediaAttachment
+from app.models import AlertEvent, GiveawayEntrant, GiveawayEvidenceEvent, InstagramGiveawayWebhookEvent, MediaAttachment, RunEvent
 from app.schemas import ScheduledPostCreate
 from app.services.alerts import AlertDispatcher
 from app.services.auth import Principal
@@ -31,6 +31,7 @@ from app.services.giveaway_engine import (
     GIVEAWAY_STATUS_REVIEW_REQUIRED,
     GIVEAWAY_STATUS_WINNER_SELECTED,
     collect_bluesky_channel_state,
+    end_giveaway_campaign,
     evaluate_channel_entrants,
     process_giveaway_lifecycle,
     refresh_instagram_channel_state,
@@ -46,6 +47,21 @@ from app.services.personas import create_account, create_persona
 from app.services.delivery import process_delivery_queue
 from app.services.posts import create_scheduled_post, get_post, schedule_post_now
 from app.services.storage import settings as storage_settings
+
+
+@contextmanager
+def _instagram_private_scan_mode(mode: str):
+    previous = os.environ.get("INSTAGRAM_PRIVATE_SCAN_MODE")
+    os.environ["INSTAGRAM_PRIVATE_SCAN_MODE"] = mode
+    reload_settings()
+    try:
+        yield
+    finally:
+        if previous is None:
+            os.environ.pop("INSTAGRAM_PRIVATE_SCAN_MODE", None)
+        else:
+            os.environ["INSTAGRAM_PRIVATE_SCAN_MODE"] = previous
+        reload_settings()
 
 
 class _DumpableResponse:
@@ -567,7 +583,7 @@ def test_refresh_instagram_channel_state_collects_live_likes(session, monkeypatc
     monkeypatch.setattr("app.services.giveaway_engine._instagram_destination_dependency_issue", lambda: None)
     monkeypatch.setattr("app.services.giveaway_engine._authenticated_publish_client", lambda credentials: _FakeInstagramClient())
 
-    refresh_instagram_channel_state(session, channel)
+    refresh_instagram_channel_state(session, channel, force_private_scan=True)
 
     entrant = session.query(GiveawayEntrant).filter_by(channel_id=channel.id, provider_user_id="ig-user-like").one()
     assert entrant.provider_username == "liker.one"
@@ -733,6 +749,63 @@ def test_manual_instagram_scan_ignores_private_scan_interval(session, monkeypatc
     entrant = session.query(GiveawayEntrant).filter_by(channel_id=channel.id, provider_user_id="ig-user-manual").one()
     assert entrant.provider_username == "manual.liker"
     assert entrant.eligibility_status == ENTRY_STATUS_ELIGIBLE
+    scan_event = session.query(RunEvent).filter_by(service="instagram", operation="giveaway_private_scan").order_by(RunEvent.created_at.desc()).first()
+    assert scan_event is not None
+    assert scan_event.metadata_json["private_scan_reason"] == "manual"
+
+
+def test_end_giveaway_uses_graph_only_by_default_and_logs_blocked_private_scan(session, monkeypatch):
+    persona = _create_persona(session, slug="giveaway-end-graph-only")
+    instagram = _create_account(session, persona, service="instagram", label="Instagram")
+    post = create_scheduled_post(
+        session,
+        _generic_giveaway_payload(
+            persona.id,
+            [instagram.id],
+            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            channels=[
+                {
+                    "service": "instagram",
+                    "account_id": instagram.id,
+                    "rules": {
+                        "kind": "all",
+                        "children": [{"kind": "atom", "atom": "follow_present", "params": {}}],
+                    },
+                }
+            ],
+        ),
+        [],
+    )
+    _mark_posted(post, instagram.id, external_id="ig-media-end-graph")
+    channel = post.giveaway_campaign.channels[0]
+    channel.entrants.append(
+        GiveawayEntrant(
+            provider_user_id="ig-user-review",
+            provider_username="review.one",
+            display_label="review.one",
+            signal_state_json={},
+        )
+    )
+    session.flush()
+
+    monkeypatch.setattr(
+        "app.services.giveaway_engine._authenticated_publish_client",
+        lambda credentials: pytest.fail("Default giveaway close should not use private Instagram login."),
+    )
+
+    end_giveaway_campaign(session, post.giveaway_campaign, AlertDispatcher(), run_id="run-end-graph-only")
+
+    entrant = session.query(GiveawayEntrant).filter_by(channel_id=channel.id, provider_user_id="ig-user-review").one()
+    assert entrant.eligibility_status == ENTRY_STATUS_PROVISIONAL
+    assert channel.last_private_collected_at is None
+    blocked_event = (
+        session.query(RunEvent)
+        .filter_by(service="instagram", operation="giveaway_private_scan", severity="warning")
+        .order_by(RunEvent.created_at.desc())
+        .first()
+    )
+    assert blocked_event is not None
+    assert blocked_event.metadata_json["private_scan_status"] == "blocked"
 
 
 def test_due_instagram_scan_preserves_manual_private_scan_evidence(session, monkeypatch):
@@ -795,12 +868,13 @@ def test_due_instagram_scan_preserves_manual_private_scan_evidence(session, monk
     monkeypatch.setattr("app.services.giveaway_engine._instagram_destination_dependency_issue", lambda: None)
     monkeypatch.setattr("app.services.giveaway_engine._authenticated_publish_client", lambda credentials: _FakeInstagramClient())
 
-    process_giveaway_lifecycle(
-        session,
-        AlertDispatcher(),
-        run_id="run-due-preserve-manual",
-        allow_instagram_private_scan=True,
-    )
+    with _instagram_private_scan_mode("weekly"):
+        process_giveaway_lifecycle(
+            session,
+            AlertDispatcher(),
+            run_id="run-due-preserve-manual",
+            allow_instagram_private_scan=True,
+        )
 
     assert entrant.signal_state_json["like_present"] is True
     assert entrant.signal_state_json["likes"][0]["like_id"] == "like:ig-user-manual:ig-media-preserve"
@@ -1005,6 +1079,99 @@ def test_giveaway_lifecycle_defers_instagram_follow_verification_without_private
     assert "waiting for a manual" in entrant.inconclusive_reasons_json[0]
 
 
+def test_giveaway_lifecycle_defers_instagram_repost_without_official_evidence(session, monkeypatch):
+    persona = _create_persona(session, slug="giveaway-repost-manual-review")
+    instagram = _create_account(session, persona, service="instagram", label="Instagram")
+    post = create_scheduled_post(
+        session,
+        _generic_giveaway_payload(
+            persona.id,
+            [instagram.id],
+            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            channels=[
+                {
+                    "service": "instagram",
+                    "account_id": instagram.id,
+                    "rules": {
+                        "kind": "all",
+                        "children": [{"kind": "atom", "atom": "repost_present", "params": {}}],
+                    },
+                }
+            ],
+        ),
+        [],
+    )
+    _mark_posted(post, instagram.id, external_id="ig-media-repost-manual-review")
+    channel = post.giveaway_campaign.channels[0]
+    channel.entrants.append(
+        GiveawayEntrant(
+            provider_user_id="ig-user-repost",
+            provider_username="reposter.one",
+            display_label="reposter.one",
+            signal_state_json={},
+        )
+    )
+    session.flush()
+
+    def _fail_private_client(credentials):
+        raise AssertionError("Graph-only evaluation should not crawl Instagram reposts.")
+
+    monkeypatch.setattr("app.services.giveaway_engine._authenticated_publish_client", _fail_private_client)
+
+    process_giveaway_lifecycle(session, AlertDispatcher(), run_id="run-repost-private-guard")
+
+    entrant = session.query(GiveawayEntrant).filter_by(channel_id=channel.id, provider_user_id="ig-user-repost").one()
+    assert entrant.eligibility_status == ENTRY_STATUS_PROVISIONAL
+    assert "Official Instagram APIs do not expose public profile repost checks" in entrant.inconclusive_reasons_json[0]
+
+
+def test_instagram_graph_only_lifecycle_preserves_captured_private_follow_state(session, monkeypatch):
+    persona = _create_persona(session, slug="giveaway-follow-preserve-autorun")
+    instagram = _create_account(session, persona, service="instagram", label="Instagram")
+    post = create_scheduled_post(
+        session,
+        _generic_giveaway_payload(
+            persona.id,
+            [instagram.id],
+            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            channels=[
+                {
+                    "service": "instagram",
+                    "account_id": instagram.id,
+                    "rules": {
+                        "kind": "all",
+                        "children": [{"kind": "atom", "atom": "follow_present", "params": {}}],
+                    },
+                }
+            ],
+        ),
+        [],
+    )
+    _mark_posted(post, instagram.id, external_id="ig-media-follow-preserve")
+    channel = post.giveaway_campaign.channels[0]
+    channel.entrants.append(
+        GiveawayEntrant(
+            provider_user_id="ig-user-follow",
+            provider_username="follower.one",
+            display_label="follower.one",
+            signal_state_json={"follow_present": True, "follow_collection_checked": True},
+        )
+    )
+    session.flush()
+
+    monkeypatch.setattr(
+        "app.services.giveaway_engine._authenticated_publish_client",
+        lambda credentials: pytest.fail("Graph-only autorun should not rerun private follow checks."),
+    )
+
+    process_giveaway_lifecycle(session, AlertDispatcher(), run_id="run-follow-preserve-autorun")
+
+    entrant = session.query(GiveawayEntrant).filter_by(channel_id=channel.id, provider_user_id="ig-user-follow").one()
+    assert entrant.eligibility_status == ENTRY_STATUS_ELIGIBLE
+    assert entrant.signal_state_json["follow_present"] is True
+    assert entrant.signal_state_json["follow_collection_checked"] is True
+
+
 def test_giveaway_lifecycle_does_not_verify_follow_when_private_scan_not_due(session, monkeypatch):
     persona = _create_persona(session, slug="giveaway-follow-due-gate")
     instagram = _create_account(session, persona, service="instagram", label="Instagram")
@@ -1046,12 +1213,13 @@ def test_giveaway_lifecycle_does_not_verify_follow_when_private_scan_not_due(ses
     monkeypatch.setattr("app.services.giveaway_engine._instagram_destination_dependency_issue", lambda: None)
     monkeypatch.setattr("app.services.giveaway_engine._authenticated_publish_client", _fail_private_client)
 
-    process_giveaway_lifecycle(
-        session,
-        AlertDispatcher(),
-        run_id="run-follow-due-gate",
-        allow_instagram_private_scan=True,
-    )
+    with _instagram_private_scan_mode("weekly"):
+        process_giveaway_lifecycle(
+            session,
+            AlertDispatcher(),
+            run_id="run-follow-due-gate",
+            allow_instagram_private_scan=True,
+        )
 
     entrant = session.query(GiveawayEntrant).filter_by(channel_id=channel.id, provider_user_id="ig-user-follow").one()
     assert entrant.eligibility_status == ENTRY_STATUS_PROVISIONAL
@@ -1260,7 +1428,8 @@ def test_giveaway_lifecycle_updates_qualification_checks_after_collection(sessio
     monkeypatch.setattr("app.services.giveaway_engine._instagram_destination_dependency_issue", lambda: None)
     monkeypatch.setattr("app.services.giveaway_engine._authenticated_publish_client", lambda credentials: _FakeInstagramClient())
 
-    process_giveaway_lifecycle(session, AlertDispatcher(), run_id="run-live-checks", allow_instagram_private_scan=True)
+    with _instagram_private_scan_mode("weekly"):
+        process_giveaway_lifecycle(session, AlertDispatcher(), run_id="run-live-checks", allow_instagram_private_scan=True)
 
     channel = post.giveaway_campaign.channels[0]
     entrant = session.query(GiveawayEntrant).filter_by(channel_id=channel.id, provider_user_id="ig-user-like").one()
@@ -1659,10 +1828,17 @@ def test_process_giveaway_lifecycle_selects_verified_instagram_winner(session, m
         def media_comments(self, media_id, amount=0):
             return [_LiveComment()]
 
+        def media_likers(self, media_id):
+            return []
+
+        def user_stories(self, user_id):
+            return []
+
     monkeypatch.setattr("app.services.giveaway_engine._instagram_destination_dependency_issue", lambda: None)
     monkeypatch.setattr("app.services.giveaway_engine._authenticated_publish_client", lambda credentials: _LiveCommentClient())
 
-    process_instagram_giveaway_lifecycle(session, AlertDispatcher(), run_id="run-3")
+    with _instagram_private_scan_mode("end_only"):
+        process_instagram_giveaway_lifecycle(session, AlertDispatcher(), run_id="run-3")
 
     refreshed = get_post(session, post.id)
     assert refreshed is not None

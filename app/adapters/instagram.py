@@ -18,6 +18,7 @@ from app.config import get_settings
 from app.domain import CanonicalPostPayload, ExternalPostRefPayload, PollResult, PublishPreview, PublishResult, ValidationIssue
 from app.models import Account, AccountSyncState, CanonicalPost, MediaAttachment, Persona
 from app.services.instagram_private_api import apply_instagram_private_settings, get_instagram_private_settings
+from app.services.instagram_private_policy import INSTAGRAM_PRIVATE_REASON_DIAGNOSTIC, ensure_instagram_private_access_allowed
 from app.services.storage import delete_managed_media_file, download_media, normalize_media_file, public_instagram_media_url
 from app.utils import detect_mime_type, stable_checksum
 
@@ -433,6 +434,7 @@ def validate_instagram_account_login(
     previous_credentials: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], str, str | None]:
     config = dict(credentials or {})
+    ensure_instagram_private_access_allowed(INSTAGRAM_PRIVATE_REASON_DIAGNOSTIC)
     client = _authenticated_publish_client(config)
     settings = client.get_settings()
 

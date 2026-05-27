@@ -145,10 +145,19 @@
                                 <div class="col-md-6">
                                     <label class="form-label">Recommended Subscriptions</label>
                                     <div class="lp-static-field">{{ instagram_webhook_required_fields|join(", ") }}</div>
-                                    <div class="form-text">Comments, mentions, and messages can arrive live. Instagram likes and follows are only checked during manual, due, or end-of-giveaway private scans.</div>
+                                    <div class="form-text">Comments, mentions, and messages can arrive live. Follow checks and public repost checks require manual review or intentional private verification.</div>
                                 </div>
                                 <div class="col-md-6">
-                                    <label class="form-label">Private Giveaway Scan Interval (hours)</label>
+                                    <label class="form-label">Instagram Safety Mode</label>
+                                    <select class="form-select" name="instagram_private_scan_mode">
+                                        <option value="manual_only" {% if app_settings.instagram_private_scan_mode == "manual_only" %}selected{% endif %}>Graph-only automation, manual private scans only</option>
+                                        <option value="end_only" {% if app_settings.instagram_private_scan_mode == "end_only" %}selected{% endif %}>Allow private scan when a giveaway ends</option>
+                                        <option value="weekly" {% if app_settings.instagram_private_scan_mode == "weekly" %}selected{% endif %}>Allow weekly due private scans</option>
+                                    </select>
+                                    <div class="form-text">Recommended: Graph-only automation. Private scans use saved Instagram login/session details and should be used sparingly.</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Weekly Private Scan Interval (hours)</label>
                                     <input
                                         class="form-control"
                                         name="instagram_private_scan_interval_hours"
@@ -157,7 +166,20 @@
                                         max="168"
                                         value="{{ app_settings.instagram_private_scan_interval_hours }}"
                                     >
-                                    <div class="form-text">Defaults to once per week. Autorun uses only official Graph/webhook data until a giveaway ends. Set to 0 for manual and end-of-giveaway checks only.</div>
+                                    <div class="form-text">Only used when safety mode allows weekly private scans. Leave at 0 to keep private checks manual or close-only.</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Latest Private Scan</label>
+                                    <div class="lp-static-field {% if not instagram_private_scan_latest_at %}is-empty{% endif %}">
+                                        {{ instagram_private_scan_latest_at|datetime_display if instagram_private_scan_latest_at else "No private scans logged yet" }}
+                                    </div>
+                                    <div class="form-text">
+                                        {% if instagram_private_scan_latest_message %}
+                                            {{ instagram_private_scan_latest_severity|default("info")|title }}: {{ instagram_private_scan_latest_message }}
+                                        {% else %}
+                                            Private scan attempts, blocked checks, and manual runs are logged here.
+                                        {% endif %}
+                                    </div>
                                 </div>
                                 <div class="col-12">
                                     <div class="d-flex gap-2 flex-wrap">

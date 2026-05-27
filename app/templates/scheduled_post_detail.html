@@ -1097,7 +1097,7 @@ if (endGiveawayButton) {
 
 if (instagramScanButton) {
   instagramScanButton.addEventListener("click", async () => {
-    const confirmed = window.confirm("Run an Instagram private activity scan now? This uses the saved Instagram login and should be used intentionally.");
+    const confirmed = window.confirm("Run an Instagram private activity scan now? This uses the saved Instagram login/session and should be used sparingly, especially after automation warnings.");
     if (!confirmed) return;
     instagramScanButton.disabled = true;
     instagramScanButton.textContent = "Scanning Instagram...";

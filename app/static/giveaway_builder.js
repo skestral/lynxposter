@@ -4,8 +4,14 @@
       comment_present: {label: "Comment present"},
       story_mention_present: {label: "Story mention present"},
       like_present: {label: "Like present"},
-      repost_present: {label: "Share/repost present"},
-      follow_present: {label: "Follow present"},
+      repost_present: {
+        label: "Share/repost evidence",
+        help: "Story/message share evidence can arrive through official channels. Public profile repost checks need manual review or an intentional private scan.",
+      },
+      follow_present: {
+        label: "Follow present",
+        help: "Instagram does not expose entrant follow verification through the official Graph API. Treat this as manual review unless you run a private scan.",
+      },
       friend_mention_count_gte: {label: "Friend mention count at least", params: [{key: "count", type: "number", label: "Count", min: 0}]},
       comment_keywords_all: {label: "Comment contains all keywords", params: [{key: "keywords", type: "list", label: "Keywords"}]},
       comment_hashtags_all: {label: "Comment contains all hashtags", params: [{key: "hashtags", type: "list", label: "Hashtags"}]},
@@ -216,6 +222,7 @@
       .map(([atom, config]) => `<option value="${atom}" ${node.atom === atom ? "selected" : ""}>${escapeHtml(config.label)}</option>`)
       .join("");
     const config = RULE_CATALOG[service]?.[node.atom] || {};
+    const helpMarkup = config.help ? `<div class="small text-secondary mt-2">${escapeHtml(config.help)}</div>` : "";
     const paramsMarkup = (config.params || []).map((definition) => {
       const value = node.params?.[definition.key];
       if (definition.type === "number") {
@@ -266,6 +273,7 @@
             </div>
           </div>
           ${paramsMarkup}
+          ${helpMarkup ? `<div class="col-12">${helpMarkup}</div>` : ""}
         </div>
       </div>
     `;

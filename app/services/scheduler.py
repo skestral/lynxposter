@@ -11,6 +11,7 @@ from app.services.alerts import AlertDispatcher
 from app.services.delivery import enqueue_due_scheduled_posts, new_run_id, poll_sources, process_delivery_queue, reconcile_pending_posts
 from app.services.events import log_run_event
 from app.services.giveaway_engine import process_giveaway_lifecycle
+from app.services.instagram_private_policy import INSTAGRAM_PRIVATE_SCAN_MODE_WEEKLY, instagram_private_scan_mode
 from app.services.instagram_tokens import check_instagram_token_expiry
 from app.services.media_cleanup import cleanup_stale_media_files
 
@@ -136,7 +137,7 @@ class CrossposterScheduler:
                     session,
                     self.alerts,
                     run_id=run_id,
-                    allow_instagram_private_scan=True,
+                    allow_instagram_private_scan=instagram_private_scan_mode() == INSTAGRAM_PRIVATE_SCAN_MODE_WEEKLY,
                 )
                 check_instagram_token_expiry(session, self.alerts, run_id=run_id)
                 cleanup_stale_media_files(session, run_id=run_id)

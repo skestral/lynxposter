@@ -102,8 +102,16 @@ class AppSettingsUpdate(BaseModel):
     instagram_webhooks_enabled: bool = False
     instagram_webhook_verify_token: str = ""
     instagram_app_secret: str = ""
+    instagram_private_scan_mode: Literal["manual_only", "end_only", "weekly"] = "manual_only"
     instagram_private_scan_interval_hours: int = Field(default=168, ge=0, le=168)
     media_orphan_retention_seconds: int = Field(default=86400, ge=60, le=86400)
+
+    @field_validator("instagram_private_scan_mode", mode="before")
+    @classmethod
+    def _normalize_instagram_private_scan_mode(cls, value: Any) -> str:
+        from app.services.instagram_private_policy import normalize_instagram_private_scan_mode
+
+        return normalize_instagram_private_scan_mode(str(value) if value is not None else None)
 
     @field_validator("auth_oidc_scope", mode="before")
     @classmethod

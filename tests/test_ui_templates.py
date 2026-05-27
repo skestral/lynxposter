@@ -87,7 +87,8 @@ def test_instagram_service_definition_exposes_destination_credentials():
     assert fields["graph_api_host"].options == (("auto", "Auto"), ("instagram", "Instagram"), ("facebook", "Facebook"))
     assert fields["instagrapi_sessionid"].label == "Private Verification Session ID"
     assert fields["instagrapi_sessionid"].input_type == "password"
-    assert "end-of-giveaway private verification" in fields["instagrapi_sessionid"].help_text
+    assert "intentional private verification" in fields["instagrapi_sessionid"].help_text
+    assert "Graph-only" in fields["instagrapi_sessionid"].help_text
     assert fields["instagrapi_password"].label == "Private Verification Password"
     publish_fields = {field.name: field for field in definition.publish_setting_fields}
     assert publish_fields["video_media_type"].label == "Single Video Type"
@@ -202,7 +203,7 @@ def test_persona_detail_template_renders_telegram_controls_and_secret_toggles():
     assert 'data-field-name="instagrapi_sessionid"' in html
     assert 'data-field-name="instagrapi_password"' in html
     assert "Private Verification Session ID" in html
-    assert "Not used for normal publishing or 5-minute autorun" in html
+    assert "Not used for Graph publishing or default autorun" in html
     assert 'id="persona-detail-tabs"' in html
 
 
@@ -1298,6 +1299,8 @@ def test_settings_template_renders_instagram_webhook_setup_guidance():
             instagram_webhooks_enabled=True,
             instagram_webhook_verify_token="verify-me",
             instagram_app_secret="secret",
+            instagram_private_scan_mode="manual_only",
+            instagram_private_scan_interval_hours=168,
             scheduler_automation_interval_seconds=300,
             media_orphan_retention_seconds=900,
             webhook_logging_enabled=False,
@@ -1333,6 +1336,9 @@ def test_settings_template_renders_instagram_webhook_setup_guidance():
         instagram_webhook_callback_url="https://lynxposter.example.com/webhooks/instagram",
         instagram_webhook_latest_received_at=None,
         instagram_webhook_latest_event_type=None,
+        instagram_private_scan_latest_at=None,
+        instagram_private_scan_latest_message=None,
+        instagram_private_scan_latest_severity=None,
         instagram_webhook_required_fields=["comments", "mentions", "messages"],
         instagram_tunnel_local_target="http://127.0.0.1:8000",
         instagram_tunnel_cloudflared_command="cloudflared tunnel --url http://127.0.0.1:8000",
@@ -1348,7 +1354,9 @@ def test_settings_template_renders_instagram_webhook_setup_guidance():
     assert "Verify Token" in html
     assert "Recommended Subscriptions" in html
     assert "comments, mentions, messages" in html
-    assert "Instagram likes and follows are only checked during manual, due, or end-of-giveaway private scans" in html
+    assert "Instagram Safety Mode" in html
+    assert "Graph-only automation, manual private scans only" in html
+    assert "Latest Private Scan" in html
     assert 'name="media_orphan_retention_seconds"' in html
     assert '<option value="900" selected>15 minutes</option>' in html
     assert "Tunnel Helper" in html
