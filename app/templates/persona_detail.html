@@ -560,22 +560,32 @@
                 <div class="card section-card h-100">
                     <div class="card-body">
                         <div class="section-kicker mb-2">Current Access</div>
-                        <h2 class="h5 mb-3">Collaborators</h2>
+                        <h2 class="h5 mb-3">Owners and collaborators</h2>
                         <div class="d-flex flex-column gap-3">
                             {% for access in persona_access_entries %}
                             <div class="surface-panel-soft persona-access-row" data-access-id="{{ access.id }}">
                                 <div class="d-flex flex-column flex-md-row justify-content-between gap-3">
                                     <div>
-                                        <div class="fw-semibold">{{ access.email or access.user_id }}</div>
-                                        <div class="small text-secondary">{{ access.status|title }} · {{ access.permission|title }}</div>
+                                        <div class="fw-semibold">
+                                            {{ access.display_name or (access.user.effective_display_name if access.user else "") or access.email or access.user_id or "Persona owner" }}
+                                        </div>
+                                        <div class="small text-secondary">
+                                            {% if access.is_owner|default(false) %}Original owner · {% endif %}{{ access.status|title }} · {{ access.permission|title }}
+                                            {% if access.email %} · {{ access.email }}{% endif %}
+                                        </div>
                                     </div>
                                     <div class="d-flex gap-2 flex-wrap align-items-start">
+                                        {% if access.is_owner|default(false) %}
+                                        <span class="badge text-bg-light border">Owner</span>
+                                        <span class="small text-secondary align-self-center">Edit access by default.</span>
+                                        {% else %}
                                         <select class="form-select form-select-sm persona-access-permission" style="width: 140px;">
                                             <option value="view" {% if access.permission == "view" %}selected{% endif %}>View</option>
                                             <option value="edit" {% if access.permission == "edit" %}selected{% endif %}>Edit</option>
                                         </select>
                                         <button class="btn btn-sm btn-outline-primary persona-access-save" type="button">Save</button>
                                         <button class="btn btn-sm btn-outline-danger persona-access-delete" type="button">Remove</button>
+                                        {% endif %}
                                     </div>
                                 </div>
                             </div>

@@ -286,6 +286,74 @@ def test_persona_detail_template_renders_instagram_token_tracking_controls():
     assert "Instagram login failed. Challenge required." in html
 
 
+def test_persona_detail_sharing_tab_shows_original_owner():
+    html = templates.env.get_template("persona_detail.html").render(
+        request=_request_with_principal(),
+        current_principal=SimpleNamespace(
+            is_authenticated=True,
+            is_user=True,
+            is_admin=False,
+            user_id="owner-user",
+            display_name="Lynx",
+            role="user",
+            timezone="UTC",
+        ),
+        auth_enabled=False,
+        persona=SimpleNamespace(
+            id="persona-1",
+            name="Savannah",
+            slug="savannah",
+            is_enabled=True,
+            timezone="UTC",
+            accounts=[],
+            settings_json={},
+            retry_settings_json={"max_retries": 3},
+            throttle_settings_json={"max_per_hour": 0, "overflow_posts": "retry"},
+        ),
+        accounts=[],
+        routes=[],
+        routes_map={},
+        source_accounts=[],
+        destination_accounts=[],
+        service_definitions=iter_service_definitions(),
+        can_manage_persona_sharing=True,
+        can_manage_persona_credentials=True,
+        persona_access_permission="owner",
+        persona_access_entries=[
+            SimpleNamespace(
+                id="owner:persona-1",
+                user_id="owner-user",
+                email="owner@example.com",
+                display_name="Original Lynx",
+                status="active",
+                permission="edit",
+                is_owner=True,
+                user=None,
+            ),
+            SimpleNamespace(
+                id="access-1",
+                user_id="editor-user",
+                email="editor@example.com",
+                display_name="Editor Lynx",
+                status="active",
+                permission="edit",
+                is_owner=False,
+                user=None,
+            ),
+        ],
+    )
+
+    assert "Owners and collaborators" in html
+    assert "Original Lynx" in html
+    assert "Original owner" in html
+    assert "Edit access by default." in html
+    assert 'data-access-id="owner:persona-1"' in html
+    owner_row = html.split('data-access-id="owner:persona-1"', 1)[1].split('data-access-id="access-1"', 1)[0]
+    editor_row = html.split('data-access-id="access-1"', 1)[1].split("<script>", 1)[0]
+    assert "persona-access-delete" not in owner_row
+    assert "persona-access-delete" in editor_row
+
+
 def test_scheduled_post_templates_render_attachment_previews():
     detail_html = templates.env.get_template("scheduled_post_detail.html").render(
         request=_request_with_principal(),

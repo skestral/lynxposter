@@ -115,7 +115,7 @@ from app.services.personas import (
     get_account,
     get_persona,
     link_pending_persona_access_for_user,
-    list_persona_access,
+    list_persona_access_with_owner,
     list_pending_persona_access_for_user,
     list_personas,
     list_routes,
@@ -1043,7 +1043,7 @@ def persona_detail_page(persona_id: str, request: Request) -> HTMLResponse:
             principal.user_id,
             is_admin=principal.is_admin,
         )
-        persona_access_entries = list_persona_access(session, persona) if can_manage_credentials else []
+        persona_access_entries = list_persona_access_with_owner(session, persona) if can_manage_credentials else []
         accounts = [
             _account_template_context(account, include_credentials=can_manage_credentials)
             for account in sorted(persona.accounts, key=lambda item: (item.label, item.service))
@@ -1631,7 +1631,7 @@ def api_persona_access(persona_id: str, request: Request) -> list[PersonaAccessR
             raise HTTPException(status_code=404, detail="Persona not found.")
         if not user_can_manage_persona_access(persona, principal.user_id, is_admin=principal.is_admin):
             raise HTTPException(status_code=403, detail="Only the persona owner can manage sharing.")
-        return [PersonaAccessRead.model_validate(access) for access in list_persona_access(session, persona)]
+        return [PersonaAccessRead.model_validate(access) for access in list_persona_access_with_owner(session, persona)]
 
 
 @app.post("/personas/{persona_id}/access")

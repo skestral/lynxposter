@@ -11,6 +11,7 @@ from app.services.personas import (
     get_persona,
     link_pending_persona_access_for_user,
     list_persona_access,
+    list_persona_access_with_owner,
     list_pending_persona_access_for_user,
     list_personas,
     user_can_manage_persona_access,
@@ -69,6 +70,22 @@ def test_persona_access_filters_owner_edit_view_and_unrelated_users(session):
     assert user_can_manage_persona_access(persona, owner.id)
     assert not user_can_manage_persona_access(persona, editor.id)
     assert user_can_manage_persona_access(persona, outsider.id, is_admin=True)
+
+
+def test_persona_access_listing_includes_original_owner(session):
+    owner = _user(session, "owner-user", "owner@example.com")
+    editor = _user(session, "edit-user", "edit@example.com")
+    persona = _persona(session, owner_user_id=owner.id)
+    create_persona_access(session, persona, {"user_id": editor.id, "permission": "edit"}, created_by_user_id=owner.id)
+
+    access_rows = list_persona_access_with_owner(session, persona)
+
+    assert access_rows[0].is_owner is True
+    assert access_rows[0].user_id == owner.id
+    assert access_rows[0].email == owner.email
+    assert access_rows[0].permission == "edit"
+    assert access_rows[0].status == "active"
+    assert [row.user_id for row in access_rows] == [owner.id, editor.id]
 
 
 def test_persona_access_can_store_pending_email_invites(session):

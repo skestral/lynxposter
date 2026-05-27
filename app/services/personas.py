@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import datetime
+
 from sqlalchemy import exists, or_, select
 from sqlalchemy.orm import Session, selectinload
 
@@ -11,6 +14,23 @@ from app.services.instagram_tokens import apply_instagram_token_tracking, record
 
 _LEGACY_PERSONA_PUBLISH_KEYS = ("mastodon_lang", "twitter_lang")
 PERSONA_PERMISSION_ORDER = {"view": 1, "edit": 2}
+
+
+@dataclass(frozen=True)
+class PersonaAccessView:
+    id: str
+    persona_id: str
+    user_id: str | None
+    email: str | None
+    display_name: str | None
+    permission: str
+    status: str
+    created_by_user_id: str | None
+    is_owner: bool
+    created_at: datetime
+    updated_at: datetime
+    user: User | None = None
+    created_by_user: User | None = None
 
 
 def normalize_persona_permission(value: str | None) -> str:
@@ -68,7 +88,15 @@ def list_personas(
     access_user_id: str | None = None,
     min_permission: str = "view",
 ) -> list[Persona]:
-    stmt = select(Persona).options(selectinload(Persona.accounts), selectinload(Persona.access_entries)).order_by(Persona.name)
+    stmt = (
+        select(Persona)
+        .options(
+            selectinload(Persona.accounts),
+            selectinload(Persona.owner_user),
+            selectinload(Persona.access_entries),
+        )
+        .order_by(Persona.name)
+    )
     visibility_clause = _persona_visibility_clause(
         owner_user_id=owner_user_id,
         access_user_id=access_user_id,
@@ -89,7 +117,11 @@ def get_persona(
 ) -> Persona | None:
     stmt = (
         select(Persona)
-        .options(selectinload(Persona.accounts), selectinload(Persona.access_entries))
+        .options(
+            selectinload(Persona.accounts),
+            selectinload(Persona.owner_user),
+            selectinload(Persona.access_entries),
+        )
         .where(Persona.id == persona_id)
         .execution_options(populate_existing=True)
     )
@@ -142,9 +174,34 @@ def list_persona_access(session: Session, persona: Persona) -> list[PersonaAcces
     stmt = (
         select(PersonaAccess)
         .where(PersonaAccess.persona_id == persona.id)
+        .options(selectinload(PersonaAccess.user), selectinload(PersonaAccess.created_by_user))
         .order_by(PersonaAccess.status, PersonaAccess.email, PersonaAccess.user_id)
     )
     return list(session.scalars(stmt))
+
+
+def _persona_owner_access_view(persona: Persona) -> PersonaAccessView:
+    owner = persona.owner_user
+    owner_display_name = owner.effective_display_name if owner else None
+    return PersonaAccessView(
+        id=f"owner:{persona.id}",
+        persona_id=persona.id,
+        user_id=persona.owner_user_id,
+        email=owner.email if owner else None,
+        display_name=owner_display_name or persona.owner_user_id or "Original owner",
+        permission="edit",
+        status="active",
+        created_by_user_id=None,
+        is_owner=True,
+        created_at=persona.created_at,
+        updated_at=persona.updated_at,
+        user=owner,
+        created_by_user=None,
+    )
+
+
+def list_persona_access_with_owner(session: Session, persona: Persona) -> list[PersonaAccess | PersonaAccessView]:
+    return [_persona_owner_access_view(persona), *list_persona_access(session, persona)]
 
 
 def list_pending_persona_access_for_user(session: Session, user: User) -> list[PersonaAccess]:

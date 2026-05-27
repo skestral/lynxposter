@@ -63,9 +63,11 @@ class PersonaAccessRead(BaseModel):
     persona_id: str
     user_id: str | None = None
     email: str | None = None
+    display_name: str | None = None
     permission: Literal["view", "edit"]
     status: Literal["pending", "active"]
     created_by_user_id: str | None = None
+    is_owner: bool = False
     created_at: datetime
     updated_at: datetime
 
