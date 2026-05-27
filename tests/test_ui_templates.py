@@ -419,9 +419,14 @@ def test_scheduled_post_templates_render_attachment_previews():
     assert 'Media Queue' in create_html
     assert 'composer-media-dropzone' in create_html
     assert 'composer-media-sortable' in create_html
+    assert 'composer-workbench-surface' in create_html
+    assert 'composer-tabbar' in create_html
+    assert 'data-composer-tab-target="giveaway"' in create_html
+    assert 'giveaway-tab-status' in create_html
     assert 'selectedUploads' in create_html
     assert 'addUploadFiles' in create_html
     assert 'moveUploadItem' in create_html
+    assert 'activateComposerTab("giveaway")' in create_html
     assert 'for (const file of selectedUploads)' in create_html
     assert 'composer-design-grid' in create_html
     assert 'preview-persona-name' in create_html
