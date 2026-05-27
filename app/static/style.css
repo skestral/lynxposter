@@ -3323,34 +3323,6 @@ body[data-ui-mode="dark"] .form-select option {
     background: rgba(var(--lp-shadow-rgb), 0.03);
 }
 
-.planner-board-mini-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.42rem;
-    min-width: 0;
-}
-
-.planner-board-mini-card {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    justify-content: center;
-    gap: 0.16rem;
-    width: 100%;
-    min-width: 0;
-    max-width: 100%;
-    min-height: 2.78rem;
-    padding: 0.48rem 0.58rem;
-    border: 1px solid rgba(117, 136, 173, 0.18);
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.68);
-    color: var(--lp-ink);
-    font-size: 0.76rem;
-    line-height: 1.22;
-    text-decoration: none;
-    box-shadow: none;
-}
-
 .planner-board-mini-title,
 .planner-board-mini-meta {
     display: block;
@@ -4064,7 +4036,6 @@ body[data-ui-mode="dark"] .composer-tab.is-active .composer-tab-count {
     color: #eef3fb;
 }
 
-body[data-ui-mode="dark"] .planner-board-mini-card,
 body[data-ui-mode="dark"] .planner-lane-modal-card,
 body[data-ui-mode="dark"] .planner-mobile-tab,
 body[data-ui-mode="dark"] .planner-calendar-card,
@@ -4179,11 +4150,7 @@ body[data-ui-mode="dark"] .planner-calendar-surface .scheduled-calendar-day-numb
     }
 
     .planner-workspace-page .figma-page-actions {
-        flex-wrap: nowrap;
-        width: 100%;
-        overflow-x: auto;
-        padding-bottom: 0.2rem;
-        scrollbar-width: none;
+        display: none;
     }
 
     .planner-workspace-page .figma-page-actions::-webkit-scrollbar,
@@ -4342,15 +4309,6 @@ body[data-ui-mode="dark"] .planner-calendar-surface .scheduled-calendar-day-numb
     .planner-board-surface .scheduled-kanban-lane {
         min-height: auto;
         padding: 0.72rem;
-    }
-
-    .planner-board-mini-list {
-        gap: 0.35rem;
-    }
-
-    .planner-board-mini-card {
-        min-height: 2.45rem;
-        padding: 0.42rem 0.52rem;
     }
 
     .planner-board-modal-summary {

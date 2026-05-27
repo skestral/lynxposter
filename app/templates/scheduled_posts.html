@@ -358,7 +358,6 @@ const kanbanLabels = {
   done: "Completed",
 };
 const kanbanCollapsedLimit = 3;
-const kanbanSnapshotLimit = 2;
 const plannerState = {
   viewMode: plannerIsMonthPage ? "month" : "week",
   anchorDate: new Date(),
@@ -670,27 +669,6 @@ function plannerCalendarCardMarkup(post) {
   `;
 }
 
-function plannerBoardMiniCardMarkup(post) {
-  const deliveryNote = post.failureCount
-    ? `${post.failureCount} failed`
-    : post.successCount
-      ? `${post.successCount} delivered`
-      : `${post.targetCount} target${post.targetCount === 1 ? "" : "s"}`;
-  const title = summarizeBody(post.body);
-  const meta = `${statusLabel(post.displayStatus)} • ${post.personaName} • ${deliveryNote}`;
-  return `
-    <a
-      class="planner-board-mini-card planner-card ${post.canDrag ? "is-draggable" : "is-locked"}"
-      href="${post.href}"
-      data-post-id="${post.id}"
-      ${post.canDrag ? 'draggable="true"' : ""}
-    >
-      <span class="planner-board-mini-title">${escapeHtml(title)}</span>
-      <span class="planner-board-mini-meta">${escapeHtml(meta)}</span>
-    </a>
-  `;
-}
-
 function plannerLaneModalCardMarkup(post) {
   const deliveryNote = post.failureCount
     ? `${post.failureCount} failed`
@@ -871,9 +849,7 @@ function renderKanbanBoard() {
     const count = document.getElementById(kanbanCountIds[bucket]);
     const isExpanded = plannerIsFullBoard && kanbanExpandedBuckets.has(bucket);
     const hasHiddenCards = items.length > kanbanCollapsedLimit;
-    const visibleItems = plannerIsFullBoard
-      ? (hasHiddenCards && !isExpanded ? items.slice(-kanbanCollapsedLimit) : items)
-      : items.slice(-kanbanSnapshotLimit);
+    const visibleItems = hasHiddenCards && !isExpanded ? items.slice(-kanbanCollapsedLimit) : items;
     const toggleLabel = isExpanded ? "Show last 3" : `Display all ${items.length}`;
     const toggleMarkup = hasHiddenCards
       ? `
@@ -893,7 +869,7 @@ function renderKanbanBoard() {
     const snapshotSummaryMarkup = items.length
       ? `
         <div class="scheduled-kanban-list-summary planner-board-modal-summary">
-          <span>Showing latest ${visibleItems.length} of ${items.length}</span>
+          <span>${items.length} card${items.length === 1 ? "" : "s"} in this lane</span>
           <button class="btn btn-sm btn-outline-secondary scheduled-kanban-toggle" type="button" data-kanban-modal="${bucket}">
             View lane
           </button>
@@ -912,12 +888,7 @@ function renderKanbanBoard() {
       ? "Nothing to show here."
       : "Drop a card here.";
     lane.innerHTML = `
-      ${
-        visibleItems.length
-          ? `<div class="planner-board-mini-list">${visibleItems.map((post) => plannerBoardMiniCardMarkup(post)).join("")}</div>`
-          : `<div class="planner-board-lane-empty">${escapeHtml(emptyText)}</div>`
-      }
-      ${snapshotSummaryMarkup}
+      ${items.length ? snapshotSummaryMarkup : `<div class="planner-board-lane-empty">${escapeHtml(emptyText)}</div>`}
     `;
   });
   bindPlannerInteractions();
