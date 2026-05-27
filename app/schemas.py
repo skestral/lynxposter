@@ -528,6 +528,7 @@ class ScheduledPostUpdate(BaseModel):
     giveaway: "GiveawayConfigInput | None" = None
     attachment_order: list[str] | None = None
     deleted_attachment_ids: list[str] | None = None
+    attachment_alt_texts: dict[str, str] | None = None
 
     @field_validator("post_type", mode="before")
     @classmethod

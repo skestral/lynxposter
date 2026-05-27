@@ -503,7 +503,10 @@ def test_scheduled_post_templates_render_attachment_previews():
     assert 'addUploadFiles' in create_html
     assert 'moveUploadItem' in create_html
     assert 'activateComposerTab("giveaway")' in create_html
-    assert 'for (const file of selectedUploads)' in create_html
+    assert 'for (const upload of selectedUploads)' in create_html
+    assert 'upload-alt-input' in create_html
+    assert 'saved-alt-input' in detail_html
+    assert 'attachment_alt_texts' in detail_html
     assert 'composer-design-grid' in create_html
     assert 'preview-persona-name' in create_html
     assert 'Save Post' in create_html

@@ -289,6 +289,80 @@ def test_update_scheduled_post_reorders_and_deletes_media_attachments(session, t
     assert paths[2].exists()
 
 
+def test_update_scheduled_post_updates_saved_attachment_alt_text(session, tmp_path):
+    persona = _create_persona(session, slug="attachments-alt-text")
+    mastodon = _create_account(session, persona, service="mastodon", label="Mastodon", source_enabled=False, destination_enabled=True)
+
+    image_path = tmp_path / "one.jpg"
+    image_path.write_bytes(b"one")
+    post = create_scheduled_post(
+        session,
+        ScheduledPostCreate.model_validate(
+            {
+                "persona_id": persona.id,
+                "body": "With image alt text",
+                "status": "draft",
+                "target_account_ids": [mastodon.id],
+                "publish_overrides_json": {},
+                "metadata_json": {},
+                "scheduled_for": None,
+            }
+        ),
+        [
+            MediaItem(
+                storage_path=image_path,
+                mime_type="image/jpeg",
+                alt_text="Old description",
+                size_bytes=image_path.stat().st_size,
+                checksum="one",
+                sort_order=0,
+            )
+        ],
+    )
+    attachment_id = post.attachments[0].id
+
+    updated = update_scheduled_post(
+        session,
+        post,
+        ScheduledPostUpdate.model_validate(
+            {
+                "attachment_alt_texts": {
+                    attachment_id: "A small black cat sleeping on a blue blanket",
+                }
+            }
+        ),
+    )
+
+    assert updated.attachments[0].alt_text == "A small black cat sleeping on a blue blanket"
+
+
+def test_update_scheduled_post_rejects_unknown_alt_text_attachment(session):
+    persona = _create_persona(session, slug="attachments-alt-text-unknown")
+    mastodon = _create_account(session, persona, service="mastodon", label="Mastodon", source_enabled=False, destination_enabled=True)
+    post = create_scheduled_post(
+        session,
+        ScheduledPostCreate.model_validate(
+            {
+                "persona_id": persona.id,
+                "body": "No media yet",
+                "status": "draft",
+                "target_account_ids": [mastodon.id],
+                "publish_overrides_json": {},
+                "metadata_json": {},
+                "scheduled_for": None,
+            }
+        ),
+        [],
+    )
+
+    with pytest.raises(ValueError, match="Alt text"):
+        update_scheduled_post(
+            session,
+            post,
+            ScheduledPostUpdate.model_validate({"attachment_alt_texts": {"missing": "Description"}}),
+        )
+
+
 def test_destination_media_override_selects_ordered_attachment_subset(session, tmp_path):
     persona = _create_persona(session, slug="destination-media-override")
     mastodon = _create_account(session, persona, service="mastodon", label="Mastodon", source_enabled=False, destination_enabled=True)

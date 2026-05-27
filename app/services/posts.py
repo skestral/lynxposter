@@ -152,8 +152,20 @@ def _sync_post_attachments(
     *,
     attachment_order: list[str] | None,
     deleted_attachment_ids: list[str] | None,
+    attachment_alt_texts: dict[str, str] | None,
 ) -> None:
     attachments_by_id = {attachment.id: attachment for attachment in post.attachments}
+    alt_text_updates = {
+        str(attachment_id or "").strip(): str(alt_text or "").strip()
+        for attachment_id, alt_text in dict(attachment_alt_texts or {}).items()
+        if str(attachment_id or "").strip()
+    }
+    unknown_alt_text_ids = [attachment_id for attachment_id in alt_text_updates if attachment_id not in attachments_by_id]
+    if unknown_alt_text_ids:
+        raise ValueError("Alt text can only be edited for media already attached to this post.")
+    for attachment_id, alt_text in alt_text_updates.items():
+        attachments_by_id[attachment_id].alt_text = alt_text
+
     deleted_ids = [str(item or "").strip() for item in deleted_attachment_ids or [] if str(item or "").strip()]
     unknown_deleted = [attachment_id for attachment_id in deleted_ids if attachment_id not in attachments_by_id]
     if unknown_deleted:
@@ -452,6 +464,7 @@ def update_scheduled_post(
         post,
         attachment_order=payload.attachment_order,
         deleted_attachment_ids=payload.deleted_attachment_ids,
+        attachment_alt_texts=payload.attachment_alt_texts,
     )
 
     next_sort_order = len(post.attachments)

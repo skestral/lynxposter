@@ -207,7 +207,7 @@
                                                             data-attachment-id="{{ attachment.id }}"
                                                             {% if override_attachment_ids is none or attachment.id in override_attachment_ids %}checked{% endif %}
                                                         >
-                                                        <span>{{ loop.index }}. {{ attachment.mime_type }}</span>
+                                                        <span>{{ loop.index }}. {{ attachment.alt_text or attachment.mime_type }}</span>
                                                     </label>
                                                     {% else %}
                                                     <div class="small text-secondary">Save media on this post before setting destination media.</div>
@@ -483,6 +483,7 @@ existingAttachments.sort((left, right) => {
   if (leftOrder !== rightOrder) return leftOrder - rightOrder;
   return String(left.id || "").localeCompare(String(right.id || ""));
 });
+const mediaAltTextMaxLength = 1000;
 
 const bodyTextarea = document.querySelector("textarea[name='body']");
 const bodyLengthIndicator = document.getElementById("body-length-indicator");
@@ -655,6 +656,15 @@ function renderSavedAttachments() {
             <div class="fw-semibold text-truncate">${escapeHtml(savedAttachmentTitle(attachment))}</div>
             <div class="small text-secondary">${escapeHtml(attachment.mime_type || "Unknown type")} &bull; ${formatFileSize(Number(attachment.size_bytes || 0))}</div>
             <div class="small-muted code-ish text-truncate mt-1">${escapeHtml(attachment.storage_path || "")}</div>
+            <label class="form-label small-muted mt-2 mb-1" for="saved-alt-${escapeHtml(attachment.id)}">Alt text</label>
+            <textarea
+              class="form-control form-control-sm saved-alt-input"
+              id="saved-alt-${escapeHtml(attachment.id)}"
+              data-attachment-id="${escapeHtml(attachment.id)}"
+              maxlength="${mediaAltTextMaxLength}"
+              rows="2"
+              ${isDeleted ? "disabled" : ""}
+              placeholder="Describe this media for screen readers">${escapeHtml(attachment.alt_text || "")}</textarea>
             ${isDeleted ? '<div class="small text-danger mt-1">Marked for removal on save.</div>' : ""}
           </div>
         </div>
@@ -698,7 +708,7 @@ function renderUploadPreviews() {
     uploadPreviewList.innerHTML = '<div class="col-12"><div class="small text-secondary">No new files selected.</div></div>';
     return;
   }
-  for (const file of files) {
+  files.forEach((file, index) => {
     const item = document.createElement("div");
     item.className = "col-12";
     const preview = file.type.startsWith("image/")
@@ -713,12 +723,20 @@ function renderUploadPreviews() {
           <div class="col-md-8">
             <div class="fw-semibold">${escapeHtml(file.name)}</div>
             <div class="small text-secondary">${escapeHtml(file.type || "Unknown type")} &bull; ${formatFileSize(file.size)}</div>
+            <label class="form-label small-muted mt-2 mb-1" for="new-upload-alt-${index}">Alt text</label>
+            <textarea
+              class="form-control form-control-sm new-upload-alt-input"
+              id="new-upload-alt-${index}"
+              data-new-upload-alt-index="${index}"
+              maxlength="${mediaAltTextMaxLength}"
+              rows="2"
+              placeholder="Describe this media for screen readers"></textarea>
           </div>
         </div>
       </div>
     `;
     uploadPreviewList.appendChild(item);
-  }
+  });
 }
 
 function describeServiceGuidance(rule) {
@@ -929,8 +947,19 @@ function buildPostPayload(form) {
     metadata_json: metadata,
     attachment_order: activeExistingAttachments().map((item) => item.id),
     deleted_attachment_ids: deletedAttachmentIds(),
+    attachment_alt_texts: Object.fromEntries(
+      activeExistingAttachments().map((item) => [item.id, item.alt_text || ""])
+    ),
     giveaway: buildGiveawayPayload(),
   };
+}
+
+function pendingUploadAltTexts() {
+  const fields = Array.from(document.querySelectorAll(".new-upload-alt-input"));
+  return Array.from(uploadsInput?.files || []).map((_, index) => {
+    const field = fields.find((item) => Number(item.dataset.newUploadAltIndex) === index);
+    return field ? field.value.slice(0, mediaAltTextMaxLength) : "";
+  });
 }
 
 document.getElementById("scheduled-post-update-form").addEventListener("submit", async (event) => {
@@ -954,8 +983,9 @@ document.getElementById("scheduled-post-update-form").addEventListener("submit",
   payload.append("metadata_json", JSON.stringify(postPayload.metadata_json));
   payload.append("attachment_order", JSON.stringify(postPayload.attachment_order));
   payload.append("deleted_attachment_ids", JSON.stringify(postPayload.deleted_attachment_ids));
+  payload.append("attachment_alt_texts", JSON.stringify(postPayload.attachment_alt_texts));
   payload.append("giveaway_json", JSON.stringify(postPayload.giveaway));
-  payload.append("alt_texts", JSON.stringify([]));
+  payload.append("alt_texts", JSON.stringify(pendingUploadAltTexts()));
   for (const file of form.uploads.files) {
     payload.append("uploads", file);
   }
@@ -1149,6 +1179,14 @@ savedAttachmentList?.addEventListener("click", (event) => {
   } else if (button.dataset.action === "remove") {
     toggleSavedAttachmentDeleted(index);
   }
+});
+savedAttachmentList?.addEventListener("input", (event) => {
+  const field = event.target.closest(".saved-alt-input");
+  if (!field) return;
+  const attachment = existingAttachments.find((item) => item.id === field.dataset.attachmentId);
+  if (!attachment) return;
+  attachment.alt_text = field.value.slice(0, mediaAltTextMaxLength);
+  refreshPostGuidance();
 });
 renderSavedAttachments();
 renderUploadPreviews();

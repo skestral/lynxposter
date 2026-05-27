@@ -659,7 +659,7 @@ class InstagramDestinationAdapter(DestinationAdapter):
         if graph_issue:
             notes.append(graph_issue)
         if any(str(attachment.alt_text or "").strip() for attachment in attachments):
-            notes.append("Alt text is sent for single image posts when present.")
+            notes.append("Alt text is sent for image posts and image carousel items when present.")
 
         return PublishPreview(
             service="instagram",
@@ -709,7 +709,7 @@ class InstagramDestinationAdapter(DestinationAdapter):
                     "image_url": _instagram_public_media_url(attachment),
                     "caption": caption,
                 }
-                alt_text = str(attachment.alt_text or "").strip()
+                alt_text = str(attachment.alt_text or "").strip()[:1000]
                 if alt_text:
                     container_data["alt_text"] = alt_text
             elif mime_type in INSTAGRAM_GRAPH_VIDEO_MIME_TYPES:
@@ -741,6 +741,9 @@ class InstagramDestinationAdapter(DestinationAdapter):
                         "image_url": _instagram_public_media_url(attachment),
                         "is_carousel_item": "true",
                     }
+                    alt_text = str(attachment.alt_text or "").strip()[:1000]
+                    if alt_text:
+                        child_data["alt_text"] = alt_text
                 elif mime_type in INSTAGRAM_GRAPH_VIDEO_MIME_TYPES:
                     child_data = {
                         "video_url": _instagram_public_media_url(attachment),

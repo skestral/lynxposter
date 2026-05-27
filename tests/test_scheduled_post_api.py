@@ -287,6 +287,67 @@ def test_update_scheduled_post_api_reorders_and_deletes_attachments(api_stack, t
         assert [attachment.id for attachment in saved_attachments] == [attachment_ids["three"], attachment_ids["one"]]
 
 
+def test_update_scheduled_post_api_updates_attachment_alt_text(api_stack, tmp_path):
+    api_client, SessionLocal = api_stack
+    with SessionLocal() as session:
+        persona = _create_persona(session, slug="scheduled-post-api-alt-text")
+        destination = _create_destination_account(session, persona)
+
+        image_path = tmp_path / "one.jpg"
+        image_path.write_bytes(b"image-one")
+        post = create_scheduled_post(
+            session,
+            ScheduledPostCreate.model_validate(
+                {
+                    "persona_id": persona.id,
+                    "body": "Draft body",
+                    "status": "draft",
+                    "target_account_ids": [destination.id],
+                    "publish_overrides_json": {},
+                    "metadata_json": {},
+                    "scheduled_for": None,
+                }
+            ),
+            [
+                MediaItem(
+                    storage_path=Path(image_path),
+                    mime_type="image/jpeg",
+                    alt_text="Old description",
+                    size_bytes=image_path.stat().st_size,
+                    checksum="checksum-one",
+                    sort_order=0,
+                )
+            ],
+        )
+        session.commit()
+        post_id = post.id
+        destination_id = destination.id
+        attachment_id = post.attachments[0].id
+
+    response = api_client.put(
+        f"/scheduled-posts/{post_id}",
+        data={
+            "body": "Draft body",
+            "status": "draft",
+            "target_account_ids": json.dumps([destination_id]),
+            "publish_overrides_json": json.dumps({}),
+            "metadata_json": json.dumps({}),
+            "scheduled_for": "",
+            "attachment_alt_texts": json.dumps({attachment_id: "A product photo on a pink background"}),
+            "alt_texts": json.dumps([]),
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["attachments"][0]["alt_text"] == "A product photo on a pink background"
+
+    with SessionLocal() as session:
+        saved = get_post(session, post_id)
+        assert saved is not None
+        assert saved.attachments[0].alt_text == "A product photo on a pink background"
+
+
 def test_update_scheduled_post_api_accepts_json_schedule_moves(api_stack):
     api_client, SessionLocal = api_stack
     with SessionLocal() as session:

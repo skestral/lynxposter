@@ -269,6 +269,7 @@ const scheduledPostForm = document.getElementById("scheduled-post-form");
 let selectedUploads = [];
 let uploadPreviewUrls = [];
 let draggedUploadIndex = null;
+const mediaAltTextMaxLength = 1000;
 
 function activateComposerTab(tabName) {
   scheduledPostForm.dataset.activeComposerTab = tabName;
@@ -315,7 +316,7 @@ function escapeHtml(value) {
 }
 
 function attachmentSnapshot(files) {
-  const items = Array.from(files || []);
+  const items = Array.from(files || []).map((item) => item?.file || item);
   const images = items.filter((item) => (item.type || "").startsWith("image/"));
   const videos = items.filter((item) => (item.type || "").startsWith("video/"));
   const others = items.filter((item) => !(item.type || "").startsWith("image/") && !(item.type || "").startsWith("video/"));
@@ -542,7 +543,7 @@ function cleanupUploadPreviewUrls() {
 function addUploadFiles(files) {
   const incoming = Array.from(files || []);
   if (!incoming.length) return;
-  selectedUploads = selectedUploads.concat(incoming);
+  selectedUploads = selectedUploads.concat(incoming.map((file) => ({file, altText: ""})));
   renderUploadPreviews();
   refreshPostGuidance();
 }
@@ -566,7 +567,8 @@ function removeUploadItem(index) {
   refreshPostGuidance();
 }
 
-function renderUploadPreviewMedia(file) {
+function renderUploadPreviewMedia(upload) {
+  const file = upload.file || upload;
   if ((file.type || "").startsWith("image/")) {
     const url = URL.createObjectURL(file);
     uploadPreviewUrls.push(url);
@@ -580,13 +582,14 @@ function renderUploadPreviewMedia(file) {
 
 function renderUploadPreviews() {
   cleanupUploadPreviewUrls();
-  const files = selectedUploads;
+  const uploads = selectedUploads;
   uploadPreviewList.innerHTML = "";
-  if (!files.length) {
+  if (!uploads.length) {
     uploadPreviewList.innerHTML = '<div class="composer-media-empty">No media selected yet.</div>';
     return;
   }
-  files.forEach((file, index) => {
+  uploads.forEach((upload, index) => {
+    const file = upload.file;
     const item = document.createElement("div");
     item.className = "composer-media-item";
     item.draggable = true;
@@ -594,16 +597,24 @@ function renderUploadPreviews() {
     item.innerHTML = `
       <div class="composer-media-card">
         <div class="composer-media-thumb">
-          ${renderUploadPreviewMedia(file)}
+          ${renderUploadPreviewMedia(upload)}
           <span class="composer-media-order">${index + 1}</span>
         </div>
         <div class="composer-media-copy">
           <div class="fw-semibold text-truncate">${escapeHtml(file.name)}</div>
           <div class="small text-secondary">${escapeHtml(file.type || "Unknown type")} • ${formatFileSize(file.size)}</div>
+          <label class="form-label small-muted mt-2 mb-1" for="upload-alt-${index}">Alt text</label>
+          <textarea
+            class="form-control form-control-sm upload-alt-input"
+            id="upload-alt-${index}"
+            data-upload-alt-index="${index}"
+            maxlength="${mediaAltTextMaxLength}"
+            rows="2"
+            placeholder="Describe this media for screen readers">${escapeHtml(upload.altText || "")}</textarea>
         </div>
         <div class="composer-media-actions" aria-label="Media order controls">
           <button class="btn btn-sm btn-outline-secondary" type="button" data-upload-action="up" data-upload-index="${index}" ${index === 0 ? "disabled" : ""}>Up</button>
-          <button class="btn btn-sm btn-outline-secondary" type="button" data-upload-action="down" data-upload-index="${index}" ${index === files.length - 1 ? "disabled" : ""}>Down</button>
+          <button class="btn btn-sm btn-outline-secondary" type="button" data-upload-action="down" data-upload-index="${index}" ${index === uploads.length - 1 ? "disabled" : ""}>Down</button>
           <button class="btn btn-sm btn-outline-danger" type="button" data-upload-action="remove" data-upload-index="${index}">Remove</button>
         </div>
       </div>
@@ -648,6 +659,14 @@ uploadPreviewList.addEventListener("click", (event) => {
   } else if (button.dataset.uploadAction === "down") {
     moveUploadItem(index, index + 1);
   }
+});
+
+uploadPreviewList.addEventListener("input", (event) => {
+  const field = event.target.closest(".upload-alt-input");
+  if (!field) return;
+  const index = Number(field.dataset.uploadAltIndex);
+  if (!Number.isInteger(index) || !selectedUploads[index]) return;
+  selectedUploads[index].altText = field.value.slice(0, mediaAltTextMaxLength);
 });
 
 uploadPreviewList.addEventListener("dragstart", (event) => {
@@ -817,9 +836,9 @@ scheduledPostForm.addEventListener("submit", async (event) => {
   payload.append("metadata_json", JSON.stringify(metadata));
   payload.append("scheduled_for", form.scheduled_for.value);
   payload.append("giveaway_json", JSON.stringify(giveaway));
-  payload.append("alt_texts", JSON.stringify([]));
-  for (const file of selectedUploads) {
-    payload.append("uploads", file);
+  payload.append("alt_texts", JSON.stringify(selectedUploads.map((upload) => upload.altText || "")));
+  for (const upload of selectedUploads) {
+    payload.append("uploads", upload.file);
   }
 
   const response = await fetch("/scheduled-posts", {method: "POST", body: payload});

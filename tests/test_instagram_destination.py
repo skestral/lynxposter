@@ -492,7 +492,7 @@ def test_instagram_destination_publish_album_uses_graph_children(session, monkey
             }
         ),
         [
-            MediaItem(storage_path=image_path, mime_type="image/jpeg", alt_text="", size_bytes=4, checksum="img-1", sort_order=0),
+            MediaItem(storage_path=image_path, mime_type="image/jpeg", alt_text="Carousel image alt", size_bytes=4, checksum="img-1", sort_order=0),
             MediaItem(storage_path=video_path, mime_type="video/mp4", alt_text="", size_bytes=5, checksum="vid-1", sort_order=1),
         ],
     )
@@ -542,4 +542,5 @@ def test_instagram_destination_publish_album_uses_graph_children(session, monkey
     assert result.external_id == "media-3"
     assert result.external_url == "https://www.instagram.com/p/GHI789/"
     assert post_calls[0]["image_url"].startswith("https://lynxposter.example.com/media/instagram/")
+    assert post_calls[0]["alt_text"] == "Carousel image alt"
     assert post_calls[1]["video_url"].startswith("https://lynxposter.example.com/media/instagram/")

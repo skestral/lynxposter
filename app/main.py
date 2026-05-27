@@ -599,6 +599,7 @@ async def _read_scheduled_post_payload(request: Request) -> tuple[dict[str, Any]
         "giveaway": _parse_json_value(form.get("giveaway_json"), None),
         "attachment_order": _parse_json_value(form.get("attachment_order"), None),
         "deleted_attachment_ids": _parse_json_value(form.get("deleted_attachment_ids"), None),
+        "attachment_alt_texts": _parse_json_value(form.get("attachment_alt_texts"), None),
     }
     if isinstance(payload.get("giveaway"), dict):
         payload["giveaway"]["giveaway_end_at"] = _local_timezone_to_utc(
