@@ -1,53 +1,26 @@
 {% extends "base.html" %}
 {% block content %}
 {% if personas %}
-<div class="composer-workspace-page">
-    <section class="figma-page-header">
+<div class="composer-workspace-page composer-v2-page">
+    <section class="figma-page-header composer-v2-header">
         <div>
             <div class="section-kicker mb-2">Post Composer</div>
-            <h1 class="h3 mb-1">Post Composer</h1>
-            <p class="text-secondary mb-0">Build copy, media, destination rules, and scheduling from one editor.</p>
+            <h1 class="h3 mb-1">New Post</h1>
+            <p class="text-secondary mb-0">Compose once, arrange media, choose destinations, and save the plan.</p>
         </div>
         <div class="figma-page-actions">
             <a class="btn btn-outline-secondary" href="/scheduled-posts/page">Cancel</a>
-            <button class="btn btn-primary" type="submit" form="scheduled-post-form">Post</button>
+            <button class="btn btn-primary" type="submit" form="scheduled-post-form">Save Post</button>
         </div>
     </section>
 
-    <form id="scheduled-post-form" class="composer-form-shell">
-        <section class="figma-stat-grid composer-stat-grid" aria-label="Composer summary">
-            <div class="figma-stat-card">
-                <div class="figma-stat-accent"></div>
-                <div class="figma-stat-label">Step 1</div>
-                <div class="figma-stat-value">Active</div>
-                <div class="figma-stat-detail">Caption and setup</div>
-            </div>
-            <div class="figma-stat-card">
-                <div class="figma-stat-accent"></div>
-                <div class="figma-stat-label">Targets</div>
-                <div class="figma-stat-value" id="snapshot-targets">0 targets</div>
-                <div class="figma-stat-detail">Selected destinations</div>
-            </div>
-            <div class="figma-stat-card">
-                <div class="figma-stat-accent"></div>
-                <div class="figma-stat-label">Media</div>
-                <div class="figma-stat-value" id="snapshot-attachments">0 attachments</div>
-                <div class="figma-stat-detail">Upload queue</div>
-            </div>
-            <div class="figma-stat-card">
-                <div class="figma-stat-accent"></div>
-                <div class="figma-stat-label">Body</div>
-                <div class="figma-stat-value" id="snapshot-body-length">0 chars</div>
-                <div class="figma-stat-detail">Current length</div>
-            </div>
-        </section>
-
-        <section class="composer-design-grid">
-            <div class="composer-editor-surface">
-                <div class="composer-surface-header">
+    <form id="scheduled-post-form" class="composer-form-shell composer-v2-shell">
+        <section class="composer-design-grid composer-v2-grid">
+            <div class="composer-editor-surface composer-v2-panel">
+                <div class="composer-surface-header composer-v2-panel-header">
                     <div>
-                        <h2 class="h4 mb-1">Post Composer</h2>
-                        <p class="text-secondary mb-0">Start with the shared caption, then tune media and destinations.</p>
+                        <h2 class="h5 mb-1">Compose</h2>
+                        <p class="text-secondary mb-0">Global caption and post timing.</p>
                     </div>
                     <span class="badge soft-badge rounded-pill px-3 py-2" id="preview-status-pill">Draft</span>
                 </div>
@@ -85,54 +58,13 @@
                     <textarea class="form-control" name="body" rows="7" placeholder="What is your post saying today?"></textarea>
                 </div>
 
-                <div class="composer-media-queue">
+                <section class="composer-schedule-surface composer-inline-schedule">
                     <div class="composer-surface-header is-compact">
                         <div>
-                            <h3 class="h5 mb-1">Media Queue</h3>
-                            <p class="text-secondary mb-0" id="upload-summary">Selected images and videos will travel with this post plan.</p>
-                        </div>
-                        <label class="btn btn-outline-primary mb-0">
-                            Add media
-                            <input class="visually-hidden" name="uploads" type="file" multiple>
-                        </label>
-                    </div>
-                    <div id="upload-preview-list" class="composer-media-list"></div>
-                </div>
-
-                <div class="composer-override-launcher">
-                    <div class="figma-stat-accent"></div>
-                    <span>Destination-specific copy and media overrides are available after saving the post plan.</span>
-                </div>
-            </div>
-
-            <div class="composer-side-stack">
-                <section class="composer-platform-surface">
-                    <div class="composer-surface-header">
-                        <div>
-                            <h2 class="h5 mb-1">Platform Preview</h2>
-                            <p class="text-secondary mb-0">Review selected destinations and service guidance.</p>
+                            <h3 class="h6 mb-1">Schedule</h3>
+                            <p class="text-secondary mb-0">Leave blank for draft-only planning.</p>
                         </div>
                     </div>
-                    <div class="composer-preview-phone">
-                        <div class="composer-preview-header">
-                            <div>
-                                <div class="fw-semibold" id="preview-persona-name">{{ personas[0].name }}</div>
-                                <div class="small text-secondary" id="preview-schedule-label">Not scheduled yet</div>
-                            </div>
-                            <div class="small text-secondary">lynxposter</div>
-                        </div>
-                        <div class="composer-preview-body" id="preview-body-copy">Your post preview appears here as you type.</div>
-                        <div class="composer-preview-media" id="preview-media-summary">No media selected yet.</div>
-                        <div class="composer-preview-footer">
-                            <span id="preview-target-count">0 targets</span>
-                            <span id="preview-attachment-count">0 attachments</span>
-                        </div>
-                    </div>
-                    <div class="composer-destination-rows" id="target-account-list"></div>
-                </section>
-
-                <section class="composer-schedule-surface">
-                    <h2 class="h5 mb-3">Scheduling</h2>
                     <div class="composer-schedule-grid">
                         <div>
                             <label class="form-label d-flex align-items-center gap-2 flex-wrap">
@@ -157,8 +89,67 @@
                         </div>
                     </div>
                 </section>
+            </div>
 
-                <section class="composer-giveaway-surface">
+            <div class="composer-media-surface composer-v2-panel">
+                <div class="composer-surface-header composer-v2-panel-header">
+                    <div>
+                        <h2 class="h5 mb-1">Media Queue</h2>
+                        <p class="text-secondary mb-0" id="upload-summary">Drag media in, then arrange the publish order.</p>
+                    </div>
+                    <span class="badge soft-badge rounded-pill px-3 py-2" id="snapshot-attachments">0 attachments</span>
+                </div>
+                <div class="composer-media-dropzone" id="composer-media-dropzone" tabindex="0" role="button" aria-label="Add media files">
+                    <div>
+                        <div class="fw-semibold">Drop images or videos here</div>
+                        <div class="small text-secondary">Drag to reorder. Remove anything before saving.</div>
+                    </div>
+                    <label class="btn btn-outline-primary mb-0">
+                        Add media
+                        <input class="visually-hidden" name="uploads" type="file" multiple>
+                    </label>
+                </div>
+                <div id="upload-preview-list" class="composer-media-list composer-media-sortable"></div>
+            </div>
+
+            <div class="composer-side-stack composer-review-column">
+                <section class="composer-platform-surface composer-v2-panel">
+                    <div class="composer-surface-header composer-v2-panel-header">
+                        <div>
+                            <h2 class="h5 mb-1">Preview</h2>
+                            <p class="text-secondary mb-0">Fast read on how this plan is shaping up.</p>
+                        </div>
+                    </div>
+                    <div class="composer-preview-phone">
+                        <div class="composer-preview-header">
+                            <div>
+                                <div class="fw-semibold" id="preview-persona-name">{{ personas[0].name }}</div>
+                                <div class="small text-secondary" id="preview-schedule-label">Not scheduled yet</div>
+                            </div>
+                            <div class="small text-secondary">lynxposter</div>
+                        </div>
+                        <div class="composer-preview-body" id="preview-body-copy">Your post preview appears here as you type.</div>
+                        <div class="composer-preview-media" id="preview-media-summary">No media selected yet.</div>
+                        <div class="composer-preview-footer">
+                            <span id="preview-target-count">0 targets</span>
+                            <span id="preview-attachment-count">0 attachments</span>
+                            <span id="snapshot-body-length">0 chars</span>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="composer-destinations-surface composer-v2-panel">
+                    <div class="composer-surface-header composer-v2-panel-header">
+                        <div>
+                            <h2 class="h5 mb-1">Destinations</h2>
+                            <p class="text-secondary mb-0">Open a destination to adjust its copy.</p>
+                        </div>
+                        <span class="badge soft-badge rounded-pill px-3 py-2" id="snapshot-targets">0 targets</span>
+                    </div>
+                    <div class="composer-destination-rows" id="target-account-list"></div>
+                </section>
+
+                <section class="composer-giveaway-surface composer-v2-panel">
                     <div class="surface-panel giveaway-only d-none" id="giveaway-config-panel">
                         <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
                             <div>
@@ -177,11 +168,6 @@
                 </section>
             </div>
         </section>
-
-        <div class="composer-action-row">
-            <button class="btn btn-primary" type="submit">Create Post Plan</button>
-            <a class="btn btn-outline-secondary" href="/scheduled-posts/page">Back to Planner</a>
-        </div>
     </form>
 </div>
 {% else %}
@@ -211,6 +197,7 @@ const bodyTextarea = document.querySelector("textarea[name='body']");
 const uploadsInput = document.querySelector("input[name='uploads']");
 const uploadPreviewList = document.getElementById("upload-preview-list");
 const uploadSummary = document.getElementById("upload-summary");
+const mediaDropzone = document.getElementById("composer-media-dropzone");
 const bodyLengthIndicator = document.getElementById("body-length-indicator");
 const snapshotBodyLength = document.getElementById("snapshot-body-length");
 const snapshotAttachments = document.getElementById("snapshot-attachments");
@@ -229,6 +216,9 @@ const previewMediaSummary = document.getElementById("preview-media-summary");
 const previewTargetCount = document.getElementById("preview-target-count");
 const previewAttachmentCount = document.getElementById("preview-attachment-count");
 const previewStatusPill = document.getElementById("preview-status-pill");
+let selectedUploads = [];
+let uploadPreviewUrls = [];
+let draggedUploadIndex = null;
 
 function currentGiveawayServiceAccounts() {
   const accounts = personaTargets[personaSelect.value] || [];
@@ -397,21 +387,25 @@ function renderTargetAccounts() {
     wrapper.dataset.accountService = account.service;
     wrapper.innerHTML = `
       <div class="composer-destination-card">
-        <div class="form-check">
-          <input class="form-check-input target-checkbox" type="checkbox" value="${account.id}" id="target-${account.id}" checked>
-          <label class="form-check-label fw-semibold" for="target-${account.id}">${account.label}</label>
-          <span class="small-muted ms-2">${account.service}</span>
+        <div class="composer-destination-head">
+          <div class="form-check mb-0">
+            <input class="form-check-input target-checkbox" type="checkbox" value="${account.id}" id="target-${account.id}" checked>
+            <label class="form-check-label fw-semibold" for="target-${account.id}">${escapeHtml(account.label)}</label>
+          </div>
+          <span class="badge text-bg-light border">${escapeHtml(account.service)}</span>
         </div>
-        <div class="small text-secondary mt-2">${escapeHtml(describeServiceGuidance(servicePostGuidance[account.service]))}</div>
-        <div class="mt-2">
-          <label class="form-label small-muted mb-1">Optional override body</label>
-          <textarea class="form-control override-body" data-account-id="${account.id}" rows="2"></textarea>
-        </div>
-        <div class="post-guidance-panel border rounded p-2 bg-body-tertiary mt-3" data-account-id="${account.id}">
-          <div class="fw-semibold small">Delivery Notes</div>
-          <div class="small text-secondary post-guidance-summary"></div>
-          <div class="small mt-2 post-guidance-status"></div>
-        </div>
+        <div class="small text-secondary mt-2 post-guidance-summary">${escapeHtml(describeServiceGuidance(servicePostGuidance[account.service]))}</div>
+        <details class="composer-destination-details mt-2">
+          <summary>Customize</summary>
+          <div class="mt-2">
+            <label class="form-label small-muted mb-1">Override body</label>
+            <textarea class="form-control override-body" data-account-id="${account.id}" rows="2"></textarea>
+          </div>
+          <div class="post-guidance-panel border rounded p-2 bg-body-tertiary mt-3" data-account-id="${account.id}">
+            <div class="fw-semibold small">Delivery notes</div>
+            <div class="small mt-2 post-guidance-status"></div>
+          </div>
+        </details>
       </div>
     `;
     targetAccountList.appendChild(wrapper);
@@ -470,35 +464,151 @@ function formatFileSize(bytes) {
   return `${value.toFixed(value >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
 }
 
-function renderUploadPreviews() {
-  const files = Array.from(uploadsInput.files || []);
-  uploadPreviewList.innerHTML = "";
-  if (!files.length) {
-    uploadPreviewList.innerHTML = '<div class="col-12"><div class="small text-secondary">No files selected yet.</div></div>';
+function cleanupUploadPreviewUrls() {
+  uploadPreviewUrls.forEach((url) => URL.revokeObjectURL(url));
+  uploadPreviewUrls = [];
+}
+
+function addUploadFiles(files) {
+  const incoming = Array.from(files || []);
+  if (!incoming.length) return;
+  selectedUploads = selectedUploads.concat(incoming);
+  renderUploadPreviews();
+  refreshPostGuidance();
+}
+
+function moveUploadItem(fromIndex, toIndex) {
+  if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0 || fromIndex >= selectedUploads.length || toIndex >= selectedUploads.length) {
     return;
   }
-  for (const file of files) {
+  const next = selectedUploads.slice();
+  const [moved] = next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, moved);
+  selectedUploads = next;
+  renderUploadPreviews();
+  refreshPostGuidance();
+}
+
+function removeUploadItem(index) {
+  if (index < 0 || index >= selectedUploads.length) return;
+  selectedUploads = selectedUploads.filter((_, currentIndex) => currentIndex !== index);
+  renderUploadPreviews();
+  refreshPostGuidance();
+}
+
+function renderUploadPreviewMedia(file) {
+  if ((file.type || "").startsWith("image/")) {
+    const url = URL.createObjectURL(file);
+    uploadPreviewUrls.push(url);
+    return `<img src="${url}" alt="${escapeHtml(file.name)}" loading="lazy">`;
+  }
+  if ((file.type || "").startsWith("video/")) {
+    return '<div class="composer-media-kind">Video</div>';
+  }
+  return '<div class="composer-media-kind">File</div>';
+}
+
+function renderUploadPreviews() {
+  cleanupUploadPreviewUrls();
+  const files = selectedUploads;
+  uploadPreviewList.innerHTML = "";
+  if (!files.length) {
+    uploadPreviewList.innerHTML = '<div class="composer-media-empty">No media selected yet.</div>';
+    return;
+  }
+  files.forEach((file, index) => {
     const item = document.createElement("div");
     item.className = "composer-media-item";
-    const preview = file.type.startsWith("image/")
-      ? `<img src="${URL.createObjectURL(file)}" alt="${file.name}" class="img-fluid rounded border" style="max-height: 220px;">`
-      : `<div class="border rounded bg-light px-3 py-4 text-secondary text-center">${file.type || "Attachment"}</div>`;
+    item.draggable = true;
+    item.dataset.uploadIndex = String(index);
     item.innerHTML = `
       <div class="composer-media-card">
-        <div class="row g-3 align-items-center">
-          <div class="col-md-4">
-            ${preview}
-          </div>
-          <div class="col-md-8">
-            <div class="fw-semibold">${file.name}</div>
-            <div class="small text-secondary">${file.type || "Unknown type"} • ${formatFileSize(file.size)}</div>
-          </div>
+        <div class="composer-media-thumb">
+          ${renderUploadPreviewMedia(file)}
+          <span class="composer-media-order">${index + 1}</span>
+        </div>
+        <div class="composer-media-copy">
+          <div class="fw-semibold text-truncate">${escapeHtml(file.name)}</div>
+          <div class="small text-secondary">${escapeHtml(file.type || "Unknown type")} • ${formatFileSize(file.size)}</div>
+        </div>
+        <div class="composer-media-actions" aria-label="Media order controls">
+          <button class="btn btn-sm btn-outline-secondary" type="button" data-upload-action="up" data-upload-index="${index}" ${index === 0 ? "disabled" : ""}>Up</button>
+          <button class="btn btn-sm btn-outline-secondary" type="button" data-upload-action="down" data-upload-index="${index}" ${index === files.length - 1 ? "disabled" : ""}>Down</button>
+          <button class="btn btn-sm btn-outline-danger" type="button" data-upload-action="remove" data-upload-index="${index}">Remove</button>
         </div>
       </div>
     `;
     uploadPreviewList.appendChild(item);
-  }
+  });
 }
+
+function bindMediaDropzone() {
+  if (!mediaDropzone) return;
+  ["dragenter", "dragover"].forEach((eventName) => {
+    mediaDropzone.addEventListener(eventName, (event) => {
+      event.preventDefault();
+      mediaDropzone.classList.add("is-dragover");
+    });
+  });
+  ["dragleave", "drop"].forEach((eventName) => {
+    mediaDropzone.addEventListener(eventName, () => {
+      mediaDropzone.classList.remove("is-dragover");
+    });
+  });
+  mediaDropzone.addEventListener("drop", (event) => {
+    event.preventDefault();
+    addUploadFiles(event.dataTransfer?.files || []);
+  });
+  mediaDropzone.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      uploadsInput.click();
+    }
+  });
+}
+
+uploadPreviewList.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-upload-action]");
+  if (!button) return;
+  const index = Number(button.dataset.uploadIndex);
+  if (button.dataset.uploadAction === "remove") {
+    removeUploadItem(index);
+  } else if (button.dataset.uploadAction === "up") {
+    moveUploadItem(index, index - 1);
+  } else if (button.dataset.uploadAction === "down") {
+    moveUploadItem(index, index + 1);
+  }
+});
+
+uploadPreviewList.addEventListener("dragstart", (event) => {
+  const item = event.target.closest(".composer-media-item");
+  if (!item) return;
+  draggedUploadIndex = Number(item.dataset.uploadIndex);
+  item.classList.add("is-dragging");
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = "move";
+  }
+});
+
+uploadPreviewList.addEventListener("dragend", () => {
+  draggedUploadIndex = null;
+  uploadPreviewList.querySelectorAll(".composer-media-item").forEach((item) => item.classList.remove("is-dragging"));
+});
+
+uploadPreviewList.addEventListener("dragover", (event) => {
+  if (draggedUploadIndex === null) return;
+  event.preventDefault();
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = "move";
+  }
+});
+
+uploadPreviewList.addEventListener("drop", (event) => {
+  const item = event.target.closest(".composer-media-item");
+  if (!item || draggedUploadIndex === null) return;
+  event.preventDefault();
+  moveUploadItem(draggedUploadIndex, Number(item.dataset.uploadIndex));
+});
 
 function formatScheduledPreview(value) {
   if (!value) return "Not scheduled yet";
@@ -513,7 +623,7 @@ function formatScheduledPreview(value) {
 }
 
 function refreshComposerPreview() {
-  const snapshot = attachmentSnapshot(uploadsInput.files || []);
+  const snapshot = attachmentSnapshot(selectedUploads);
   const selectedTargets = Array.from(targetAccountList.querySelectorAll(".target-checkbox")).filter((checkbox) => checkbox.checked).length;
   const selectedPersonaLabel = personaSelect.options[personaSelect.selectedIndex]?.textContent || "Persona";
   const bodyText = bodyTextarea.value.trim();
@@ -530,19 +640,19 @@ function refreshComposerPreview() {
 }
 
 function refreshPostGuidance() {
-  const snapshot = attachmentSnapshot(uploadsInput.files || []);
+  const snapshot = attachmentSnapshot(selectedUploads);
   refreshGiveawayState();
   const selectedTargets = Array.from(targetAccountList.querySelectorAll(".target-checkbox")).filter((checkbox) => checkbox.checked).length;
   bodyLengthIndicator.textContent = `${bodyTextarea.value.length} chars`;
   uploadSummary.textContent = snapshot.total
-    ? `${describeAttachmentSnapshot(snapshot)} will travel with this post plan.`
-    : "Selected images and videos will travel with this post plan.";
+    ? `${describeAttachmentSnapshot(snapshot)} in queue. Drag cards to change publish order.`
+    : "Drag media in, then arrange the publish order.";
   snapshotBodyLength.textContent = `${bodyTextarea.value.length} chars`;
   snapshotAttachments.textContent = `${snapshot.total} attachment${snapshot.total === 1 ? "" : "s"}`;
   snapshotTargets.textContent = `${selectedTargets} target${selectedTargets === 1 ? "" : "s"}`;
   refreshComposerPreview();
 
-  targetAccountList.querySelectorAll(".col-12[data-account-service]").forEach((wrapper) => {
+  targetAccountList.querySelectorAll(".composer-destination-wrapper[data-account-service]").forEach((wrapper) => {
     const checkbox = wrapper.querySelector(".target-checkbox");
     const panel = wrapper.querySelector(".post-guidance-panel");
     const summary = wrapper.querySelector(".post-guidance-summary");
@@ -573,8 +683,8 @@ personaSelect.addEventListener("change", () => {
 renderTargetAccounts();
 
 uploadsInput.addEventListener("change", () => {
-  renderUploadPreviews();
-  refreshPostGuidance();
+  addUploadFiles(uploadsInput.files || []);
+  uploadsInput.value = "";
 });
 bodyTextarea.addEventListener("input", refreshPostGuidance);
 targetAccountList.addEventListener("input", refreshPostGuidance);
@@ -582,6 +692,8 @@ targetAccountList.addEventListener("change", refreshPostGuidance);
 postTypeSelect.addEventListener("change", refreshPostGuidance);
 statusSelect.addEventListener("change", refreshComposerPreview);
 scheduledForInput.addEventListener("input", refreshComposerPreview);
+window.addEventListener("beforeunload", cleanupUploadPreviewUrls);
+bindMediaDropzone();
 renderUploadPreviews();
 refreshPostGuidance();
 
@@ -622,7 +734,7 @@ document.getElementById("scheduled-post-form").addEventListener("submit", async 
   payload.append("scheduled_for", form.scheduled_for.value);
   payload.append("giveaway_json", JSON.stringify(giveaway));
   payload.append("alt_texts", JSON.stringify([]));
-  for (const file of form.uploads.files) {
+  for (const file of selectedUploads) {
     payload.append("uploads", file);
   }
 

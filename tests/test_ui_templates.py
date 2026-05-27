@@ -414,12 +414,18 @@ def test_scheduled_post_templates_render_attachment_previews():
     assert 'data-action="up"' in detail_html
     assert 'attachment_order' in detail_html
     assert 'deleted_attachment_ids' in detail_html
-    assert 'Selected images and videos will travel with this post plan.' in create_html
+    assert 'Drag media in, then arrange the publish order.' in create_html
     assert 'Post Snapshot' in detail_html
     assert 'Media Queue' in create_html
+    assert 'composer-media-dropzone' in create_html
+    assert 'composer-media-sortable' in create_html
+    assert 'selectedUploads' in create_html
+    assert 'addUploadFiles' in create_html
+    assert 'moveUploadItem' in create_html
+    assert 'for (const file of selectedUploads)' in create_html
     assert 'composer-design-grid' in create_html
     assert 'preview-persona-name' in create_html
-    assert 'Create Post Plan' in create_html
+    assert 'Save Post' in create_html
     assert 'planner-workspace-layout' in planner_html
     assert 'planner-calendar-surface' in planner_html
     assert 'planner-board-surface' in planner_html

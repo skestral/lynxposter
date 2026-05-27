@@ -3117,7 +3117,9 @@ body[data-ui-mode="dark"] .form-select option {
 .planner-board-surface,
 .planner-selected-surface,
 .composer-editor-surface,
+.composer-media-surface,
 .composer-platform-surface,
+.composer-destinations-surface,
 .composer-schedule-surface,
 .composer-giveaway-surface,
 .composer-destination-card,
@@ -3566,11 +3568,34 @@ body[data-ui-mode="dark"] .form-select option {
     align-items: start;
 }
 
+.composer-v2-page {
+    --composer-panel-height: calc(100vh - 13.5rem);
+}
+
+.composer-v2-header {
+    margin-bottom: 0.85rem;
+}
+
+.composer-v2-grid {
+    grid-template-columns: minmax(21rem, 1.05fr) minmax(18rem, 0.82fr) minmax(19rem, 0.9fr);
+    align-items: stretch;
+}
+
 .composer-editor-surface,
+.composer-media-surface,
 .composer-platform-surface,
+.composer-destinations-surface,
 .composer-schedule-surface,
 .composer-giveaway-surface {
     padding: 1rem;
+}
+
+.composer-v2-grid > .composer-editor-surface,
+.composer-v2-grid > .composer-media-surface,
+.composer-v2-grid > .composer-review-column {
+    max-height: var(--composer-panel-height);
+    min-height: 0;
+    overflow: auto;
 }
 
 .composer-side-stack {
@@ -3578,6 +3603,10 @@ body[data-ui-mode="dark"] .form-select option {
     flex-direction: column;
     gap: 0.95rem;
     min-width: 0;
+}
+
+.composer-review-column {
+    padding-right: 0.1rem;
 }
 
 .composer-surface-header.is-compact {
@@ -3597,6 +3626,14 @@ body[data-ui-mode="dark"] .form-select option {
     margin: 0;
 }
 
+.composer-inline-schedule {
+    margin-top: 0.9rem;
+    padding: 0.85rem;
+    border: 1px solid var(--lp-border-soft);
+    border-radius: var(--lp-container-radius);
+    background: rgba(var(--lp-shadow-rgb), 0.035);
+}
+
 .composer-caption-field,
 .composer-media-queue,
 .composer-platform-surface .composer-preview-phone {
@@ -3605,8 +3642,29 @@ body[data-ui-mode="dark"] .form-select option {
 
 .composer-caption-field textarea {
     margin-top: 0.5rem;
-    min-height: 10.75rem;
+    min-height: clamp(12rem, 28vh, 18rem);
     resize: vertical;
+}
+
+.composer-media-dropzone {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    min-height: 5.8rem;
+    margin-top: 0.9rem;
+    padding: 0.9rem;
+    border: 1px dashed var(--lp-theme-outline);
+    border-radius: var(--lp-container-radius);
+    background: linear-gradient(135deg, var(--lp-theme-active-tint), rgba(255, 255, 255, 0.58));
+}
+
+.composer-media-dropzone.is-dragover {
+    border-style: solid;
+    background:
+        linear-gradient(var(--lp-theme-active-fill), var(--lp-theme-active-fill)) padding-box,
+        var(--lp-theme-border) border-box;
+    box-shadow: 0 18px 38px rgba(var(--lp-shadow-rgb), 0.12);
 }
 
 .composer-media-queue {
@@ -3628,8 +3686,118 @@ body[data-ui-mode="dark"] .form-select option {
     padding: 0.78rem;
 }
 
+.composer-media-sortable {
+    margin-top: 0.8rem;
+}
+
+.composer-media-card {
+    display: grid;
+    grid-template-columns: 4.4rem minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.72rem;
+}
+
+.composer-media-item {
+    cursor: grab;
+}
+
+.composer-media-item.is-dragging {
+    opacity: 0.48;
+}
+
+.composer-media-thumb {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 4.4rem;
+    aspect-ratio: 1;
+    overflow: hidden;
+    border: 1px solid var(--lp-border-soft);
+    border-radius: 14px;
+    background: rgba(var(--lp-shadow-rgb), 0.05);
+}
+
+.composer-media-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.composer-media-kind {
+    color: var(--lp-ink-soft);
+    font-size: 0.74rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.composer-media-order {
+    position: absolute;
+    top: 0.28rem;
+    left: 0.28rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.35rem;
+    height: 1.35rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.92);
+    color: var(--lp-ink);
+    font-size: 0.72rem;
+    font-weight: 800;
+}
+
+.composer-media-copy {
+    min-width: 0;
+}
+
+.composer-media-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.32rem;
+}
+
+.composer-media-empty {
+    padding: 0.82rem;
+    border: 1px dashed var(--lp-border-soft);
+    border-radius: var(--lp-container-radius);
+    color: var(--lp-ink-soft);
+    background: rgba(var(--lp-shadow-rgb), 0.03);
+}
+
 .composer-destination-wrapper {
     min-width: 0;
+}
+
+.composer-destination-rows {
+    max-height: min(23rem, calc(var(--composer-panel-height) - 9rem));
+    overflow: auto;
+    padding-right: 0.1rem;
+}
+
+.composer-destination-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.composer-destination-details summary {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2rem;
+    padding: 0 0.72rem;
+    border: 1px solid var(--lp-border-soft);
+    border-radius: var(--lp-control-radius);
+    color: var(--lp-ink);
+    cursor: pointer;
+    font-size: 0.82rem;
+    font-weight: 750;
+    list-style: none;
+}
+
+.composer-destination-details summary::-webkit-details-marker {
+    display: none;
 }
 
 .composer-destination-card .post-guidance-panel,
@@ -3662,12 +3830,17 @@ body[data-ui-mode="dark"] .planner-calendar-surface,
 body[data-ui-mode="dark"] .planner-board-surface,
 body[data-ui-mode="dark"] .planner-selected-surface,
 body[data-ui-mode="dark"] .composer-editor-surface,
+body[data-ui-mode="dark"] .composer-media-surface,
 body[data-ui-mode="dark"] .composer-platform-surface,
+body[data-ui-mode="dark"] .composer-destinations-surface,
 body[data-ui-mode="dark"] .composer-schedule-surface,
 body[data-ui-mode="dark"] .composer-giveaway-surface,
 body[data-ui-mode="dark"] .composer-destination-card,
 body[data-ui-mode="dark"] .composer-media-card,
-body[data-ui-mode="dark"] .composer-override-launcher {
+body[data-ui-mode="dark"] .composer-override-launcher,
+body[data-ui-mode="dark"] .composer-media-dropzone,
+body[data-ui-mode="dark"] .composer-media-empty,
+body[data-ui-mode="dark"] .composer-inline-schedule {
     background: rgba(28, 36, 52, 0.84);
     border-color: rgba(136, 152, 184, 0.22);
 }
@@ -3682,6 +3855,11 @@ body[data-ui-mode="dark"] .composer-destination-card .post-guidance-panel,
 body[data-ui-mode="dark"] .composer-media-card .border,
 body[data-ui-mode="dark"] .composer-media-card .bg-light {
     background: rgba(18, 25, 38, 0.72) !important;
+}
+
+body[data-ui-mode="dark"] .composer-media-order {
+    background: rgba(18, 25, 38, 0.92);
+    color: #eef3fb;
 }
 
 body[data-ui-mode="dark"] .planner-board-mini-card,
@@ -3712,6 +3890,12 @@ body[data-ui-mode="dark"] .planner-calendar-surface .scheduled-calendar-day-numb
     .planner-workspace-layout,
     .composer-design-grid {
         grid-template-columns: 1fr;
+    }
+
+    .composer-v2-grid > .composer-editor-surface,
+    .composer-v2-grid > .composer-media-surface,
+    .composer-v2-grid > .composer-review-column {
+        max-height: none;
     }
 
     .planner-board-surface {
@@ -3758,6 +3942,21 @@ body[data-ui-mode="dark"] .planner-calendar-surface .scheduled-calendar-day-numb
     .planner-range-panel {
         align-items: stretch;
         flex-direction: column;
+    }
+
+    .composer-media-dropzone,
+    .composer-destination-head {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .composer-media-card {
+        grid-template-columns: 3.75rem minmax(0, 1fr);
+    }
+
+    .composer-media-actions {
+        grid-column: 1 / -1;
+        justify-content: flex-start;
     }
 
     .persona-share-invite {
