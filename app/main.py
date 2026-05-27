@@ -66,7 +66,7 @@ from app.services.delivery import new_run_id, process_delivery_queue
 from app.services.dashboard_v2 import build_dashboard_v2_view_model
 from app.services.events import log_run_event
 from app.services.bootstrap import bootstrap
-from app.services.giveaway_activity import build_dashboard_giveaway_activity_monitor
+from app.services.giveaway_activity import build_dashboard_giveaway_activity_monitor, build_dashboard_giveaway_metric_tally
 from app.services.giveaway_engine import (
     POST_TYPE_GIVEAWAY,
     advance_giveaway_winner,
@@ -939,7 +939,14 @@ def dashboard(request: Request) -> HTMLResponse:
         giveaway_activity_monitor = build_dashboard_giveaway_activity_monitor(
             session,
             owner_user_id=owner_user_id,
+            access_user_id=access_user_id,
             filters=activity_filters,
+        )
+        giveaway_metric_tally = build_dashboard_giveaway_metric_tally(
+            session,
+            owner_user_id=owner_user_id,
+            access_user_id=access_user_id,
+            persona_id=activity_filters.get("persona_id"),
         )
         scheduler_status = _scheduler_service(request).get_status()
         dashboard_v2_model = build_dashboard_v2_view_model(
@@ -949,6 +956,7 @@ def dashboard(request: Request) -> HTMLResponse:
             alert_events=alert_events,
             scheduler_status=scheduler_status,
             giveaway_activity_monitor=giveaway_activity_monitor,
+            giveaway_metric_tally=giveaway_metric_tally,
             instagram_webhook_observability=webhook_observability,
             timezone_name=_principal_timezone(principal),
         )
@@ -964,6 +972,7 @@ def dashboard(request: Request) -> HTMLResponse:
                 alert_events=alert_events,
                 instagram_webhook_observability=webhook_observability,
                 giveaway_activity_monitor=giveaway_activity_monitor,
+                giveaway_metric_tally=giveaway_metric_tally,
                 scheduler_status=scheduler_status,
                 dashboard_v2=dashboard_v2_model,
                 admin_mode=bool(auth_enabled() and principal.is_admin),

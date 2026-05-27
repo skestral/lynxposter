@@ -2988,6 +2988,138 @@ body[data-ui-mode="dark"] .mobile-bottom-nav-create {
         var(--lp-theme-border) border-box;
 }
 
+/* Dashboard giveaway metric meters. */
+.dashboard-v2-giveaway-tally-panel {
+    margin-bottom: 0.85rem;
+}
+
+.dashboard-v2-giveaway-meter-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 0.85rem;
+}
+
+.dashboard-v2-giveaway-meter {
+    border: 1px solid transparent;
+    border-radius: var(--lp-container-radius);
+    background:
+        linear-gradient(var(--lp-theme-active-fill), var(--lp-theme-active-fill)) padding-box,
+        var(--lp-theme-border) border-box;
+    padding: 0.85rem;
+}
+
+.dashboard-v2-giveaway-meter-value {
+    color: var(--lp-ink);
+    font-size: clamp(1.75rem, 3vw, 2.35rem);
+    font-weight: 820;
+    letter-spacing: 0;
+    line-height: 1;
+    margin: 0.35rem 0 0.25rem;
+}
+
+.dashboard-v2-giveaway-meter-track,
+.dashboard-v2-giveaway-mini-track {
+    display: block;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--lp-elevated-soft);
+}
+
+.dashboard-v2-giveaway-meter-track {
+    height: 0.75rem;
+    margin-top: 0.7rem;
+}
+
+.dashboard-v2-giveaway-meter-fill,
+.dashboard-v2-giveaway-mini-fill {
+    display: block;
+    width: max(0.45rem, var(--meter-width));
+    height: 100%;
+    border-radius: inherit;
+    background: var(--lp-theme-rail);
+}
+
+.dashboard-v2-giveaway-meter.is-blue .dashboard-v2-giveaway-meter-fill,
+.dashboard-v2-giveaway-mini-fill.is-all-time {
+    background: linear-gradient(90deg, rgba(var(--lp-accent-rgb), 0.58), rgba(var(--lp-accent-rgb), 0.88));
+}
+
+.dashboard-v2-giveaway-tally-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+}
+
+.dashboard-v2-giveaway-tally-header,
+.dashboard-v2-giveaway-tally-row {
+    display: grid;
+    grid-template-columns: minmax(8rem, 1.1fr) minmax(7rem, 1fr) minmax(7rem, 1fr);
+    align-items: center;
+    gap: 0.7rem;
+}
+
+.dashboard-v2-giveaway-tally-header {
+    color: var(--lp-ink-soft);
+    font-size: 0.72rem;
+    font-weight: 780;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.dashboard-v2-giveaway-tally-row {
+    border: 1px solid rgba(117, 136, 173, 0.18);
+    border-radius: var(--lp-control-radius);
+    background: var(--lp-panel-bg);
+    padding: 0.6rem;
+}
+
+.dashboard-v2-giveaway-tally-label,
+.dashboard-v2-giveaway-tally-bar strong {
+    color: var(--lp-ink);
+    font-size: 0.86rem;
+    font-weight: 760;
+}
+
+.dashboard-v2-giveaway-tally-bar {
+    display: grid;
+    grid-template-columns: minmax(2rem, auto) minmax(4.5rem, 1fr);
+    align-items: center;
+    gap: 0.45rem;
+}
+
+.dashboard-v2-giveaway-tally-bar strong {
+    text-align: right;
+}
+
+.dashboard-v2-giveaway-mini-track {
+    height: 0.55rem;
+}
+
+body[data-ui-mode="dark"] .dashboard-v2-giveaway-meter,
+body[data-ui-mode="dark"] .dashboard-v2-giveaway-tally-row {
+    background:
+        linear-gradient(var(--lp-theme-active-fill), var(--lp-theme-active-fill)) padding-box,
+        var(--lp-theme-border) border-box;
+    border-color: transparent;
+}
+
+@media (max-width: 767.98px) {
+    .dashboard-v2-giveaway-meter-grid,
+    .dashboard-v2-giveaway-tally-header,
+    .dashboard-v2-giveaway-tally-row {
+        grid-template-columns: 1fr;
+    }
+
+    .dashboard-v2-giveaway-tally-header {
+        display: none;
+    }
+
+    .dashboard-v2-giveaway-tally-bar strong {
+        text-align: left;
+    }
+}
+
 /* Unified theme pass: one language for pills, toggles, checkboxes, and selected states. */
 :root {
     --lp-check-icon: url("data:image/svg+xml,%3Csvg width='18' height='18' viewBox='0 0 18 18' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M4 9.2L7.25 12.35L14 5.65' stroke='%231e2b46' stroke-width='2.35' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");

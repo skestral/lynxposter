@@ -398,6 +398,101 @@ def test_dashboard_v2_route_renders_ops_health_for_admin(monkeypatch, tmp_path):
                     processed=True,
                 )
             )
+            instagram_account = _create_account(session, persona, service="instagram", label="Instagram", handle="dashboard")
+            bluesky_account = _create_account(session, persona, service="bluesky", label="Bluesky", handle="dashboard.bsky.social")
+            active_post = CanonicalPost(
+                persona_id=persona.id,
+                origin_kind="composer",
+                post_type="giveaway",
+                status="success",
+                body="Active dashboard giveaway",
+                publish_overrides_json={},
+                metadata_json={},
+                scheduled_for=datetime.now(timezone.utc) - timedelta(hours=1),
+            )
+            closed_post = CanonicalPost(
+                persona_id=persona.id,
+                origin_kind="composer",
+                post_type="giveaway",
+                status="success",
+                body="Closed dashboard giveaway",
+                publish_overrides_json={},
+                metadata_json={},
+                scheduled_for=datetime.now(timezone.utc) - timedelta(days=7),
+            )
+            session.add_all([active_post, closed_post])
+            session.flush()
+            active_campaign = GiveawayCampaign(
+                post_id=active_post.id,
+                giveaway_end_at=datetime.now(timezone.utc) + timedelta(days=1),
+                status="collecting",
+                pool_mode="combined",
+            )
+            closed_campaign = GiveawayCampaign(
+                post_id=closed_post.id,
+                giveaway_end_at=datetime.now(timezone.utc) - timedelta(days=1),
+                status="winner_selected",
+                pool_mode="combined",
+            )
+            session.add_all([active_campaign, closed_campaign])
+            session.flush()
+            active_channel = GiveawayChannel(
+                campaign_id=active_campaign.id,
+                service="instagram",
+                account_id=instagram_account.id,
+                rules_json={"kind": "atom", "atom": "like_present", "params": {}},
+                status="collecting",
+            )
+            closed_channel = GiveawayChannel(
+                campaign_id=closed_campaign.id,
+                service="bluesky",
+                account_id=bluesky_account.id,
+                rules_json={"kind": "atom", "atom": "like_present", "params": {}},
+                status="winner_selected",
+            )
+            session.add_all([active_channel, closed_channel])
+            session.flush()
+            session.add_all(
+                [
+                    GiveawayEntrant(
+                        channel_id=active_channel.id,
+                        provider_user_id="ig-entrant",
+                        provider_username="entrant.one",
+                        display_label="Entrant One",
+                        signal_state_json={
+                            "comment_count": 1,
+                            "friend_mention_count": 1,
+                            "like_present": True,
+                            "likes": [{"id": "like-1"}],
+                            "repost_present": True,
+                            "reposts": [{"id": "share-1"}],
+                            "follow_present": True,
+                        },
+                        rule_match_details_json={},
+                        eligibility_status="eligible",
+                        inconclusive_reasons_json=[],
+                        disqualification_reasons_json=[],
+                    ),
+                    GiveawayEntrant(
+                        channel_id=closed_channel.id,
+                        provider_user_id="did:plc:entrant",
+                        provider_username="entrant.bsky.social",
+                        display_label="Entrant Bsky",
+                        signal_state_json={
+                            "reply_posts": [{"uri": "at://reply"}],
+                            "quote_posts": [{"uri": "at://quote"}],
+                            "reply_or_quote_mention_count": 1,
+                            "like_present": True,
+                            "repost_present": True,
+                            "follow_present": True,
+                        },
+                        rule_match_details_json={},
+                        eligibility_status="eligible",
+                        inconclusive_reasons_json=[],
+                        disqualification_reasons_json=[],
+                    ),
+                ]
+            )
             session.commit()
 
         with TestClient(app) as client:
@@ -409,6 +504,13 @@ def test_dashboard_v2_route_renders_ops_health_for_admin(monkeypatch, tmp_path):
         assert "Dashboard V2 scheduled post" in response.text
         assert "Dashboard V2 alert" in response.text
         assert "Instagram Webhooks" in response.text
+        assert "Giveaway Metrics" in response.text
+        assert "Active meter" in response.text
+        assert "All-time meter" in response.text
+        assert "1 active campaign · 1 entrants" in response.text
+        assert "2 campaigns · 2 entrants" in response.text
+        assert "Friend mentions" in response.text
+        assert "Reposts + shares" in response.text
         assert "dashboard-v2-tabs" not in response.text
         assert "dashboard-v2-live-update-status" in response.text
     finally:

@@ -1224,6 +1224,24 @@ def test_dashboard_v2_template_renders_mobile_friendly_tab_shell():
             "run_count": 0,
             "alert_count": 0,
             "giveaway_metrics": {"campaigns": 0, "channels": 0, "entrants": 0, "activities": 0},
+            "giveaway_metric_tally": {
+                "active": {"campaign_count": 1, "entrant_count": 2},
+                "all_time": {"campaign_count": 3, "entrant_count": 8},
+                "signal_rows": [
+                    {
+                        "label": "Likes",
+                        "active_count": 2,
+                        "all_time_count": 6,
+                        "active_width_pct": 33,
+                        "all_time_width_pct": 100,
+                    }
+                ],
+                "outcome_rows": [],
+                "active_signal_total": 2,
+                "all_time_signal_total": 6,
+                "active_meter_pct": 33,
+                "all_time_meter_pct": 100,
+            },
             "giveaway_rollups": [],
             "giveaway_recent_events": [],
             "open_giveaways": [],
@@ -1247,6 +1265,10 @@ def test_dashboard_v2_template_renders_mobile_friendly_tab_shell():
     assert "dashboard-v2-bleed" in html
     assert "dashboard-v2-tabs" not in html
     assert "dashboard-v2-metrics-grid" in html
+    assert "Giveaway Metrics" in html
+    assert "Active meter" in html
+    assert "All-time meter" in html
+    assert "Likes" in html
     assert "dashboard-v2-manual-run-button" in html
     assert "registerLiveUpdates" in html
 

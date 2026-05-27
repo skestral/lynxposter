@@ -106,6 +106,7 @@ def build_dashboard_v2_view_model(
     alert_events: list[Any],
     scheduler_status: Any,
     giveaway_activity_monitor: dict[str, Any] | None,
+    giveaway_metric_tally: dict[str, Any] | None,
     instagram_webhook_observability: dict[str, Any] | None,
     timezone_name: str | None,
 ) -> dict[str, Any]:
@@ -145,6 +146,16 @@ def build_dashboard_v2_view_model(
 
     giveaway_monitor = giveaway_activity_monitor or {}
     giveaway_metrics = giveaway_monitor.get("metrics") or {}
+    giveaway_tally = giveaway_metric_tally or {
+        "active": {},
+        "all_time": {},
+        "signal_rows": [],
+        "outcome_rows": [],
+        "active_signal_total": 0,
+        "all_time_signal_total": 0,
+        "active_meter_pct": 0,
+        "all_time_meter_pct": 0,
+    }
     giveaway_recent_events = giveaway_monitor.get("recent_events") or []
     open_giveaways = giveaway_monitor.get("open_giveaways") or []
 
@@ -191,6 +202,7 @@ def build_dashboard_v2_view_model(
         "run_count": len(run_groups),
         "alert_count": len(alert_events),
         "giveaway_metrics": giveaway_metrics,
+        "giveaway_metric_tally": giveaway_tally,
         "giveaway_rollups": giveaway_monitor.get("rollups") or [],
         "giveaway_recent_events": giveaway_recent_events,
         "open_giveaways": open_giveaways,

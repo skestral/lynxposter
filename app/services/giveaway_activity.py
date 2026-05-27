@@ -9,6 +9,13 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.models import CanonicalPost, GiveawayCampaign, GiveawayChannel, GiveawayEntrant, GiveawayEvidenceEvent, Persona
 from app.services.giveaway_engine import GIVEAWAY_STATUS_COLLECTING, GIVEAWAY_STATUS_REVIEW_REQUIRED, GIVEAWAY_STATUS_SCHEDULED
+from app.services.giveaway_engine import (
+    ENTRY_STATUS_DISQUALIFIED,
+    ENTRY_STATUS_ELIGIBLE,
+    ENTRY_STATUS_PROVISIONAL,
+    _entrant_activity_breakdown,
+)
+from app.services.personas import _persona_visibility_clause
 
 OPEN_GIVEAWAY_STATUSES = (
     GIVEAWAY_STATUS_SCHEDULED,
@@ -35,6 +42,21 @@ EVENT_LABELS = {
 }
 
 EXCLUDED_RECENT_EVENT_TYPES = {"bluesky_collection_snapshot"}
+
+SIGNAL_METRIC_DEFINITIONS = (
+    ("comments", "Comments + replies"),
+    ("friend_mentions", "Friend mentions"),
+    ("likes", "Likes"),
+    ("reposts", "Reposts + shares"),
+    ("follows", "Follows"),
+    ("story_mentions", "Story mentions"),
+)
+
+OUTCOME_METRIC_DEFINITIONS = (
+    (ENTRY_STATUS_ELIGIBLE, "Eligible"),
+    (ENTRY_STATUS_PROVISIONAL, "Provisional"),
+    (ENTRY_STATUS_DISQUALIFIED, "Disqualified"),
+)
 
 
 def _parse_datetime(value: str | None) -> datetime | None:
@@ -163,7 +185,14 @@ def _campaign_label(campaign: GiveawayCampaign) -> str:
     return f"Giveaway post {campaign.post_id}"
 
 
-def _list_open_campaigns(session: Session, *, owner_user_id: str | None = None, persona_id: str | None = None) -> list[GiveawayCampaign]:
+def _list_giveaway_campaigns(
+    session: Session,
+    *,
+    statuses: tuple[str, ...] | None = None,
+    owner_user_id: str | None = None,
+    access_user_id: str | None = None,
+    persona_id: str | None = None,
+) -> list[GiveawayCampaign]:
     stmt = (
         select(GiveawayCampaign)
         .join(GiveawayCampaign.post)
@@ -174,20 +203,163 @@ def _list_open_campaigns(session: Session, *, owner_user_id: str | None = None, 
             selectinload(GiveawayCampaign.channels).selectinload(GiveawayChannel.entrants),
             selectinload(GiveawayCampaign.evidence_events),
         )
-        .where(GiveawayCampaign.status.in_(OPEN_GIVEAWAY_STATUSES))
         .order_by(GiveawayCampaign.giveaway_end_at.asc())
     )
-    if owner_user_id is not None:
-        stmt = stmt.where(Persona.owner_user_id == owner_user_id)
+    if statuses is not None:
+        stmt = stmt.where(GiveawayCampaign.status.in_(statuses))
+    visibility_clause = _persona_visibility_clause(owner_user_id=owner_user_id, access_user_id=access_user_id)
+    if visibility_clause is not None:
+        stmt = stmt.where(visibility_clause)
     if persona_id:
         stmt = stmt.where(Persona.id == persona_id)
     return list(session.scalars(stmt))
+
+
+def _list_open_campaigns(
+    session: Session,
+    *,
+    owner_user_id: str | None = None,
+    access_user_id: str | None = None,
+    persona_id: str | None = None,
+) -> list[GiveawayCampaign]:
+    return _list_giveaway_campaigns(
+        session,
+        statuses=OPEN_GIVEAWAY_STATUSES,
+        owner_user_id=owner_user_id,
+        access_user_id=access_user_id,
+        persona_id=persona_id,
+    )
+
+
+def _percent(value: int, total: int) -> int:
+    if total <= 0:
+        return 0
+    return max(0, min(100, round(value / total * 100)))
+
+
+def _state_int(state: dict[str, Any], key: str) -> int:
+    try:
+        return int(state.get(key) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _entrant_friend_mention_count(channel: GiveawayChannel, entrant: GiveawayEntrant) -> int:
+    state = dict(entrant.signal_state_json or {})
+    if channel.service == "instagram":
+        return _state_int(state, "friend_mention_count") or len(state.get("friend_mentions") or [])
+    return _state_int(state, "reply_or_quote_mention_count")
+
+
+def _empty_giveaway_metric_bucket() -> dict[str, Any]:
+    return {
+        "campaign_count": 0,
+        "channel_count": 0,
+        "entrant_count": 0,
+        "activity_total": 0,
+        "signals": {key: 0 for key, _ in SIGNAL_METRIC_DEFINITIONS},
+        "outcomes": {key: 0 for key, _ in OUTCOME_METRIC_DEFINITIONS},
+    }
+
+
+def _summarize_giveaway_campaigns(campaigns: list[GiveawayCampaign]) -> dict[str, Any]:
+    summary = _empty_giveaway_metric_bucket()
+    summary["campaign_count"] = len({campaign.id for campaign in campaigns if campaign.id})
+    channel_ids: set[str] = set()
+    entrant_ids: set[str] = set()
+
+    for campaign in campaigns:
+        for channel in campaign.channels or []:
+            if channel.id:
+                channel_ids.add(channel.id)
+            for entrant in channel.entrants or []:
+                if entrant.id:
+                    entrant_ids.add(entrant.id)
+                breakdown, activity_total = _entrant_activity_breakdown(channel, entrant)
+                summary["activity_total"] += activity_total
+                summary["signals"]["comments"] += int(breakdown.get("comments") or 0)
+                summary["signals"]["comments"] += int(breakdown.get("replies") or 0)
+                summary["signals"]["comments"] += int(breakdown.get("quotes") or 0)
+                summary["signals"]["friend_mentions"] += _entrant_friend_mention_count(channel, entrant)
+                summary["signals"]["likes"] += int(breakdown.get("likes") or 0)
+                summary["signals"]["reposts"] += int(breakdown.get("reposts") or 0)
+                summary["signals"]["follows"] += int(breakdown.get("follows") or 0)
+                summary["signals"]["story_mentions"] += int(breakdown.get("story_mentions") or 0)
+                if entrant.eligibility_status in summary["outcomes"]:
+                    summary["outcomes"][entrant.eligibility_status] += 1
+
+    summary["channel_count"] = len(channel_ids)
+    summary["entrant_count"] = len(entrant_ids)
+    return summary
+
+
+def build_dashboard_giveaway_metric_tally(
+    session: Session,
+    *,
+    owner_user_id: str | None = None,
+    access_user_id: str | None = None,
+    persona_id: str | None = None,
+) -> dict[str, Any]:
+    all_campaigns = _list_giveaway_campaigns(
+        session,
+        owner_user_id=owner_user_id,
+        access_user_id=access_user_id,
+        persona_id=persona_id,
+    )
+    active_campaigns = [campaign for campaign in all_campaigns if campaign.status in OPEN_GIVEAWAY_STATUSES]
+    active = _summarize_giveaway_campaigns(active_campaigns)
+    all_time = _summarize_giveaway_campaigns(all_campaigns)
+
+    signal_rows = []
+    for key, label in SIGNAL_METRIC_DEFINITIONS:
+        active_count = int(active["signals"].get(key) or 0)
+        all_time_count = int(all_time["signals"].get(key) or 0)
+        signal_rows.append(
+            {
+                "key": key,
+                "label": label,
+                "active_count": active_count,
+                "all_time_count": all_time_count,
+                "active_width_pct": _percent(active_count, all_time_count or active_count),
+                "all_time_width_pct": 100 if all_time_count else 0,
+            }
+        )
+
+    outcome_rows = []
+    for key, label in OUTCOME_METRIC_DEFINITIONS:
+        active_count = int(active["outcomes"].get(key) or 0)
+        all_time_count = int(all_time["outcomes"].get(key) or 0)
+        outcome_rows.append(
+            {
+                "key": key,
+                "label": label,
+                "active_count": active_count,
+                "all_time_count": all_time_count,
+                "active_width_pct": _percent(active_count, all_time_count or active_count),
+                "all_time_width_pct": 100 if all_time_count else 0,
+            }
+        )
+
+    active_signal_total = sum(int(value or 0) for value in active["signals"].values())
+    all_time_signal_total = sum(int(value or 0) for value in all_time["signals"].values())
+
+    return {
+        "active": active,
+        "all_time": all_time,
+        "signal_rows": signal_rows,
+        "outcome_rows": outcome_rows,
+        "active_signal_total": active_signal_total,
+        "all_time_signal_total": all_time_signal_total,
+        "active_meter_pct": _percent(active_signal_total, all_time_signal_total or active_signal_total),
+        "all_time_meter_pct": 100 if all_time_signal_total else 0,
+    }
 
 
 def build_dashboard_giveaway_activity_monitor(
     session: Session,
     *,
     owner_user_id: str | None = None,
+    access_user_id: str | None = None,
     filters: dict[str, str | None] | None = None,
     limit: int = 18,
 ) -> dict[str, Any]:
@@ -199,6 +371,7 @@ def build_dashboard_giveaway_activity_monitor(
     campaigns = _list_open_campaigns(
         session,
         owner_user_id=owner_user_id,
+        access_user_id=access_user_id,
         persona_id=selected_filters["persona_id"],
     )
 
