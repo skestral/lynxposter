@@ -31,7 +31,7 @@
 </div>
 {%- endmacro %}
 
-{% macro giveaway_metric_card(dom_id, title, value, detail, percent, scope, tone, signal_rows) -%}
+{% macro giveaway_metric_card(dom_id, title, value, detail, percent, scope, tone, signal_rows, href) -%}
 <section class="dashboard-v2-metric dashboard-v2-giveaway-kpi-card is-{{ tone or 'pink' }}" aria-labelledby="{{ dom_id }}">
     <div class="dashboard-v2-giveaway-kpi-main">
         <div>
@@ -39,18 +39,16 @@
             <div class="dashboard-v2-metric-label">Giveaways</div>
             <div class="dashboard-v2-giveaway-kpi-title" id="{{ dom_id }}">{{ title }}</div>
         </div>
-        <a href="/scheduled-posts/page" class="dashboard-v2-panel-link">Open</a>
+        <a href="{{ href }}" class="dashboard-v2-panel-link">Open</a>
     </div>
-    <div class="dashboard-v2-giveaway-kpi-meters">
-        <div class="dashboard-v2-giveaway-compact-meter is-{{ tone or 'pink' }}">
-            <div class="dashboard-v2-giveaway-compact-meter-head">
-                <span>Signal meter</span>
-                <strong>{{ value }}</strong>
-            </div>
-            <div class="dashboard-v2-giveaway-compact-meter-detail">{{ detail }}</div>
-            <div class="dashboard-v2-giveaway-compact-track" aria-hidden="true">
-                <div class="dashboard-v2-giveaway-compact-fill" style="--meter-width: {{ percent }}%;"></div>
-            </div>
+    <div class="dashboard-v2-giveaway-compact-meter is-{{ tone or 'pink' }}">
+        <div class="dashboard-v2-giveaway-compact-meter-head">
+            <strong>{{ value }}</strong>
+            <span>signals</span>
+        </div>
+        <div class="dashboard-v2-giveaway-compact-meter-detail">{{ detail }}</div>
+        <div class="dashboard-v2-giveaway-compact-track" aria-hidden="true">
+            <div class="dashboard-v2-giveaway-compact-fill" style="--meter-width: {{ percent }}%;"></div>
         </div>
     </div>
     <div class="dashboard-v2-giveaway-kpi-signals" aria-label="{{ title }} signal counts">
@@ -125,6 +123,7 @@
                     {% set active_entrant_count = giveaway_active_tally.get("entrant_count", 0) %}
                     {% set all_time_campaign_count = giveaway_all_time_tally.get("campaign_count", 0) %}
                     {% set all_time_entrant_count = giveaway_all_time_tally.get("entrant_count", 0) %}
+                    {% set current_giveaway_href = model.open_giveaways[0].href if model.open_giveaways else "/scheduled-posts/page" %}
                     {% if active_campaign_count %}
                         {{ giveaway_metric_card(
                             "dashboard-v2-current-giveaway-kpi-title",
@@ -134,7 +133,8 @@
                             giveaway_tally.get("active_meter_pct", 0),
                             "active",
                             "pink",
-                            giveaway_tally.get("signal_rows", [])
+                            giveaway_tally.get("signal_rows", []),
+                            current_giveaway_href
                         ) }}
                     {% endif %}
                     {{ giveaway_metric_card(
@@ -145,7 +145,8 @@
                         giveaway_tally.get("all_time_meter_pct", 0),
                         "all_time",
                         "blue",
-                        giveaway_tally.get("signal_rows", [])
+                        giveaway_tally.get("signal_rows", []),
+                        "/scheduled-posts/page"
                     ) }}
                     {% for metric in model.overview_metrics %}
                         {{ metric_tile(metric) }}

@@ -1269,7 +1269,7 @@ def test_dashboard_v2_template_renders_mobile_friendly_tab_shell():
             },
             "giveaway_rollups": [],
             "giveaway_recent_events": [],
-            "open_giveaways": [],
+            "open_giveaways": [{"href": "/scheduled-posts/current/page#giveaway-details"}],
             "webhook_total": 0,
             "webhook_matched": 0,
             "webhook_match_pct": 0,
@@ -1292,7 +1292,7 @@ def test_dashboard_v2_template_renders_mobile_friendly_tab_shell():
     assert "dashboard-v2-metrics-grid" in html
     assert "Current Giveaway" in html
     assert "All-Time Giveaways" in html
-    assert "Signal meter" in html
+    assert 'href="/scheduled-posts/current/page#giveaway-details"' in html
     assert "Likes" in html
     assert "2 / 6" not in html
     assert "dashboard-v2-giveaway-kpi-card" in html

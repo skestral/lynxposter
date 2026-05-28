@@ -99,30 +99,30 @@
                 <tr>
                     <td data-label="Channel">
                         <div class="fw-semibold">{{ channel.service|title }}</div>
-                        {% if channel.last_collected_at %}
-                        <div class="small text-secondary">Last collected {{ channel.last_collected_at|datetime_display }}</div>
-                        {% endif %}
-                        {% if channel.service == "instagram" %}
-                            {% if channel.last_private_collected_at %}
-                            <div class="small text-secondary">Private scan {{ channel.last_private_collected_at|datetime_display }}</div>
+                        <div class="giveaway-channel-timing small text-secondary">
+                            {% if channel.last_collected_at %}
+                            <span>Collected {{ channel.last_collected_at|datetime_display }}</span>
                             {% endif %}
-                            {% if channel.private_scan_interval_hours %}
-                            <div class="small text-secondary">Next private scan {{ channel.private_scan_due_at|datetime_display if channel.private_scan_due_at else "when ready" }}</div>
-                            {% else %}
-                            <div class="small text-secondary">Private scans are manual only.</div>
+                            {% if channel.service == "instagram" and channel.last_private_collected_at %}
+                            <span>Private {{ channel.last_private_collected_at|datetime_display }}</span>
                             {% endif %}
-                        {% endif %}
+                            {% if channel.service == "instagram" and channel.private_scan_interval_hours and channel.private_scan_due_at %}
+                            <span>Next private {{ channel.private_scan_due_at|datetime_display }}</span>
+                            {% endif %}
+                        </div>
                     </td>
                     <td data-label="Activity">{{ channel.summary.engagement_activities | default(0, true) }}</td>
                     <td data-label="Eligible">{{ channel.summary.eligible | default(0, true) }}</td>
                     <td data-label="Review">{{ channel.summary.provisional | default(0, true) }}</td>
                     <td data-label="Out">{{ channel.summary.disqualified | default(0, true) }}</td>
                     <td class="small" data-label="Breakdown">
+                        <div class="giveaway-activity-chip-row">
                         {% for key, value in (channel.summary.activity_breakdown | default({}, true)).items() %}
-                        <div>{{ key|replace('_', ' ')|title }}: {{ value }}</div>
+                        <span class="giveaway-activity-chip">{{ key|replace('_', ' ')|title }} {{ value }}</span>
                         {% else %}
-                        <div class="text-secondary">No captured activity yet.</div>
+                        <span class="text-secondary">No tracks yet.</span>
                         {% endfor %}
+                        </div>
                     </td>
                 </tr>
                 {% endfor %}
@@ -285,26 +285,29 @@
                         </td>
                         <td class="small" data-label="Activity">
                             <div class="fw-semibold">{{ entry.activity_total | default(0, true) }} activities</div>
+                            <div class="giveaway-activity-chip-row mt-1">
                             {% for key, value in (entry.activity_breakdown | default({}, true)).items() %}
-                            <div>{{ key|replace('_', ' ')|title }}: {{ value }}</div>
+                            <span class="giveaway-activity-chip">{{ key|replace('_', ' ')|title }} {{ value }}</span>
                             {% endfor %}
+                            </div>
                         </td>
                         <td class="small" data-label="Checks">
                             <div class="giveaway-check-list">
                             {% for check in entry.checks | default([], true) %}
-                            <div class="giveaway-check-item">
-                                <div class="fw-semibold">
-                                    {{ check.label }}
-                                    {% if check.status == "passed" %}
-                                    <span class="badge text-bg-success">Passed</span>
-                                    {% elif check.status == "failed" %}
-                                    <span class="badge text-bg-danger">Failed</span>
-                                    {% else %}
-                                    <span class="badge text-bg-warning">Inconclusive</span>
-                                    {% endif %}
-                                </div>
-                                {% if check.detail %}
-                                <div class="text-secondary giveaway-check-detail">{{ check.detail }}</div>
+                            <div class="giveaway-check-item is-{{ check.status }}">
+                                <span class="giveaway-check-label">{{ check.label }}</span>
+                                {% if check.status == "passed" %}
+                                <span class="badge text-bg-success">Passed</span>
+                                {% elif check.status == "failed" %}
+                                <span class="badge text-bg-danger">Failed</span>
+                                {% else %}
+                                <span class="badge text-bg-warning">Review</span>
+                                {% endif %}
+                                {% if check.detail and check.status != "passed" %}
+                                <details class="giveaway-check-detail">
+                                    <summary>Note</summary>
+                                    <div>{{ check.detail }}</div>
+                                </details>
                                 {% endif %}
                             </div>
                             {% else %}
@@ -314,11 +317,16 @@
                         </td>
                         <td class="small" data-label="Outcome">
                             <div class="fw-semibold">{{ entry.eligibility_status|replace('_', ' ')|title }}</div>
-                            {% if entry.inconclusive_reasons %}
-                            <div class="text-secondary mt-1 giveaway-outcome-detail">{{ entry.inconclusive_reasons|join("; ") }}</div>
-                            {% endif %}
-                            {% if entry.disqualification_reasons %}
-                            <div class="text-danger mt-1 giveaway-outcome-detail">{{ entry.disqualification_reasons|join("; ") }}</div>
+                            {% if entry.inconclusive_reasons or entry.disqualification_reasons %}
+                            <details class="giveaway-outcome-detail mt-1">
+                                <summary>Notes</summary>
+                                {% if entry.inconclusive_reasons %}
+                                <div class="text-secondary">{{ entry.inconclusive_reasons|join("; ") }}</div>
+                                {% endif %}
+                                {% if entry.disqualification_reasons %}
+                                <div class="text-danger">{{ entry.disqualification_reasons|join("; ") }}</div>
+                                {% endif %}
+                            </details>
                             {% endif %}
                         </td>
                     </tr>
@@ -327,13 +335,13 @@
             </table>
         </div>
         {% else %}
-        <div class="text-secondary">No {{ channel.service }} evidence has been captured yet.</div>
+        <div class="text-secondary">No {{ channel.service }} tracks yet.</div>
         {% endif %}
     </div>
     {% endfor %}
 </div>
 {% else %}
 <div class="surface-panel">
-    <div class="text-secondary">No giveaway evidence has been captured yet.</div>
+    <div class="text-secondary">No giveaway tracks yet.</div>
 </div>
 {% endif %}

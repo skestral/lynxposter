@@ -612,6 +612,7 @@ def test_dashboard_v2_route_renders_ops_health_for_admin(monkeypatch, tmp_path):
                     ),
                 ]
             )
+            active_post_id = active_post.id
             session.commit()
 
         with TestClient(app) as client:
@@ -625,9 +626,9 @@ def test_dashboard_v2_route_renders_ops_health_for_admin(monkeypatch, tmp_path):
         assert "Instagram Webhooks" in response.text
         assert "Current Giveaway" in response.text
         assert "All-Time Giveaways" in response.text
-        assert "Signal meter" in response.text
         assert "1 active campaign, 1 entrant" in response.text
         assert "2 campaigns, 2 entrants" in response.text
+        assert f'href="/scheduled-posts/{active_post_id}/page#giveaway-details"' in response.text
         assert "Friend mentions" in response.text
         assert "Reposts + shares" in response.text
         assert "1 / 2" not in response.text
