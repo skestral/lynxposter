@@ -5995,6 +5995,80 @@ body[data-ui-mode="dark"] .mobile-nav-drawer-link.active {
     margin-top: 0.22rem;
 }
 
+.giveaway-entrant-table {
+    table-layout: fixed;
+}
+
+.giveaway-entrant-table th,
+.giveaway-entrant-table td {
+    vertical-align: top;
+}
+
+.giveaway-entrant-col-name {
+    width: 18%;
+}
+
+.giveaway-entrant-col-activity {
+    width: 13%;
+}
+
+.giveaway-entrant-col-checks {
+    width: 52%;
+}
+
+.giveaway-entrant-col-outcome {
+    width: 17%;
+}
+
+.giveaway-entrant-table .giveaway-check-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(11rem, 1fr));
+    align-items: start;
+    gap: 0.45rem;
+}
+
+.giveaway-entrant-table .giveaway-check-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 0.28rem 0.42rem;
+    padding: 0.42rem 0.5rem;
+    border-radius: calc(var(--lp-control-radius) - 4px);
+}
+
+.giveaway-entrant-table .giveaway-check-label {
+    overflow: visible;
+    color: var(--lp-ink);
+    font-weight: 760;
+    line-height: 1.22;
+    text-overflow: clip;
+    white-space: normal;
+}
+
+.giveaway-entrant-table .giveaway-check-detail {
+    grid-column: 1 / -1;
+    font-size: 0.76rem;
+    line-height: 1.28;
+}
+
+.giveaway-entrant-table .giveaway-check-detail summary,
+.giveaway-entrant-table .giveaway-outcome-detail summary {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.45rem;
+}
+
+.giveaway-entrant-table .giveaway-outcome-detail {
+    font-size: 0.78rem;
+    line-height: 1.32;
+}
+
+.giveaway-entrant-actions .btn {
+    min-height: auto;
+    padding: 0.4rem 0.72rem;
+    line-height: 1.15;
+}
+
 .scheduled-detail-giveaway-details .giveaway-collapsible-section {
     overflow: hidden;
     padding: 0;
@@ -6302,6 +6376,14 @@ body[data-ui-mode="dark"] .scheduled-detail-alert {
 
     .giveaway-check-item {
         padding: 0.24rem 0.36rem;
+    }
+
+    .giveaway-entrant-table .giveaway-check-list {
+        grid-template-columns: 1fr;
+    }
+
+    .giveaway-entrant-table .giveaway-check-item {
+        padding: 0.36rem 0.42rem;
     }
 
     .scheduled-detail-actions {

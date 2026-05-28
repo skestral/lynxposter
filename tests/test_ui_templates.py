@@ -731,6 +731,8 @@ def test_scheduled_post_templates_render_generic_giveaway_controls():
     assert "giveaway-audit-log-section" in html
     assert "giveaway-channel-audit-summary" in html
     assert '<details class="surface-panel giveaway-collapsible-section giveaway-audit-log-section">' in html
+    assert 'giveaway-entrant-col-checks' in html
+    assert 'giveaway-entrant-actions' in html
     assert "giveaway-mobile-table giveaway-activity-table" in html
     assert "giveaway-mobile-table giveaway-entrant-table" in html
     assert 'data-label="Checks"' in html
@@ -1488,6 +1490,8 @@ def test_theme_runtime_uses_selected_colorway_tokens():
     assert "Edit post plan refresh" in stylesheet
     assert "scroll-padding-inline: 0.35rem;" in stylesheet
     assert ".scheduled-detail-giveaway-details" in stylesheet
+    assert ".giveaway-entrant-table .giveaway-check-list" in stylesheet
+    assert "grid-template-columns: repeat(2, minmax(11rem, 1fr));" in stylesheet
     assert "var(--lp-pride-border)" not in stylesheet
     assert "linear-gradient(100deg, #e6007a" not in stylesheet
 
