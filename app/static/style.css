@@ -3155,8 +3155,7 @@ body[data-ui-mode="dark"] .mobile-bottom-nav-create {
     }
 
     .dashboard-v2-actions::-webkit-scrollbar,
-    .dashboard-v2-metrics-grid::-webkit-scrollbar,
-    .dashboard-v2-giveaway-kpi-signals::-webkit-scrollbar {
+    .dashboard-v2-metrics-grid::-webkit-scrollbar {
         display: none;
     }
 
@@ -3244,15 +3243,12 @@ body[data-ui-mode="dark"] .mobile-bottom-nav-create {
     }
 
     .dashboard-v2-giveaway-kpi-signals {
-        flex-wrap: nowrap;
-        overflow-x: auto;
-        padding-bottom: 0.05rem;
-        scrollbar-width: none;
+        gap: 0.28rem;
     }
 
     .dashboard-v2-giveaway-kpi-chip {
-        flex: 0 0 auto;
-        padding: 0.24rem 0.38rem;
+        min-height: 1.75rem;
+        padding: 0.22rem 0.34rem;
     }
 
     .dashboard-v2-overview-grid,
@@ -3384,7 +3380,6 @@ body[data-ui-mode="dark"] .mobile-bottom-nav-create {
 }
 
 .dashboard-v2-giveaway-kpi-main,
-.dashboard-v2-giveaway-kpi-signals,
 .dashboard-v2-giveaway-compact-meter-head,
 .dashboard-v2-giveaway-kpi-chip {
     display: flex;
@@ -3459,25 +3454,27 @@ body[data-ui-mode="dark"] .mobile-bottom-nav-create {
 }
 
 .dashboard-v2-giveaway-kpi-signals {
-    flex-wrap: nowrap;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.3rem;
-    overflow-x: auto;
-    padding-bottom: 0.02rem;
-    scrollbar-width: none;
-}
-
-.dashboard-v2-giveaway-kpi-signals::-webkit-scrollbar {
-    display: none;
+    min-width: 0;
 }
 
 .dashboard-v2-giveaway-kpi-chip {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    flex: 0 0 auto;
-    gap: 0.24rem;
+    gap: 0.28rem;
+    min-height: 1.85rem;
+    min-width: 0;
     border: 1px solid rgba(117, 136, 173, 0.18);
-    border-radius: var(--lp-control-radius);
-    background: var(--lp-panel-bg);
-    padding: 0.2rem 0.36rem;
+    border-radius: calc(var(--lp-control-radius) - 4px);
+    background: rgba(var(--lp-accent-rgb), 0.045);
+    padding: 0.26rem 0.4rem;
+}
+
+.dashboard-v2-giveaway-kpi-chip span {
+    white-space: normal;
 }
 
 .dashboard-v2-giveaway-kpi-chip strong {

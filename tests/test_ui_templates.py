@@ -1475,6 +1475,7 @@ def test_theme_runtime_uses_selected_colorway_tokens():
     assert "scroll-snap-type: x proximity" in stylesheet
     assert ".dashboard-v2-actions .btn" in stylesheet
     assert ".dashboard-v2-giveaway-kpi-signals" in stylesheet
+    assert ".dashboard-v2-giveaway-kpi-signals::-webkit-scrollbar" not in stylesheet
     assert ".composer-mobile-tabbar.composer-tabbar {\n        position: sticky;" in stylesheet
     assert "Edit post plan refresh" in stylesheet
     assert "scroll-padding-inline: 0.35rem;" in stylesheet
