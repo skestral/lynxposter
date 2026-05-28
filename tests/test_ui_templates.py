@@ -1294,6 +1294,11 @@ def test_dashboard_v2_template_renders_mobile_friendly_tab_shell():
     assert "dashboard-v2-automation-panel" in html
     assert "dashboard-v2-delivery-panel" in html
     assert "dashboard-v2-open-giveaway-panel" in html
+    assert "mobile-nav-menu-button" in html
+    assert "mobile-all-nav" in html
+    assert "All Areas" in html
+    assert "Preview Studio" in html
+    assert "My Account" in html
     assert "dashboard-v2-manual-run-button" in html
     assert "registerLiveUpdates" in html
 

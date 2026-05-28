@@ -102,6 +102,18 @@
                         <button class="app-mode-button" type="button" data-ui-mode-value="light" aria-label="Light mode" title="Light mode">L</button>
                         <button class="app-mode-button" type="button" data-ui-mode-value="dark" aria-label="Dark mode" title="Dark mode">D</button>
                     </div>
+                    <button
+                        class="mobile-nav-menu-button"
+                        type="button"
+                        data-bs-toggle="offcanvas"
+                        data-bs-target="#mobile-all-nav"
+                        aria-controls="mobile-all-nav"
+                        aria-label="Open full navigation menu"
+                    >
+                        <span class="mobile-nav-menu-line"></span>
+                        <span class="mobile-nav-menu-line"></span>
+                        <span class="mobile-nav-menu-line"></span>
+                    </button>
                     {% elif auth_enabled %}
                     <a class="btn btn-primary btn-sm" href="/auth/login">Sign In</a>
                     {% else %}
@@ -109,6 +121,46 @@
                     {% endif %}
                 </div>
             </header>
+
+            {% if current_principal.is_authenticated %}
+            <div class="offcanvas offcanvas-end mobile-nav-drawer" tabindex="-1" id="mobile-all-nav" aria-labelledby="mobile-all-nav-title">
+                <div class="offcanvas-header">
+                    <div>
+                        <div class="mobile-nav-drawer-kicker">Navigation</div>
+                        <h2 class="offcanvas-title" id="mobile-all-nav-title">All Areas</h2>
+                    </div>
+                    <button type="button" class="btn-close mobile-nav-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+                </div>
+                <div class="offcanvas-body">
+                    <nav class="mobile-nav-drawer-list" aria-label="All mobile navigation">
+                        <a class="mobile-nav-drawer-link {% if page_path == '/' %}active{% endif %}" href="/">Dashboard</a>
+                        {% if current_principal.is_user %}
+                        <div class="mobile-nav-drawer-label">Workspace</div>
+                        <a class="mobile-nav-drawer-link {% if page_path.startswith('/scheduled-posts') and not page_path.startswith('/scheduled-posts/new') %}active{% endif %}" href="/scheduled-posts/page">Planner</a>
+                        <a class="mobile-nav-drawer-link {% if page_path.startswith('/scheduled-posts/new') %}active{% endif %}" href="/scheduled-posts/new/page">New Post</a>
+                        <a class="mobile-nav-drawer-link {% if page_path.startswith('/personas') %}active{% endif %}" href="/personas/page">
+                            <span>Personas</span>
+                            {% if pending_persona_share_count|default(0) %}
+                            <span class="app-nav-badge">{{ pending_persona_share_count }}</span>
+                            {% endif %}
+                        </a>
+                        <a class="mobile-nav-drawer-link {% if page_path.startswith('/sandbox') %}active{% endif %}" href="/sandbox/page">Preview Studio</a>
+                        <a class="mobile-nav-drawer-link {% if page_path.startswith('/logs') %}active{% endif %}" href="/logs/page">Activity</a>
+                        {% endif %}
+                        {% if current_principal.is_admin %}
+                        <div class="mobile-nav-drawer-label">Admin</div>
+                        <a class="mobile-nav-drawer-link {% if page_path.startswith('/settings') %}active{% endif %}" href="/settings/page">Settings</a>
+                        <a class="mobile-nav-drawer-link {% if page_path.startswith('/admin/users') %}active{% endif %}" href="/admin/users/page">Users</a>
+                        {% endif %}
+                        {% if current_principal.user_id %}
+                        <div class="mobile-nav-drawer-label">Account</div>
+                        <a class="mobile-nav-drawer-link {% if page_path.startswith('/account') %}active{% endif %}" href="/account/page">My Account</a>
+                        <a class="mobile-nav-drawer-link" href="/auth/logout">Sign Out</a>
+                        {% endif %}
+                    </nav>
+                </div>
+            </div>
+            {% endif %}
 
             {% if not current_principal.is_authenticated %}
             <div class="auth-action-row">
