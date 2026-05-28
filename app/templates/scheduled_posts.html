@@ -738,6 +738,9 @@ function setPlannerMobileTab(tab) {
   plannerMobileTabs.forEach((button) => {
     button.classList.toggle("active", button.dataset.plannerMobileTab === tab);
   });
+  if (tab === "calendar") {
+    scrollPlannerCalendarIntoView();
+  }
 }
 
 function setCalendarView(mode) {
@@ -779,10 +782,11 @@ function renderMonthCalendar() {
     const day = addDays(gridStart, index);
     const dayPosts = postsForDay(day);
     const isOutsideMonth = day.getMonth() !== anchor.getMonth();
+    const isToday = isSameDay(day, new Date());
     const hiddenCount = Math.max(dayPosts.length - 3, 0);
     const visiblePosts = dayPosts.slice(0, 3);
     cells.push(`
-      <div class="scheduled-calendar-cell planner-drop-zone ${isOutsideMonth ? "is-muted" : ""}" data-drop-type="day" data-drop-date="${toDateKey(day)}">
+      <div class="scheduled-calendar-cell planner-drop-zone ${isOutsideMonth ? "is-muted" : ""} ${isToday ? "is-today" : ""}" data-drop-type="day" data-drop-date="${toDateKey(day)}">
         <div class="scheduled-calendar-cell-head">
           <span class="scheduled-calendar-day-number">${day.getDate()}</span>
           ${dayPosts.length ? `<span class="small text-secondary">${dayPosts.length}</span>` : ""}
@@ -834,6 +838,19 @@ function renderWeekCalendar() {
   calendarRangeLabel.textContent = `${formatDayLabel(start, {month: "short", day: "numeric"})} - ${formatDayLabel(weekEnd, {month: "short", day: "numeric", year: "numeric"})}`;
 }
 
+function scrollPlannerCalendarIntoView() {
+  if (!window.matchMedia("(max-width: 767.98px)").matches || !calendarRoot || !calendarGrid) return;
+  window.requestAnimationFrame(() => {
+    const target =
+      calendarGrid.querySelector(".is-today")
+      || calendarGrid.querySelector(".scheduled-calendar-cell:not(.is-muted)")
+      || calendarGrid.firstElementChild;
+    if (!target) return;
+    const targetLeft = Math.max(0, target.offsetLeft - ((calendarRoot.clientWidth - target.clientWidth) / 2));
+    calendarRoot.scrollTo({left: targetLeft, behavior: "auto"});
+  });
+}
+
 function renderCalendar() {
   syncCalendarViewButtons();
   const visibleScheduled = plannerPosts.filter((post) => isCalendarPost(post));
@@ -857,6 +874,7 @@ function renderCalendar() {
   } else {
     renderMonthCalendar();
   }
+  scrollPlannerCalendarIntoView();
   bindPlannerInteractions();
 }
 

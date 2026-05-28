@@ -4416,6 +4416,13 @@ body[data-ui-mode="dark"] .form-select option {
         var(--lp-theme-border) border-box;
 }
 
+.planner-calendar-surface .scheduled-calendar-cell.is-today {
+    border-color: transparent;
+    background:
+        linear-gradient(var(--lp-theme-active-fill), var(--lp-theme-active-fill)) padding-box,
+        var(--lp-theme-border) border-box;
+}
+
 .scheduled-calendar-weekday-inline {
     color: var(--lp-ink-soft);
     font-size: 0.74rem;
@@ -4942,6 +4949,12 @@ body[data-ui-mode="dark"] .planner-calendar-surface .scheduled-calendar-column.i
         var(--lp-theme-border) border-box;
 }
 
+body[data-ui-mode="dark"] .planner-calendar-surface .scheduled-calendar-cell.is-today {
+    background:
+        linear-gradient(var(--lp-theme-active-fill), var(--lp-theme-active-fill)) padding-box,
+        var(--lp-theme-border) border-box;
+}
+
 body[data-ui-mode="dark"] .planner-calendar-card-time,
 body[data-ui-mode="dark"] .planner-calendar-card-title,
 body[data-ui-mode="dark"] .planner-calendar-surface .scheduled-calendar-day-number {
@@ -5037,8 +5050,7 @@ body[data-ui-mode="dark"] .planner-calendar-surface .scheduled-calendar-day-numb
 
     .planner-workspace-page .figma-page-actions::-webkit-scrollbar,
     .planner-mobile-tabbar::-webkit-scrollbar,
-    .planner-calendar-surface .planner-surface-controls::-webkit-scrollbar,
-    .planner-calendar-surface .scheduled-calendar-grid.is-week::-webkit-scrollbar {
+    .planner-calendar-surface .planner-surface-controls::-webkit-scrollbar {
         display: none;
     }
 
@@ -5131,16 +5143,24 @@ body[data-ui-mode="dark"] .planner-calendar-surface .scheduled-calendar-day-numb
         display: none;
     }
 
+    .planner-calendar-surface .scheduled-calendar {
+        margin-inline: -0.3rem;
+        overflow-x: auto;
+        overflow-y: visible;
+        padding: 0 0.3rem 0.35rem;
+        overscroll-behavior-x: contain;
+        scroll-padding-inline: 0.3rem;
+        scrollbar-width: thin;
+        -webkit-overflow-scrolling: touch;
+    }
+
     .planner-calendar-surface .scheduled-calendar-grid.is-week {
         display: grid;
-        grid-auto-columns: minmax(13rem, 78vw);
-        grid-auto-flow: column;
-        grid-template-columns: none;
+        grid-template-columns: repeat(7, minmax(12.5rem, 78vw));
         gap: 0.55rem;
-        overflow-x: auto;
-        padding-bottom: 0.12rem;
+        min-width: max-content;
+        overflow: visible;
         scroll-snap-type: x proximity;
-        scrollbar-width: none;
     }
 
     .planner-calendar-surface .scheduled-calendar-column {
@@ -5151,14 +5171,16 @@ body[data-ui-mode="dark"] .planner-calendar-surface .scheduled-calendar-day-numb
     }
 
     .planner-calendar-surface .scheduled-calendar-grid.is-month {
-        grid-template-columns: repeat(7, minmax(2.35rem, 1fr));
+        grid-template-columns: repeat(7, minmax(4.25rem, 1fr));
         gap: 0.35rem;
-        overflow-x: visible;
+        min-width: calc(29.75rem + 2.1rem);
+        overflow: visible;
     }
 
     .planner-calendar-surface .scheduled-calendar-weekdays {
-        grid-template-columns: repeat(7, minmax(2.35rem, 1fr));
+        grid-template-columns: repeat(7, minmax(4.25rem, 1fr));
         gap: 0.35rem;
+        min-width: calc(29.75rem + 2.1rem);
     }
 
     .planner-calendar-surface .scheduled-calendar-weekday {

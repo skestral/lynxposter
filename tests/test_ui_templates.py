@@ -559,6 +559,9 @@ def test_scheduled_post_templates_render_attachment_previews():
     assert 'planner-move-modal' in planner_html
     assert 'document.body.appendChild(plannerMoveModalElement)' in planner_html
     assert 'function queueMoveModal(post, target)' in planner_html
+    assert 'function scrollPlannerCalendarIntoView()' in planner_html
+    assert 'if (tab === "calendar") {' in planner_html
+    assert 'calendarRoot.scrollTo({left: targetLeft, behavior: "auto"});' in planner_html
     assert '>New</a>' in planner_html
     assert 'scheduledPostsPlannerData' in planner_html
     assert 'id="scheduled-detail-tabs"' in detail_html
@@ -1473,6 +1476,9 @@ def test_theme_runtime_uses_selected_colorway_tokens():
     assert "Dashboard mobile app pass" in stylesheet
     assert ".app-page:has(.dashboard-v2-shell)" in stylesheet
     assert "scroll-snap-type: x proximity" in stylesheet
+    assert ".planner-calendar-surface .scheduled-calendar {" in stylesheet
+    assert "-webkit-overflow-scrolling: touch;" in stylesheet
+    assert "grid-template-columns: repeat(7, minmax(12.5rem, 78vw));" in stylesheet
     assert ".dashboard-v2-actions .btn" in stylesheet
     assert ".dashboard-v2-giveaway-kpi-signals" in stylesheet
     assert ".dashboard-v2-giveaway-kpi-signals::-webkit-scrollbar" not in stylesheet
