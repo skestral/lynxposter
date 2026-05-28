@@ -3,7 +3,7 @@
 <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
     <div>
         <h1 class="h3 mb-1">People</h1>
-        <div class="small text-secondary">Review profiles, see persona ownership, and pause access when needed.</div>
+        <div class="small text-secondary">Profiles, ownership, and access.</div>
     </div>
     <div class="d-flex gap-2 flex-wrap">
         <span class="badge text-bg-light border">{{ timezone_indicator() }}</span>
@@ -25,9 +25,10 @@
 
 <div class="card section-card mb-4">
     <div class="card-body">
-        <div class="small text-secondary">
-            When OIDC is on, roles and groups come from your provider. Use this screen to check persona ownership, review recent sign-ins, and locally disable a profile if you need to block access.
-        </div>
+        <details class="surface-details compact-help">
+            <summary>OIDC details</summary>
+            <div class="small text-secondary mt-2">OIDC supplies roles and groups. Local disable still blocks a profile.</div>
+        </details>
     </div>
 </div>
 

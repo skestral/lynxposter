@@ -6,7 +6,7 @@
         <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
             <div>
                 <h2 class="h5 mb-1">Giveaway Activity Monitor</h2>
-                <div class="small text-secondary">Watch Instagram and Bluesky engagement for open giveaways in one rollup while entrants keep coming in.</div>
+                <div class="small text-secondary">Open giveaway signals in one rollup.</div>
             </div>
             <div class="d-flex gap-2 flex-wrap">
                 <span class="badge text-bg-light border rounded-pill px-3 py-2">{{ timezone_indicator() }}</span>
@@ -120,12 +120,12 @@
                                         {% for item in row.event_breakdown %}
                                         <div>{{ item.label }}: {{ item.count }}</div>
                                         {% else %}
-                                        <div class="text-secondary">No captured activity yet.</div>
+                                        <div class="text-secondary">No tracks yet.</div>
                                         {% endfor %}
                                     </td>
                                 </tr>
                                 {% else %}
-                                <tr><td colspan="5" class="text-secondary">No open giveaways match the current filters.</td></tr>
+                                <tr><td colspan="5" class="text-secondary">No matching prowls.</td></tr>
                                 {% endfor %}
                             </tbody>
                         </table>
@@ -196,7 +196,7 @@
                                     </td>
                                 </tr>
                                 {% else %}
-                                <tr><td colspan="5" class="text-secondary">No giveaway activity has been captured for the current filters yet.</td></tr>
+                                <tr><td colspan="5" class="text-secondary">No tracks yet.</td></tr>
                                 {% endfor %}
                             </tbody>
                         </table>

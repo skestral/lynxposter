@@ -1070,6 +1070,22 @@ details > summary::-webkit-details-marker {
     display: none;
 }
 
+details.compact-help {
+    box-shadow: none;
+}
+
+details.compact-help > summary {
+    padding: 0.7rem 0.85rem;
+    cursor: pointer;
+    color: var(--lp-ink);
+    font-weight: 700;
+}
+
+details.compact-help > div,
+details.compact-help > .small {
+    padding: 0 0.85rem 0.85rem;
+}
+
 .glass-tabs {
     gap: 0.55rem;
     border: none;

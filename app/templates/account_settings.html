@@ -8,7 +8,7 @@
                     <div>
                         <div class="section-kicker mb-2">My Space</div>
                         <h1 class="h3 mb-2">My Account</h1>
-                        <div class="text-secondary">Make lynxposter feel like yours, from local time to color mood.</div>
+                        <div class="text-secondary">Local time, profile, and color mood.</div>
                     </div>
                     <div class="d-flex gap-2 flex-wrap">
                         <span class="badge soft-badge rounded-pill px-3 py-2">{{ ui_theme_definition(user.ui_theme).label }}</span>
@@ -29,7 +29,7 @@
                             <div>
                                 <div class="section-kicker mb-2">Display</div>
                                 <h2 class="h5 mb-1">Timezone and appearance</h2>
-                                <div class="text-secondary">These picks stay with your own account and do not change anyone else's workspace.</div>
+                                <div class="text-secondary">Saved to your account.</div>
                             </div>
                         </div>
                         <div class="row g-3">
@@ -40,17 +40,17 @@
                                     <option value="{{ option }}" {% if user.timezone == option %}selected{% endif %}>{{ option }}</option>
                                     {% endfor %}
                                 </select>
-                                <div class="form-text">Used for timestamps, planner dates, and anything time-based across the app.</div>
+                                <div class="form-text">Used for timestamps and planner dates.</div>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Current theme</label>
                                 <div class="lp-static-field">{{ ui_theme_definition(user.ui_theme).label }}</div>
-                                <div class="form-text">Theme choices preview right away. Save when you find the one that fits.</div>
+                                <div class="form-text">Preview now, save when ready.</div>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Appearance mode</label>
                                 <div class="lp-static-field" id="account-ui-mode-display">{{ ui_mode_label(user.ui_mode) }}</div>
-                                <div class="form-text">Use the light and dark switch in the top bar from any page. It saves with your account automatically.</div>
+                                <div class="form-text">Saved automatically from the top bar.</div>
                             </div>
                             <div class="col-12">
                                 <label class="form-label">Theme Presets</label>
@@ -139,9 +139,9 @@
                 <h2 class="h5 mb-3">Just for you</h2>
                 <div class="surface-panel-soft">
                     <div class="small text-secondary mb-2">Theme and mode</div>
-                    <div class="fw-semibold mb-3">Update your navigation, cards, gradients, and overall workspace style.</div>
+                    <div class="fw-semibold mb-3">Updates navigation, cards, and workspace style.</div>
                     <div class="small text-secondary mb-2">Timezone</div>
-                    <div class="fw-semibold">Updates the dashboard, activity feed, planner dates, and giveaway timing displays.</div>
+                    <div class="fw-semibold">Updates dashboard, planner, logs, and giveaways.</div>
                 </div>
             </div>
         </div>

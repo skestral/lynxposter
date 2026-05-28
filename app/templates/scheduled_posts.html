@@ -11,11 +11,11 @@
             </h1>
             <p class="text-secondary mb-0">
                 {% if active_planner_view == "month" %}
-                See the full monthly publishing rhythm and reschedule posts by day.
+                Month view and day drops.
                 {% elif active_planner_view == "board" %}
-                Work every lane at full size with the same drag-and-drop controls.
+                All lanes, full width.
                 {% else %}
-                Calendar, board lanes, and quick reschedule details in one workspace.
+                Calendar, lanes, and quick edits.
                 {% endif %}
             </p>
         </div>
@@ -68,9 +68,9 @@
                     <h2 class="h4 mb-1">{% if active_planner_view == "month" %}Month Calendar{% else %}Calendar Week{% endif %}</h2>
                     <p class="text-secondary mb-0">
                         {% if active_planner_view == "month" %}
-                        Review the whole month and drop cards onto the right day.
+                        Month view and day drops.
                         {% else %}
-                        Drop cards onto a day, then pick the exact time in the quick edit sheet.
+                        Drop onto a day, then set time.
                         {% endif %}
                     </p>
                 </div>
@@ -90,7 +90,7 @@
             <div class="surface-panel-soft planner-range-panel">
                 <div class="planner-range-copy">
                     <div class="fw-semibold" id="calendar-range-label">Loading calendar...</div>
-                    <div class="small text-secondary">Scheduled posts appear here, including drafts that are still being refined on the board.</div>
+                    <div class="small text-secondary">Scheduled and draft tracks.</div>
                 </div>
                 <div class="d-flex gap-2 flex-wrap">
                     <span class="badge text-bg-light border" id="calendar-summary-total">0 scheduled</span>
@@ -103,8 +103,8 @@
             </div>
             <div class="scheduled-calendar-empty d-none" id="scheduled-calendar-empty">
                 <div class="surface-panel text-center">
-                    <div class="fw-semibold mb-2">No post plans in this range</div>
-                    <div class="text-secondary">Move to another week or month, or create a new post plan.</div>
+                    <div class="fw-semibold mb-2">No tracks in range</div>
+                    <div class="text-secondary">Shift dates or create a post.</div>
                 </div>
             </div>
         </div>
@@ -115,9 +115,9 @@
                     <h2 class="h5 mb-1">{% if active_planner_view == "board" %}Full Board{% else %}Board Snapshot{% endif %}</h2>
                     <p class="text-secondary mb-0">
                         {% if active_planner_view == "board" %}
-                        Drag cards between editable lanes with all visible workspace.
+                        Full board lanes.
                         {% else %}
-                        Quick lane counts for the current publishing pipeline. Open a lane or jump to the full board for details.
+                        Lane counts and quick access.
                         {% endif %}
                     </p>
                 </div>
@@ -130,7 +130,7 @@
                     <div class="scheduled-kanban-lane-header">
                         <div>
                             <div class="fw-semibold">Drafts</div>
-                            <div class="small text-secondary">Posts still taking shape.</div>
+                            <div class="small text-secondary">Still taking shape.</div>
                         </div>
                         <button class="badge text-bg-light border planner-board-count-button" type="button" id="kanban-count-drafts" data-kanban-modal="drafts">0</button>
                     </div>
@@ -140,7 +140,7 @@
                     <div class="scheduled-kanban-lane-header">
                         <div>
                             <div class="fw-semibold">Scheduled</div>
-                            <div class="small text-secondary">Ready and waiting for send time.</div>
+                            <div class="small text-secondary">Ready to prowl.</div>
                         </div>
                         <button class="badge text-bg-light border planner-board-count-button" type="button" id="kanban-count-scheduled" data-kanban-modal="scheduled">0</button>
                     </div>
@@ -150,7 +150,7 @@
                     <div class="scheduled-kanban-lane-header">
                         <div>
                             <div class="fw-semibold">Queue Now</div>
-                            <div class="small text-secondary">Nudge the next cycle.</div>
+                            <div class="small text-secondary">Next cycle.</div>
                         </div>
                         <button class="badge text-bg-light border planner-board-count-button" type="button" id="kanban-count-running" data-kanban-modal="running">0</button>
                     </div>
@@ -160,7 +160,7 @@
                     <div class="scheduled-kanban-lane-header">
                         <div>
                             <div class="fw-semibold">Needs Attention</div>
-                            <div class="small text-secondary">Failures and cancelled work.</div>
+                            <div class="small text-secondary">Needs a look.</div>
                         </div>
                         <button class="badge text-bg-light border planner-board-count-button" type="button" id="kanban-count-attention" data-kanban-modal="attention">0</button>
                     </div>
@@ -170,7 +170,7 @@
                     <div class="scheduled-kanban-lane-header">
                         <div>
                             <div class="fw-semibold">Completed</div>
-                            <div class="small text-secondary">Delivered successfully.</div>
+                            <div class="small text-secondary">Delivered.</div>
                         </div>
                         <button class="badge text-bg-light border planner-board-count-button" type="button" id="kanban-count-done" data-kanban-modal="done">0</button>
                     </div>
@@ -184,7 +184,7 @@
         <div>
             <div class="section-kicker mb-2">Selected Post</div>
             <h2 class="h5 mb-1">Open any card for composer details</h2>
-            <p class="text-secondary mb-0">Drag to reschedule quickly, or open the card to edit copy, media, destination overrides, and giveaway details.</p>
+            <p class="text-secondary mb-0">Drag to reschedule, or open a card.</p>
         </div>
         <a class="btn btn-outline-primary" href="/scheduled-posts/new/page">Open composer</a>
 </section>
@@ -203,7 +203,7 @@
             <div class="modal-body">
                 <div class="surface-panel-soft planner-lane-modal-summary">
                     <div class="fw-semibold" id="planner-lane-modal-count">0 cards</div>
-                    <div class="small text-secondary">Use the full board when you need drag-and-drop space or a longer review.</div>
+                    <div class="small text-secondary">Open the full board for more room.</div>
                 </div>
                 <div class="planner-lane-modal-list mt-3" id="planner-lane-modal-list"></div>
             </div>
@@ -243,7 +243,7 @@
                             <span class="badge text-bg-light border rounded-pill">{{ timezone_indicator() }}</span>
                         </label>
                         <input class="form-control" id="planner-move-scheduled-for" type="datetime-local">
-                        <div class="form-text">Choose when this post should appear on the calendar.</div>
+                        <div class="form-text">Sets calendar time.</div>
                     </div>
                     <div class="form-check d-none" id="planner-move-clear-schedule-wrap">
                         <input class="form-check-input" type="checkbox" id="planner-move-clear-schedule">
@@ -255,7 +255,7 @@
                             <span class="badge text-bg-light border rounded-pill">{{ timezone_indicator() }}</span>
                         </label>
                         <input class="form-control" id="planner-move-giveaway-end" type="datetime-local">
-                        <div class="form-text">Giveaway posts need an end time before they can go live.</div>
+                        <div class="form-text">Required before launch.</div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -908,7 +908,7 @@ function renderKanbanBoard() {
     if (plannerIsFullBoard) {
       lane.innerHTML = items.length
         ? `${visibleItems.map((post) => plannerCardMarkup(post)).join("")}${toggleMarkup}`
-        : `<div class="scheduled-kanban-empty">${bucket === "attention" || bucket === "done" ? "Nothing to show here." : "Drop a card here."}</div>`;
+        : `<div class="scheduled-kanban-empty">${bucket === "attention" || bucket === "done" ? "No tracks here." : "Drop a card here."}</div>`;
       return;
     }
     lane.innerHTML = items.length ? snapshotSummaryMarkup : "";
@@ -941,8 +941,8 @@ function buildMoveContext(post, target) {
     const targetDate = parseDateKey(target.dateKey);
     return {
       title: `Move to ${formatDayLabel(targetDate, {month: "long", day: "numeric"})}`,
-      targetLabel: "Schedule this post on the selected day",
-      description: "Pick the time and we will update the planner right away.",
+      targetLabel: "Schedule on this day",
+      description: "Pick a time.",
       submitLabel: "Save Schedule",
       nextStatus: "scheduled",
       requireSchedule: true,
@@ -956,8 +956,8 @@ function buildMoveContext(post, target) {
     if (target.bucket === "drafts") {
       return {
         title: "Move to Drafts",
-        targetLabel: "Pull this plan back into draft mode",
-        description: "Use the checkbox below to decide whether this draft keeps its calendar time.",
+        targetLabel: "Back to draft",
+        description: "Choose whether to keep the time.",
         submitLabel: "Move to Drafts",
         nextStatus: "draft",
         requireSchedule: false,
@@ -970,8 +970,8 @@ function buildMoveContext(post, target) {
     if (target.bucket === "scheduled") {
       return {
         title: "Move to Scheduled",
-        targetLabel: "Give this post a place on the calendar",
-        description: "Choose the publish time and we will tuck it into the schedule.",
+        targetLabel: "Add to calendar",
+        description: "Choose the publish time.",
         submitLabel: "Schedule Post",
         nextStatus: "scheduled",
         requireSchedule: true,
@@ -985,8 +985,8 @@ function buildMoveContext(post, target) {
       const suggestedNow = toDatetimeLocalValue(new Date());
       return {
         title: "Queue This Post",
-        targetLabel: "Nudge it into the next publish cycle",
-        description: "We will queue this post for delivery now.",
+        targetLabel: "Send next cycle",
+        description: "Queues for delivery now.",
         submitLabel: "Queue Post",
         nextStatus: "queued",
         requireSchedule: true,

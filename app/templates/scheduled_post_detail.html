@@ -5,7 +5,7 @@
         <div>
             <div class="section-kicker mb-2">Post Plan</div>
             <h1 class="h3 mb-1">Edit Post Plan</h1>
-            <p class="text-secondary mb-0">Tune copy, media, destinations, giveaway rules, and delivery state in one workspace.</p>
+            <p class="text-secondary mb-0">Copy, media, destinations, and giveaway state.</p>
             <div class="small-muted code-ish mt-2">{{ post.id }}</div>
         </div>
         <div class="figma-page-actions">
@@ -56,7 +56,7 @@
                         <div class="composer-surface-header composer-v2-panel-header">
                             <div>
                                 <h2 class="h5 mb-1">Basics</h2>
-                                <p class="text-secondary mb-0">Caption, status, schedule, and source details.</p>
+                                <p class="text-secondary mb-0">Caption, status, schedule.</p>
                             </div>
                             <span class="badge soft-badge rounded-pill px-3 py-2">{{ post.display_status|replace('_', ' ')|title }}</span>
                         </div>
@@ -122,7 +122,7 @@
                             <div class="composer-surface-header composer-v2-panel-header">
                                 <div>
                                     <h2 class="h5 mb-1">Saved Media</h2>
-                                    <p class="text-secondary mb-0">Move saved attachments into publish order, add alt text, or mark old media for removal.</p>
+                                    <p class="text-secondary mb-0">Order media, alt text, and removals.</p>
                                 </div>
                                 <span class="badge text-bg-light border" id="saved-media-count">{{ post.attachments|length }} saved</span>
                             </div>
@@ -132,14 +132,14 @@
                         <div class="surface-panel scheduled-detail-section">
                             <label class="form-label">Add Uploads</label>
                             <input class="form-control" name="uploads" type="file" multiple>
-                            <div class="form-text" id="upload-summary">Choose more images or videos to add to this post plan.</div>
+                            <div class="form-text" id="upload-summary">Add images or videos.</div>
                             <div id="upload-preview-list" class="row g-3 mt-1"></div>
                         </div>
                         <div class="surface-panel-soft scheduled-detail-section">
                             <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
                                 <div>
                                     <div class="fw-semibold">Post Snapshot</div>
-                                    <div class="small text-secondary">Live counts for the current body, saved attachments, pending uploads, and selected destinations.</div>
+                                    <div class="small text-secondary">Live counts.</div>
                                 </div>
                                 <div class="d-flex gap-2 flex-wrap">
                                     <span class="badge text-bg-light border" id="snapshot-body-length">{{ post.body|length }} chars</span>
@@ -156,7 +156,7 @@
                         <div class="composer-surface-header composer-v2-panel-header">
                             <div>
                                 <h2 class="h5 mb-1">Destination Accounts</h2>
-                                <p class="text-secondary mb-0">Set delivery targets, destination-specific text, and media overrides.</p>
+                                <p class="text-secondary mb-0">Targets, copy, and media overrides.</p>
                             </div>
                         </div>
                         <div class="row g-2 mt-2" id="target-account-list">
@@ -200,10 +200,10 @@
                                                 <span>{{ loop.index }}. {{ attachment.alt_text or attachment.mime_type }}</span>
                                             </label>
                                             {% else %}
-                                            <div class="small text-secondary">Save media on this post before setting destination media.</div>
+                                            <div class="small text-secondary">Save media first.</div>
                                             {% endfor %}
                                         </div>
-                                        <div class="form-text">Leave custom media off to use the global media queue and ordering.</div>
+                                        <div class="form-text">Off uses global media order.</div>
                                     </div>
                                     <div class="post-guidance-panel border rounded p-2 bg-body-tertiary mt-3" data-account-id="{{ account.id }}">
                                         <div class="fw-semibold small">Delivery Notes</div>
@@ -221,18 +221,18 @@
                         <div class="composer-surface-header composer-v2-panel-header">
                             <div>
                                 <h2 class="h5 mb-1">Giveaway Builder</h2>
-                                <p class="text-secondary mb-0">Edit Instagram and Bluesky qualifying rules, channel targets, and draw mode from one place.</p>
+                                <p class="text-secondary mb-0">Rules, targets, and draw mode.</p>
                             </div>
                             {% if post.giveaway %}
                             <span class="badge text-bg-light border">{{ post.giveaway.status|replace('_', ' ')|title }}</span>
                             {% endif %}
                         </div>
                         <div id="giveaway-builder-root" class="mt-3"></div>
-                        <div class="small text-secondary mt-3" id="giveaway-target-hint">Giveaway destinations sync directly from the enabled channels.</div>
+                        <div class="small text-secondary mt-3" id="giveaway-target-hint">Giveaway destinations sync from enabled channels.</div>
                     </div>
                     {% if post.post_type != 'giveaway' %}
                     <div class="surface-panel-soft scheduled-detail-section">
-                        <div class="small text-secondary">Switch the post type to <strong>Giveaway</strong> to edit the giveaway rules here.</div>
+                        <div class="small text-secondary">Switch post type to <strong>Giveaway</strong>.</div>
                     </div>
                     {% endif %}
                 </div>
@@ -797,15 +797,15 @@ function evaluateServiceGuidance(rule, bodyText, snapshot) {
   if (!rule) {
     return {
       tone: "warning",
-      lines: lines.concat(["No structured post guidance is available for this service yet."]),
+      lines: lines.concat(["No service guidance yet."]),
     };
   }
 
   if (rule.requires_body_or_media && !bodyText.trim() && snapshot.total === 0) {
-    issues.push("This service needs text or at least one attachment.");
+    issues.push("Needs text or media.");
   }
   if (rule.requires_media && snapshot.total === 0) {
-    issues.push("This service requires at least one image or video attachment.");
+    issues.push("Needs image or video media.");
   }
   if (activeBodyLimit != null && bodyLength > activeBodyLimit) {
     issues.push(`Body exceeds the current ${activeBodyLimit}-character limit.`);
@@ -820,7 +820,7 @@ function evaluateServiceGuidance(rule, bodyText, snapshot) {
     issues.push(`Video count exceeds the ${rule.max_videos}-video limit.`);
   }
   if (rule.single_video_only && snapshot.videos > 0 && snapshot.total > 1) {
-    issues.push("This service currently supports either images or one video, not mixed or multi-video posts.");
+    issues.push("Use images or one video.");
   }
   if (rule.multi_attachment_images_only && snapshot.total > 1 && snapshot.images !== snapshot.total) {
     issues.push("Multiple attachments must all be images for this service.");
@@ -904,7 +904,7 @@ function refreshPostGuidance() {
   const pendingSnapshot = fileSnapshot(uploadsInput?.files || []);
   uploadSummary.textContent = pendingSnapshot.total
     ? `${describeAttachmentSnapshot(pendingSnapshot)} will be added to this post plan.`
-    : "Choose more images or videos to add to this post plan.";
+    : "Add images or videos.";
 
   document.querySelectorAll("[data-account-service]").forEach((wrapper) => {
     const checkbox = wrapper.querySelector(".target-checkbox");
@@ -921,7 +921,7 @@ function refreshPostGuidance() {
 
     if (!checkbox.checked) {
       panel.classList.add("is-warning");
-      renderGuidanceLines(status, ["This destination is not selected for the current post."], "warning");
+      renderGuidanceLines(status, ["Destination not selected."], "warning");
       return;
     }
 
@@ -1120,7 +1120,7 @@ if (recalculateGiveawayButton) {
 
 if (rerunGiveawayButton) {
   rerunGiveawayButton.addEventListener("click", async () => {
-    const confirmed = window.confirm("Rerun this raffle from the current captured activity? This can change the selected winner.");
+    const confirmed = window.confirm("Rerun the raffle from current activity? The winner can change.");
     if (!confirmed) return;
     rerunGiveawayButton.disabled = true;
     rerunGiveawayButton.textContent = "Rerunning...";
@@ -1159,7 +1159,7 @@ if (reopenGiveawaySubmitButton && reopenGiveawayEndAtInput) {
       alert("Choose a new giveaway end date and time.");
       return;
     }
-    const confirmed = window.confirm("Reopen this giveaway with the new closing date? Existing captured activity will remain, and the raffle result will be cleared.");
+    const confirmed = window.confirm("Reopen with this closing date? Captured activity stays. Raffle results clear.");
     if (!confirmed) return;
     reopenGiveawaySubmitButton.disabled = true;
     reopenGiveawaySubmitButton.textContent = "Reopening...";
@@ -1183,7 +1183,7 @@ if (reopenGiveawaySubmitButton && reopenGiveawayEndAtInput) {
 
 if (endGiveawayButton) {
   endGiveawayButton.addEventListener("click", async () => {
-    const confirmed = window.confirm("End this giveaway now? LynxPoster will collect the latest activity and choose winners from the current entries.");
+    const confirmed = window.confirm("End this giveaway now? Latest activity will be collected before the draw.");
     if (!confirmed) return;
     endGiveawayButton.disabled = true;
     endGiveawayButton.textContent = "Ending Giveaway...";
@@ -1203,7 +1203,7 @@ if (endGiveawayButton) {
 
 if (instagramScanButton) {
   instagramScanButton.addEventListener("click", async () => {
-    const confirmed = window.confirm("Run an Instagram private activity scan now? This uses the saved Instagram login/session and should be used sparingly, especially after automation warnings.");
+    const confirmed = window.confirm("Run Instagram private scan now? This uses saved login/session details.");
     if (!confirmed) return;
     instagramScanButton.disabled = true;
     instagramScanButton.textContent = "Scanning Instagram...";

@@ -151,7 +151,7 @@ def test_personas_template_surfaces_pending_shared_personas():
 
     assert "Shared With You" in html
     assert "Persona access waiting" in html
-    assert "No emails are sent." in html
+    assert "Accept shares in app." in html
     assert "/persona-access/inbox/${row.dataset.accessId}/accept" in html
     assert "Shared Edit" in html
     assert "PawgetSound.Studio" in html
@@ -278,7 +278,7 @@ def test_persona_detail_template_renders_instagram_token_tracking_controls():
     assert "Record Token Refresh" in html
     assert "instagram-token-refresh-button" in html
     assert "Check Login" in html
-    assert "Private verification fields are optional" in html
+    assert "Private verification is optional" in html
     assert '<option value="instagram" selected>Instagram</option>' in html
     assert 'data-scope="publish"\n        data-field-name="video_media_type"' in html
     assert '<option value="REELS" >Reel</option>' in html
@@ -483,7 +483,7 @@ def test_scheduled_post_templates_render_attachment_previews():
     assert 'data-action="up"' in detail_html
     assert 'attachment_order' in detail_html
     assert 'deleted_attachment_ids' in detail_html
-    assert 'Drag media in, then arrange the publish order.' in create_html
+    assert 'Drop, order, and save.' in create_html
     assert 'Post Snapshot' in detail_html
     assert 'Media Queue' in create_html
     assert 'composer-media-dropzone' in create_html
@@ -553,7 +553,7 @@ def test_scheduled_post_templates_render_attachment_previews():
     assert 'data-kanban-toggle="${bucket}"' in planner_html
     assert 'Display all ${items.length}' in planner_html
     assert 'View lane' in planner_html
-    assert 'Quick lane counts for the current publishing pipeline' in planner_html
+    assert 'Lane counts and quick access.' in planner_html
     assert 'class="scheduled-kanban-list" id="kanban-lane-drafts"' in planner_html
     assert 'planner-board-lane-empty' in planner_html
     assert 'planner-move-modal' in planner_html
@@ -582,7 +582,7 @@ def test_scheduled_post_templates_render_attachment_previews():
     assert 'Partial Failure' in detail_html
     assert 'Instagram session expired.' in planner_html
     assert 'Queue Now' in planner_html
-    assert 'Quick lane counts for the current publishing pipeline' in planner_html
+    assert 'Lane counts and quick access.' in planner_html
 
 
 def test_scheduled_post_templates_render_generic_giveaway_controls():
@@ -813,7 +813,7 @@ def test_scheduled_posts_planner_renders_generic_giveaway_data():
     assert 'const plannerTimezoneName = "America/Los_Angeles";' in html
     assert "Timezone: America/Los_Angeles" in html
     assert "return Boolean(post.scheduledDate);" in html
-    assert "including drafts that are still being refined on the board" in html
+    assert "Scheduled and draft tracks." in html
     assert "reply_or_quote_present" in html
     assert "pool_mode" in html
     assert "normalizeGiveawayConfig" in html
@@ -1376,10 +1376,10 @@ def test_settings_template_renders_instagram_webhook_setup_guidance():
     assert "Webhook Callback URL" in html
     assert "/webhooks/instagram" in html
     assert "Verify Token" in html
-    assert "Recommended Subscriptions" in html
+    assert "Subscriptions" in html
     assert "comments, mentions, messages" in html
     assert "Instagram Safety Mode" in html
-    assert "Graph-only automation, manual private scans only" in html
+    assert "Graph-only, manual private scans" in html
     assert "Latest Private Scan" in html
     assert 'name="media_orphan_retention_seconds"' in html
     assert '<option value="900" selected>15 minutes</option>' in html

@@ -12,7 +12,7 @@
                 <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
                     <div>
                         <h1 class="h3 mb-2">Choose a profile</h1>
-                        <p class="mb-0 text-secondary">Local mode is active for this trusted setup. Pick a profile or create a new one to keep going.</p>
+                        <p class="mb-0 text-secondary">Local mode is active.</p>
                     </div>
                     <div class="d-flex gap-2 flex-wrap">
                         <span class="badge rounded-pill soft-badge px-3 py-2">{{ local_users|length }} profiles</span>
@@ -28,7 +28,7 @@
                     <div class="card-body">
                         <div class="d-flex justify-content-between align-items-center mb-3">
                             <h2 class="h5 mb-0">Available Profiles</h2>
-                            <span class="small text-secondary">Only enabled profiles can be selected.</span>
+                            <span class="small text-secondary">Enabled profiles only.</span>
                         </div>
                         <div class="row g-3">
                             {% for user in local_users %}
@@ -81,7 +81,7 @@
                 <div class="card section-card">
                     <div class="card-body">
                         <h2 class="h5 mb-3">Create a profile</h2>
-                        <p class="text-secondary">New local profiles start with the regular <strong>User</strong> role. Admin access stays reserved for administration.</p>
+                        <p class="text-secondary">New profiles start as <strong>User</strong>.</p>
                         <form method="post" action="/auth/select/create" class="row g-3">
                             <input type="hidden" name="next" value="{{ next_path }}">
                             <div class="col-12">
@@ -106,8 +106,7 @@
                     <div class="card-body">
                         <h2 class="h5 mb-3">Local mode notes</h2>
                         <div class="small text-secondary">
-                            Local mode is best for trusted private setups.
-                            When OIDC is turned back on, external sign-in and group claims take over again.
+                            Trusted private setups only. OIDC takes over when enabled.
                         </div>
                     </div>
                 </div>

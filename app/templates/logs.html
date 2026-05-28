@@ -7,7 +7,7 @@
                 <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
                     <div>
                         <h1 class="h4 mb-1">Activity & Alerts</h1>
-                        <div class="text-secondary">Follow automation runs, warnings, and delivery hiccups from one place.</div>
+                        <div class="text-secondary">Runs, warnings, and delivery hiccups.</div>
                     </div>
                     <div class="d-flex gap-2 flex-wrap">
                         <span class="badge text-bg-light border rounded-pill px-3 py-2">{{ timezone_indicator() }}</span>
@@ -87,7 +87,7 @@
         <div class="card section-card">
             <div class="card-body">
                 {% set instagram_webhook_panel_title = "Instagram Webhook Activity" %}
-                {% set instagram_webhook_panel_subtitle = "Review the exact webhook fields and payloads Meta is sending before you tighten any handling rules." %}
+                {% set instagram_webhook_panel_subtitle = "Webhook fields, matches, and payloads." %}
                 {% set instagram_webhook_panel_cta_href = "/settings/page" %}
                 {% set instagram_webhook_panel_cta_label = "Open Settings" %}
                 {% include "_instagram_webhook_observability.html" %}

@@ -175,7 +175,7 @@
                                     <input class="form-check-input" type="checkbox" name="import_existing_posts" {% if persona.settings_json and persona.settings_json.import_existing_posts %}checked{% endif %}>
                                     <label class="form-check-label">Import existing posts on first scan</label>
                                 </div>
-                                <div class="small text-secondary">Keep this off for a clean start so an old backlog does not flood your destinations.</div>
+                                <div class="small text-secondary">Leave off to avoid old backlog.</div>
                             </div>
                         </div>
                     </div>
@@ -344,13 +344,14 @@
                                         <div class="surface-panel">
                                             <div class="section-kicker mb-2">Credentials</div>
                                             {% if entry.account.service == "instagram" %}
-                                            <div class="small text-secondary mb-3">
-                                                Graph credentials power publishing and polling. Private verification fields are optional and only used for intentional manual review or risk-enabled giveaway checks.
-                                            </div>
+                                            <details class="surface-details compact-help mb-3">
+                                                <summary>Help</summary>
+                                                <div class="small text-secondary mt-2">Graph handles publishing and polling. Private verification is optional.</div>
+                                            </details>
                                             {% if entry.account.credentials_json.get("instagrapi_sessionid") or (entry.account.credentials_json.get("instagrapi_username") and entry.account.credentials_json.get("instagrapi_password")) %}
                                             <div class="alert alert-warning py-2">
                                                 <div class="fw-semibold">Private Instagram verification is configured</div>
-                                                <div class="small mb-0">These saved login/session details are not used for Graph publishing or default autorun. Use Check Login and manual giveaway scans sparingly, especially after automation warnings.</div>
+                                                <div class="small mb-0">Private login/session details are manual-first. Use sparingly after warnings.</div>
                                             </div>
                                             {% endif %}
                                             {% endif %}
@@ -417,7 +418,7 @@
                                                     Record Token Refresh
                                                 </button>
                                                 <div class="small text-secondary mt-2">
-                                                    Use this after refreshing or replacing the long-lived token in Meta so lynxposter can reset the reminder window.
+                                                    Record after refreshing the Meta token.
                                                 </div>
                                             </div>
                                             {% endif %}
@@ -490,7 +491,7 @@
                     <div>
                         <div class="section-kicker mb-2">Routes</div>
                         <h2 class="h5 mb-1">Delivery Map</h2>
-                        <p class="text-secondary mb-0">Choose where new posts should travel when this persona watches a source account for incoming content.</p>
+                        <p class="text-secondary mb-0">Source-to-destination paths.</p>
                     </div>
                     <button class="btn btn-primary" id="save-routes-button" {% if not source_accounts or not destination_accounts or not can_edit_persona %}disabled{% endif %}>Save Routes</button>
                 </div>
@@ -548,7 +549,11 @@
                             <div class="surface-panel">
                                 <label class="form-label">Email</label>
                                 <input class="form-control" name="email" type="email" placeholder="teammate@example.com" required>
-                                <div class="form-text">If the email matches a local user, access becomes active immediately. Otherwise it waits in their in-app Personas page after they sign in. No emails are sent.</div>
+                                <div class="form-text">Matching users see it in Personas.</div>
+                                <details class="surface-details compact-help mt-2">
+                                    <summary>Details</summary>
+                                    <div class="small text-secondary mt-2">Matching users activate now. Others see it in Personas after sign-in. No emails.</div>
+                                </details>
                             </div>
                             <div class="surface-panel">
                                 <label class="form-label">Permission</label>

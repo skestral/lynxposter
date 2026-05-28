@@ -6,7 +6,7 @@
         <div>
             <div class="section-kicker mb-2">Post Composer</div>
             <h1 class="h3 mb-1">New Post</h1>
-            <p class="text-secondary mb-0">Compose once, arrange media, choose destinations, and save the plan.</p>
+            <p class="text-secondary mb-0">Compose, route, and save.</p>
         </div>
         <div class="figma-page-actions">
             <a class="btn btn-outline-secondary" href="/scheduled-posts/page">Cancel</a>
@@ -41,7 +41,7 @@
                 <div class="composer-surface-header composer-v2-panel-header">
                     <div>
                         <h2 class="h5 mb-1">Compose</h2>
-                        <p class="text-secondary mb-0">Global caption and post timing.</p>
+                        <p class="text-secondary mb-0">Caption, status, and timing.</p>
                     </div>
                     <span class="badge soft-badge rounded-pill px-3 py-2" id="preview-status-pill">Draft</span>
                 </div>
@@ -83,7 +83,7 @@
                     <div class="composer-surface-header is-compact">
                         <div>
                             <h3 class="h6 mb-1">Schedule</h3>
-                            <p class="text-secondary mb-0">Leave blank for draft-only planning.</p>
+                            <p class="text-secondary mb-0">Blank keeps it drafted.</p>
                         </div>
                     </div>
                     <div class="composer-schedule-grid">
@@ -137,13 +137,13 @@
                         <div class="composer-surface-header composer-v2-panel-header">
                             <div>
                                 <h2 class="h5 mb-1">Media Queue</h2>
-                                <p class="text-secondary mb-0" id="upload-summary">Drag media in, then arrange the publish order.</p>
+                                <p class="text-secondary mb-0" id="upload-summary">Drop, order, and save.</p>
                             </div>
                         </div>
                         <div class="composer-media-dropzone" id="composer-media-dropzone" tabindex="0" role="button" aria-label="Add media files">
                             <div>
                                 <div class="fw-semibold">Drop images or videos here</div>
-                                <div class="small text-secondary">Drag to reorder. Remove anything before saving.</div>
+                                <div class="small text-secondary">Reorder before saving.</div>
                             </div>
                             <label class="btn btn-outline-primary mb-0">
                                 Add media
@@ -157,7 +157,7 @@
                         <div class="composer-surface-header composer-v2-panel-header">
                             <div>
                                 <h2 class="h5 mb-1">Destinations</h2>
-                                <p class="text-secondary mb-0">Open a destination to adjust its copy and review service limits.</p>
+                                <p class="text-secondary mb-0">Copy and limits per service.</p>
                             </div>
                         </div>
                         <div class="composer-destination-rows" id="target-account-list"></div>
@@ -167,16 +167,16 @@
                         <div class="composer-surface-header composer-v2-panel-header">
                             <div>
                                 <h2 class="h5 mb-1">Giveaway Builder</h2>
-                                <p class="text-secondary mb-0">Mix Instagram and Bluesky channels, choose a pool mode, and define qualifying actions visually.</p>
+                                <p class="text-secondary mb-0">Channels, pools, and rules.</p>
                             </div>
                         </div>
                         <div class="surface-panel giveaway-only d-none" id="giveaway-config-panel">
                             <div id="giveaway-builder-root"></div>
-                            <div class="small text-secondary mt-3" id="giveaway-target-hint">Switch to giveaway mode to sync destinations from the enabled channels.</div>
+                            <div class="small text-secondary mt-3" id="giveaway-target-hint">Giveaway mode syncs enabled channels.</div>
                         </div>
                         <div class="surface-panel-soft" id="giveaway-standby-panel">
                             <div class="fw-semibold">Giveaway rules</div>
-                            <div class="small text-secondary">Switch the post type to Giveaway to define channels and requirements.</div>
+                            <div class="small text-secondary">Switch post type to Giveaway.</div>
                         </div>
                     </section>
 
@@ -184,7 +184,7 @@
                         <div class="composer-surface-header composer-v2-panel-header">
                             <div>
                                 <h2 class="h5 mb-1">Preview</h2>
-                                <p class="text-secondary mb-0">Fast read on how this plan is shaping up.</p>
+                                <p class="text-secondary mb-0">Quick shape check.</p>
                             </div>
                         </div>
                         <div class="composer-preview-phone">
@@ -218,7 +218,7 @@
     <div class="card-body text-center py-5">
         <div class="section-kicker mb-2">Composer</div>
         <h2 class="h4 mb-2">Add a persona before you create a post</h2>
-        <p class="text-secondary mb-4">lynxposter needs at least one persona with destination accounts before the composer can get to work.</p>
+        <p class="text-secondary mb-4">Create a persona with destinations first.</p>
         <div class="d-flex gap-2 justify-content-center flex-wrap">
             <a class="btn btn-primary" href="/personas/page">Open Personas</a>
             <a class="btn btn-outline-secondary" href="/scheduled-posts/page">Back to Planner</a>
@@ -377,15 +377,15 @@ function evaluateServiceGuidance(rule, bodyText, snapshot) {
   if (!rule) {
     return {
       tone: "warning",
-      lines: lines.concat(["No structured post guidance is available for this service yet."]),
+      lines: lines.concat(["No service guidance yet."]),
     };
   }
 
   if (rule.requires_body_or_media && !bodyText.trim() && snapshot.total === 0) {
-    issues.push("This service needs text or at least one attachment.");
+    issues.push("Needs text or media.");
   }
   if (rule.requires_media && snapshot.total === 0) {
-    issues.push("This service requires at least one image or video attachment.");
+    issues.push("Needs image or video media.");
   }
   if (activeBodyLimit != null && bodyLength > activeBodyLimit) {
     issues.push(`Body exceeds the current ${activeBodyLimit}-character limit.`);
@@ -400,7 +400,7 @@ function evaluateServiceGuidance(rule, bodyText, snapshot) {
     issues.push(`Video count exceeds the ${rule.max_videos}-video limit.`);
   }
   if (rule.single_video_only && snapshot.videos > 0 && snapshot.total > 1) {
-    issues.push("This service currently supports either images or one video, not mixed or multi-video posts.");
+    issues.push("Use images or one video.");
   }
   if (rule.multi_attachment_images_only && snapshot.total > 1 && snapshot.images !== snapshot.total) {
     issues.push("Multiple attachments must all be images for this service.");
@@ -442,7 +442,7 @@ function renderTargetAccounts() {
   const accounts = personaTargets[personaSelect.value] || [];
   targetAccountList.innerHTML = "";
   if (!accounts.length) {
-    targetAccountList.innerHTML = '<div class="col-12"><div class="alert alert-light border mb-0">This persona does not have any ready destination accounts yet.</div></div>';
+    targetAccountList.innerHTML = '<div class="col-12"><div class="alert alert-light border mb-0">No ready destinations yet.</div></div>';
     refreshComposerPreview();
     return;
   }
@@ -735,7 +735,7 @@ function refreshPostGuidance() {
   bodyLengthIndicator.textContent = `${bodyTextarea.value.length} chars`;
   uploadSummary.textContent = snapshot.total
     ? `${describeAttachmentSnapshot(snapshot)} in queue. Drag cards to change publish order.`
-    : "Drag media in, then arrange the publish order.";
+    : "Drop media to build the queue.";
   snapshotBodyLength.textContent = `${bodyTextarea.value.length} chars`;
   snapshotAttachments.textContent = `${snapshot.total} attachment${snapshot.total === 1 ? "" : "s"}`;
   snapshotTargets.textContent = `${selectedTargets} target${selectedTargets === 1 ? "" : "s"}`;
@@ -761,7 +761,7 @@ function refreshPostGuidance() {
 
     if (!checkbox.checked) {
       panel.classList.add("is-warning");
-      renderGuidanceLines(status, ["This destination is not selected for the current post."], "warning");
+      renderGuidanceLines(status, ["Destination not selected."], "warning");
       return;
     }
 

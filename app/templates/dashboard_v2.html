@@ -75,7 +75,7 @@
             <div class="dashboard-v2-title-block">
                 <div class="dashboard-v2-kicker">Operations</div>
                 <h1 id="dashboard-v2-title">Ops Health</h1>
-                <div class="dashboard-v2-subtitle">Publishing, giveaways, alerts, and platform signals in one view.</div>
+                <div class="dashboard-v2-subtitle">Signals, schedules, and giveaways at a glance.</div>
             </div>
             <div class="dashboard-v2-actions">
                 <span class="dashboard-v2-live-pill" id="dashboard-v2-live-update-status">{{ status_dot('green') }}Live</span>
@@ -103,7 +103,7 @@
                             <div>
                                 <div class="dashboard-v2-metric-accent"></div>
                                 <div class="dashboard-v2-metric-label">Giveaway Metrics</div>
-                                <div class="dashboard-v2-giveaway-kpi-title" id="dashboard-v2-giveaway-kpi-title">Active and All-Time Giveaway Meters</div>
+                                <div class="dashboard-v2-giveaway-kpi-title" id="dashboard-v2-giveaway-kpi-title">Giveaway meters</div>
                             </div>
                             <a href="/scheduled-posts/page" class="dashboard-v2-panel-link">Giveaways</a>
                         </div>
@@ -131,7 +131,7 @@
                             </span>
                             {% else %}
                             <span class="dashboard-v2-giveaway-kpi-chip">
-                                <span>No activity yet</span>
+                                <span>No tracks yet</span>
                                 <strong>0 / 0</strong>
                             </span>
                             {% endfor %}
@@ -199,7 +199,7 @@
                         <div class="dashboard-v2-donut" style="--donut-value: {{ 100 if model.giveaway_metrics.get('entrants', 0) and model.giveaway_metrics.get('activities', 0) else 0 }}%;">
                             <span>{{ model.giveaway_metrics.get("activities", 0) }}</span>
                         </div>
-                        <div class="dashboard-v2-muted">Captured activities across {{ model.giveaway_metrics.get("campaigns", 0) }} open campaign{% if model.giveaway_metrics.get("campaigns", 0) != 1 %}s{% endif %}.</div>
+                        <div class="dashboard-v2-muted">{{ model.giveaway_metrics.get("campaigns", 0) }} open prowl{% if model.giveaway_metrics.get("campaigns", 0) != 1 %}s{% endif %}.</div>
                     </section>
                 </div>
 
@@ -216,7 +216,7 @@
                             {% for card in model.upcoming_post_cards[:3] %}
                                 {{ post_card(card, compact=true) }}
                             {% else %}
-                            <div class="dashboard-v2-empty">No scheduled posts on deck.</div>
+                            <div class="dashboard-v2-empty">No posts on deck.</div>
                             {% endfor %}
                         </div>
                     </section>
@@ -239,7 +239,7 @@
                                 </span>
                             </a>
                             {% else %}
-                            <div class="dashboard-v2-empty">No giveaway activity captured yet.</div>
+                            <div class="dashboard-v2-empty">No tracks yet.</div>
                             {% endfor %}
                         </div>
                     </section>
@@ -415,7 +415,7 @@
                 <div class="dashboard-v2-panel mt-3" id="instagram-webhooks">
                     {% set webhook_obs = instagram_webhook_observability %}
                     {% set instagram_webhook_panel_title = "Instagram Webhooks" %}
-                    {% set instagram_webhook_panel_subtitle = "Recent official Graph webhook events and giveaway matching signals." %}
+                    {% set instagram_webhook_panel_subtitle = "Graph webhooks and giveaway matches." %}
                     {% set instagram_webhook_panel_cta_href = "/logs/page#instagram-webhooks" %}
                     {% set instagram_webhook_panel_cta_label = "Open Logs" %}
                     {% include "_instagram_webhook_observability.html" %}

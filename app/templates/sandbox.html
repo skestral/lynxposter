@@ -5,7 +5,7 @@
         <div class="card section-card">
             <div class="card-body">
                 <h1 class="h4">Preview Studio</h1>
-                <p class="text-secondary">Preview how each destination would receive a post without sending anything live.</p>
+                <p class="text-secondary">Inspect destination payloads before anything goes live.</p>
                 {% if sandbox_source_label %}
                 <div class="alert alert-info">{{ sandbox_source_label }}</div>
                 {% endif %}
@@ -106,7 +106,7 @@
                     </div>
                 </form>
                 {% else %}
-                <div class="alert alert-light border mb-0">Create a persona and at least one destination account before using Preview Studio.</div>
+                <div class="alert alert-light border mb-0">Create a persona with destinations first.</div>
                 {% endif %}
             </div>
         </div>
@@ -117,11 +117,11 @@
                 <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
                     <div>
                         <h2 class="h5 mb-1">Preview Results</h2>
-                        <p class="text-secondary mb-0">Everything here is generated locally. No posts, uploads, or live API calls leave lynxposter.</p>
+                        <p class="text-secondary mb-0">Local preview only. Nothing is posted.</p>
                     </div>
                     <span class="badge soft-badge rounded-pill" id="sandbox-result-badge">Waiting to preview</span>
                 </div>
-                <div id="sandbox-summary" class="mb-3 text-secondary">Run a preview to inspect what each selected destination would receive.</div>
+                <div id="sandbox-summary" class="mb-3 text-secondary">Run a preview to inspect destination output.</div>
                 <div id="sandbox-results" class="d-grid gap-3"></div>
             </div>
         </div>
@@ -182,7 +182,7 @@ function buildAttachmentInputs() {
 function renderAttachmentList() {
   const attachments = buildAttachmentInputs();
   if (!attachments.length) {
-    attachmentList.innerHTML = '<div class="small text-secondary">No attachment details loaded yet.</div>';
+    attachmentList.innerHTML = '<div class="small text-secondary">No media loaded.</div>';
     clearSavedAttachmentsButton?.classList.add("d-none");
     return;
   }
@@ -214,7 +214,7 @@ function renderTargetAccounts() {
   const selectedIds = selectedTargetIdsFromSeed(accounts);
   targetAccountList.innerHTML = "";
   if (!accounts.length) {
-    targetAccountList.innerHTML = '<div class="col-12"><div class="alert alert-light border mb-0">This persona does not have any ready destination accounts yet.</div></div>';
+    targetAccountList.innerHTML = '<div class="col-12"><div class="alert alert-light border mb-0">No ready destinations yet.</div></div>';
     return;
   }
   for (const account of accounts) {
@@ -241,7 +241,7 @@ function renderTargetAccounts() {
 
 function renderChecks(checks) {
   if (!checks?.length) {
-    return '<div class="small text-secondary">No custom expectations applied.</div>';
+    return '<div class="small text-secondary">No custom checks.</div>';
   }
   return `
     <div class="d-grid gap-2">
@@ -257,7 +257,7 @@ function renderChecks(checks) {
 
 function renderIssues(issues) {
   if (!issues?.length) {
-    return '<div class="small text-secondary">No validation issues.</div>';
+    return '<div class="small text-secondary">No issues.</div>';
   }
   return `
     <div class="d-grid gap-2">
@@ -371,7 +371,7 @@ function buildPayload() {
 async function runSandboxPreview() {
   resultBadge.textContent = "Running preview";
   resultBadge.className = "badge rounded-pill text-bg-primary";
-  summaryEl.textContent = "Generating your preview...";
+  summaryEl.textContent = "Building preview...";
   resultsEl.innerHTML = "";
   const response = await fetch("/sandbox/preview", {
     method: "POST",

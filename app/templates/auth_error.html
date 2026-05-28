@@ -9,13 +9,13 @@
                     {{ error_message }}
                 </div>
                 <div class="small text-secondary mb-3">
-                    lynxposter could not complete the sign-in flow with your identity provider.
+                    Sign-in did not complete.
                 </div>
                 {% if auth_debug_json %}
                 <div class="mt-4">
                     <h2 class="h5 mb-2">OIDC Details</h2>
                     <div class="small text-secondary mb-2">
-                        This is split into <code>lynxposter_config</code> for the app's expected group mapping, <code>provider_claims</code> for the sanitized claims returned by your provider, and <code>provider_tokens</code> for the raw JWTs plus decoded header and payload when available.
+                        Sanitized provider claims and token details.
                     </div>
                     <pre class="bg-light border rounded p-3 small mb-0"><code>{{ auth_debug_json }}</code></pre>
                 </div>
@@ -24,9 +24,9 @@
                     Try this:
                 </div>
                 <ol class="small mt-2 mb-0">
-                    <li>Check the OIDC settings in lynxposter, especially the issuer URL, client credentials, and requested scope.</li>
-                    <li>For Authelia, many clients should use <code>openid profile email</code> and only request <code>groups</code> if the client is explicitly allowed to.</li>
-                    <li>If you are locked out, temporarily set <code>AUTH_OIDC_ENABLED=false</code> in your config and restart the app so you can get back in through local mode.</li>
+                    <li>Check issuer URL, client credentials, and scope.</li>
+                    <li>For Authelia, start with <code>openid profile email</code>.</li>
+                    <li>If locked out, set <code>AUTH_OIDC_ENABLED=false</code> and restart.</li>
                 </ol>
             </div>
         </div>

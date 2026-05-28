@@ -8,7 +8,7 @@
             <div>
                 <div class="section-kicker mb-2">Persona Library</div>
                 <h1 class="h3 mb-1">Build your cast</h1>
-                <div class="text-secondary">Each persona keeps its own accounts, routes, and posting defaults in one focused workspace.</div>
+                <div class="text-secondary">Accounts, routes, and posting defaults.</div>
             </div>
             <span class="badge soft-badge rounded-pill px-3 py-2">{{ personas|length }} personas</span>
         </div>
@@ -22,7 +22,7 @@
             <div>
                 <div class="section-kicker mb-2">Shared With You</div>
                 <h2 class="h5 mb-1">Persona access waiting</h2>
-                <div class="text-secondary">Accept a share to add it to your workspace. No emails are sent.</div>
+                <div class="text-secondary">Accept shares in app.</div>
             </div>
             <span class="badge soft-badge rounded-pill px-3 py-2">{{ pending_persona_access_entries|length }} pending</span>
         </div>
@@ -139,7 +139,7 @@
                                     <input class="form-check-input" type="checkbox" name="import_existing_posts">
                                     <label class="form-check-label">Import existing posts on first scan</label>
                                 </div>
-                                <div class="small text-secondary">Leave this off for a clean start so only fresh posts begin traveling.</div>
+                                <div class="small text-secondary">Leave off to avoid old backlog.</div>
                             </div>
                         </div>
                     </div>
@@ -192,7 +192,7 @@
                                 <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="/personas/{{ persona.id }}/page">Open</a></td>
                             </tr>
                         {% else %}
-                            <tr><td colspan="4" class="text-secondary">No personas yet. Create one to get the ball rolling.</td></tr>
+                            <tr><td colspan="4" class="text-secondary">No dens yet. Create one to start prowling.</td></tr>
                         {% endfor %}
                         </tbody>
                     </table>
