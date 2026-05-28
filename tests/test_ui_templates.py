@@ -1450,6 +1450,7 @@ def test_theme_runtime_uses_selected_colorway_tokens():
     assert "--lp-select-icon" in stylesheet
     assert "background-image: var(--lp-select-icon), var(--lp-select-action-bg)" in stylesheet
     assert "body[data-ui-mode=\"dark\"] .form-select" in stylesheet
+    assert "background-color: rgba(18, 25, 38, 0.72) !important;" in stylesheet
     assert "Unified theme pass" in stylesheet
     assert ".form-check-input:checked[type=\"checkbox\"]" in stylesheet
     assert ".form-switch .form-check-input:checked[type=\"checkbox\"]" in stylesheet

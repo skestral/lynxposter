@@ -5554,7 +5554,7 @@ body[data-ui-mode="dark"] .form-control,
 body[data-ui-mode="dark"] .form-select,
 body[data-ui-mode="dark"] .input-group-text,
 body[data-ui-mode="dark"] .lp-static-field {
-    background: rgba(18, 25, 38, 0.72) !important;
+    background-color: rgba(18, 25, 38, 0.72) !important;
     border-color: rgba(136, 152, 184, 0.24) !important;
 }
 
