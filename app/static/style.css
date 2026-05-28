@@ -5880,6 +5880,52 @@ body[data-ui-mode="dark"] .mobile-nav-drawer-link.active {
     row-gap: 0.9rem;
 }
 
+.giveaway-summary-copy,
+.giveaway-mobile-table,
+.giveaway-check-list,
+.giveaway-check-item {
+    min-width: 0;
+}
+
+.giveaway-detail-meta,
+.giveaway-summary-actions,
+.giveaway-channel-stats,
+.giveaway-raffle-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.65rem;
+}
+
+.giveaway-detail-meta {
+    margin-top: 0.18rem;
+    color: var(--lp-ink-soft);
+    font-size: 0.88rem;
+}
+
+.giveaway-summary-actions {
+    justify-content: flex-end;
+}
+
+.giveaway-channel-stats span,
+.giveaway-raffle-meta span {
+    min-width: 0;
+}
+
+.giveaway-check-list {
+    display: grid;
+    gap: 0.55rem;
+}
+
+.giveaway-check-item {
+    overflow-wrap: anywhere;
+}
+
+.giveaway-check-detail,
+.giveaway-outcome-detail {
+    overflow-wrap: anywhere;
+    line-height: 1.42;
+}
+
 .scheduled-detail-section-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -5957,6 +6003,133 @@ body[data-ui-mode="dark"] .scheduled-detail-alert {
     .scheduled-detail-giveaway-details .surface-panel,
     .scheduled-detail-giveaway-details .surface-panel-soft {
         padding: 0.78rem;
+    }
+
+    .scheduled-detail-giveaway-details {
+        gap: 0.72rem;
+    }
+
+    .scheduled-detail-giveaway-details .h4 {
+        font-size: 1.2rem;
+    }
+
+    .giveaway-summary-panel {
+        font-size: 0.94rem;
+    }
+
+    .giveaway-detail-meta {
+        display: grid;
+        gap: 0.18rem;
+        font-size: 0.82rem;
+        line-height: 1.35;
+    }
+
+    .giveaway-summary-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        width: 100%;
+        gap: 0.45rem;
+    }
+
+    .giveaway-summary-actions .btn {
+        grid-column: 1 / -1;
+        width: 100%;
+    }
+
+    .giveaway-summary-actions .badge {
+        justify-content: center;
+        min-width: 0;
+        padding-inline: 0.62rem !important;
+        text-align: center;
+        white-space: normal;
+    }
+
+    .giveaway-channel-stats,
+    .giveaway-raffle-meta {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.35rem;
+    }
+
+    .giveaway-channel-stats span,
+    .giveaway-raffle-meta span {
+        padding: 0.32rem 0.48rem;
+        border: 1px solid var(--lp-border-soft);
+        border-radius: var(--lp-control-radius);
+        background: var(--lp-muted);
+        overflow-wrap: anywhere;
+    }
+
+    .scheduled-detail-giveaway-details .table-responsive {
+        overflow-x: visible;
+    }
+
+    .giveaway-mobile-table,
+    .giveaway-mobile-table thead,
+    .giveaway-mobile-table tbody,
+    .giveaway-mobile-table tr,
+    .giveaway-mobile-table td {
+        display: block;
+        width: 100%;
+    }
+
+    .giveaway-mobile-table thead {
+        display: none;
+    }
+
+    .giveaway-mobile-table tr {
+        padding: 0.72rem;
+        border: 1px solid var(--lp-border-soft);
+        border-radius: var(--lp-container-radius);
+        background: var(--lp-elevated-soft);
+    }
+
+    .giveaway-mobile-table tr + tr {
+        margin-top: 0.72rem;
+    }
+
+    .giveaway-mobile-table td {
+        display: grid;
+        grid-template-columns: minmax(5rem, 30%) minmax(0, 1fr);
+        gap: 0.65rem;
+        align-items: start;
+        padding: 0.55rem 0 !important;
+        border: 0 !important;
+        overflow-wrap: anywhere;
+    }
+
+    .giveaway-mobile-table td + td {
+        border-top: 1px solid var(--lp-border-soft) !important;
+    }
+
+    .giveaway-mobile-table td::before {
+        content: attr(data-label);
+        color: var(--lp-ink-soft);
+        font-size: 0.72rem;
+        font-weight: 780;
+        letter-spacing: 0.05em;
+        line-height: 1.25;
+        text-transform: uppercase;
+    }
+
+    .giveaway-mobile-table td[data-label="Checks"],
+    .giveaway-mobile-table td[data-label="Outcome"],
+    .giveaway-mobile-table td[data-label="Breakdown"] {
+        display: block;
+    }
+
+    .giveaway-mobile-table td[data-label="Checks"]::before,
+    .giveaway-mobile-table td[data-label="Outcome"]::before,
+    .giveaway-mobile-table td[data-label="Breakdown"]::before {
+        display: block;
+        margin-bottom: 0.42rem;
+    }
+
+    .giveaway-check-item {
+        padding: 0.56rem;
+        border: 1px solid var(--lp-border-soft);
+        border-radius: calc(var(--lp-container-radius) - 4px);
+        background: var(--lp-elevated-soft);
     }
 
     .scheduled-detail-actions {
