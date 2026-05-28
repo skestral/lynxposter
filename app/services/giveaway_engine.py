@@ -826,12 +826,45 @@ def _normalize_evidence_items(items: list[dict[str, Any]] | None, *, default_sou
     return normalized
 
 
-def _normalized_instagram_signal_state(state: dict[str, Any] | None) -> dict[str, Any]:
-    raw_state = dict(state or {})
+def _instagram_comment_parent_id(value: dict[str, Any]) -> str | None:
+    for key in ("parent_id", "parent_comment_id", "reply_to_id", "replied_to_comment_id"):
+        candidate = str(value.get(key) or "").strip()
+        if candidate:
+            return candidate
+    parent = value.get("parent")
+    if isinstance(parent, dict):
+        candidate = str(parent.get("id") or parent.get("comment_id") or "").strip()
+        if candidate:
+            return candidate
+    return None
+
+
+def _normalize_instagram_comment_items(raw_state: dict[str, Any]) -> list[dict[str, Any]]:
     comments = _normalize_evidence_items(
         raw_state.get("comments"),
         default_source=INSTAGRAM_WEBHOOK_CAPTURE_SOURCE,
     )
+    for key in ("comment_replies", "replies"):
+        replies = _normalize_evidence_items(
+            raw_state.get(key),
+            default_source=INSTAGRAM_WEBHOOK_CAPTURE_SOURCE,
+        )
+        for reply in replies:
+            payload = dict(reply)
+            if not payload.get("comment_id") and payload.get("reply_id"):
+                payload["comment_id"] = payload.get("reply_id")
+            payload["is_reply"] = True
+            comments = _append_unique_evidence_item(
+                comments,
+                payload,
+                key_fields=("comment_id", "parent_id", "text"),
+            )
+    return comments
+
+
+def _normalized_instagram_signal_state(state: dict[str, Any] | None) -> dict[str, Any]:
+    raw_state = dict(state or {})
+    comments = _normalize_instagram_comment_items(raw_state)
     story_mentions = _normalize_evidence_items(
         raw_state.get("story_mentions"),
         default_source=INSTAGRAM_WEBHOOK_CAPTURE_SOURCE,
@@ -845,10 +878,13 @@ def _normalized_instagram_signal_state(state: dict[str, Any] | None) -> dict[str
         default_source=INSTAGRAM_WEBHOOK_CAPTURE_SOURCE,
     )
     combined_text = " ".join(str(item.get("text") or "") for item in comments if isinstance(item, dict))
+    observed_friend_mentions = len({match.lower() for match in INSTAGRAM_MENTION_PATTERN.findall(combined_text)})
+    stored_friend_mentions = int(raw_state.get("friend_mention_count") or 0)
+    friend_mention_items = len(raw_state.get("friend_mentions") or [])
     normalized: dict[str, Any] = {
         "comments": comments,
-        "comment_count": len(comments),
-        "friend_mention_count": len({match.lower() for match in INSTAGRAM_MENTION_PATTERN.findall(combined_text)}),
+        "comment_count": max(len(comments), int(raw_state.get("comment_count") or 0)),
+        "friend_mention_count": max(observed_friend_mentions, stored_friend_mentions, friend_mention_items),
         "story_mentions": story_mentions,
         "story_mention_count": len(story_mentions),
         "likes": likes,
@@ -862,6 +898,16 @@ def _normalized_instagram_signal_state(state: dict[str, Any] | None) -> dict[str
         normalized["follow_present"] = raw_state.get("follow_present")
     if "follow_collection_checked" in raw_state:
         normalized["follow_collection_checked"] = bool(raw_state.get("follow_collection_checked"))
+    aliases = [
+        str(value).strip()
+        for value in raw_state.get("provider_user_id_aliases", [])
+        if str(value).strip()
+    ]
+    if aliases:
+        normalized["provider_user_id_aliases"] = sorted(dict.fromkeys(aliases))
+    manual_review = raw_state.get(MANUAL_REVIEW_SIGNAL_KEY)
+    if isinstance(manual_review, dict):
+        normalized[MANUAL_REVIEW_SIGNAL_KEY] = dict(manual_review)
     return normalized
 
 
@@ -1471,6 +1517,7 @@ def _sync_instagram_live_comment_events(
                 "value": {
                     "media_id": channel.target_post_external_id,
                     "id": provider_event_id,
+                    "parent_id": summary.get("parent_id"),
                     "text": summary.get("text") or "",
                     "created_time": raw_comment.get("created_time"),
                     "from": {
@@ -1868,9 +1915,12 @@ def _instagram_activity_summary(
         "actor_username": actor_username,
     }
     if activity == "comment":
+        parent_id = _instagram_comment_parent_id(value)
         summary.update(
             {
                 "comment_id": provider_event_id,
+                "parent_id": parent_id,
+                "is_reply": bool(parent_id),
                 "text": _instagram_webhook_text_value(value) or "",
             }
         )
@@ -2002,6 +2052,35 @@ def sync_instagram_webhook_event_to_channel(
     return captured
 
 
+def _match_instagram_comment_reply_event_to_channel(
+    session: Session,
+    channel: GiveawayChannel,
+    event: InstagramGiveawayWebhookEvent,
+) -> None:
+    if event.matched_giveaway_id or event.matched_post_id:
+        return
+    value = _instagram_webhook_value_payload(event)
+    if not value:
+        return
+    parent_id = _instagram_comment_parent_id(value)
+    if not parent_id:
+        return
+    if not _instagram_webhook_entry_matches_channel_account(event, channel):
+        return
+    parent_event = session.scalar(
+        select(GiveawayEvidenceEvent).where(
+            GiveawayEvidenceEvent.channel_id == channel.id,
+            GiveawayEvidenceEvent.event_type == "instagram_comment",
+            GiveawayEvidenceEvent.provider_event_id == parent_id,
+        )
+    )
+    if parent_event is None:
+        return
+    event.matched_giveaway_id = channel.campaign_id
+    event.matched_post_id = channel.campaign.post_id
+    event.matched_account_id = channel.account_id
+
+
 def sync_instagram_webhook_events_for_channel(session: Session, channel: GiveawayChannel) -> int:
     events = list(
         session.scalars(
@@ -2013,6 +2092,7 @@ def sync_instagram_webhook_events_for_channel(session: Session, channel: Giveawa
     captured = 0
     for event in events:
         _match_indirect_instagram_share_event_to_single_channel(session, channel, event)
+        _match_instagram_comment_reply_event_to_channel(session, channel, event)
         captured += len(sync_instagram_webhook_event_to_channel(session, channel, event))
     return captured
 
@@ -2059,6 +2139,8 @@ def evaluate_channel_entrants(channel: GiveawayChannel, *, allow_instagram_priva
     _merge_duplicate_instagram_entrants(channel)
     rule = dict(channel.rules_json or {})
     for entrant in channel.entrants:
+        if channel.service == "instagram":
+            entrant.signal_state_json = _normalized_instagram_signal_state(dict(entrant.signal_state_json or {}))
         entrant.rule_match_details_json = {}
         entrant.inconclusive_reasons_json = []
         entrant.disqualification_reasons_json = []
@@ -2721,6 +2803,10 @@ def refresh_instagram_channel_state(
                     if force_private_scan:
                         for state in state_by_user.values():
                             state["comments"] = []
+                            state["comment_replies"] = []
+                            state["comment_count"] = 0
+                            state["friend_mention_count"] = 0
+                            state["friend_mentions"] = []
                     for comment in live_comments or []:
                         user = getattr(comment, "user", None)
                         provider_user_id = str(getattr(user, "pk", "") or "").strip()
@@ -2728,9 +2814,18 @@ def refresh_instagram_channel_state(
                         if not provider_user_id:
                             continue
                         existing = state_by_user.setdefault(provider_user_id, _normalized_instagram_signal_state({}))
+                        parent_id = str(
+                            getattr(comment, "parent_pk", "")
+                            or getattr(comment, "parent_id", "")
+                            or getattr(comment, "parent_comment_id", "")
+                            or getattr(comment, "replied_to_comment_id", "")
+                            or ""
+                        ).strip() or None
                         existing["comments"].append(
                             {
                                 "comment_id": str(getattr(comment, "pk", "") or "").strip() or None,
+                                "parent_id": parent_id,
+                                "is_reply": bool(parent_id),
                                 "text": str(getattr(comment, "text", "") or "").strip(),
                                 "source": "close_time_live",
                             }

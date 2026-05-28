@@ -427,6 +427,87 @@ def test_instagram_webhook_ingest_updates_generic_entrant_state(session):
     assert comment_event.entrant_id == entrant.id
 
 
+def test_instagram_webhook_comment_reply_mentions_count_for_parent_thread(session):
+    persona = _create_persona(session, slug="giveaway-webhook-comment-reply")
+    instagram = _create_account(session, persona, service="instagram", label="Instagram")
+    rules = {
+        "kind": "all",
+        "children": [
+            {"kind": "atom", "atom": "comment_present", "params": {}},
+            {"kind": "atom", "atom": "friend_mention_count_gte", "params": {"count": 1}},
+        ],
+    }
+    post = create_scheduled_post(
+        session,
+        _generic_giveaway_payload(
+            persona.id,
+            [instagram.id],
+            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            channels=[{"service": "instagram", "account_id": instagram.id, "rules": rules}],
+        ),
+        [],
+    )
+    other_post = create_scheduled_post(
+        session,
+        _generic_giveaway_payload(
+            persona.id,
+            [instagram.id],
+            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            channels=[{"service": "instagram", "account_id": instagram.id, "rules": rules}],
+        ),
+        [],
+    )
+    _mark_posted(post, instagram.id, external_id="ig-media-1")
+    _mark_posted(other_post, instagram.id, external_id="ig-media-2")
+    session.flush()
+
+    payload = {
+        "entry": [
+            {
+                "id": "17841463479494132",
+                "changes": [
+                    {
+                        "field": "comments",
+                        "value": {
+                            "media_id": "ig-media-1",
+                            "id": "comment-1",
+                            "text": "Entering this one",
+                            "from": {"id": "user-1", "username": "entrant.one"},
+                        },
+                    },
+                    {
+                        "field": "comments",
+                        "value": {
+                            "parent_id": "comment-1",
+                            "id": "reply-1",
+                            "text": "Tagging @friend in the thread",
+                            "from": {"id": "user-1", "username": "entrant.one"},
+                        },
+                    },
+                ],
+            }
+        ]
+    }
+
+    events = ingest_instagram_webhook_payload(session, payload, signature_valid=True, run_id="run-thread-reply")
+    session.flush()
+
+    assert len(events) == 2
+    assert events[1].matched_post_id == post.id
+    assert events[1].matched_post_id != other_post.id
+    channel = post.giveaway_campaign.channels[0]
+    entrant = session.query(GiveawayEntrant).filter_by(channel_id=channel.id, provider_user_id="user-1").one()
+    assert entrant.signal_state_json["comment_count"] == 2
+    assert entrant.signal_state_json["friend_mention_count"] == 1
+    assert any(
+        item.get("comment_id") == "reply-1" and item.get("is_reply") is True
+        for item in entrant.signal_state_json["comments"]
+    )
+
+    evaluate_channel_entrants(channel)
+    assert entrant.eligibility_status == ENTRY_STATUS_ELIGIBLE
+
+
 def test_instagram_webhook_ingest_updates_generic_like_and_repost_state(session):
     persona = _create_persona(session, slug="giveaway-webhook-like-share")
     instagram = _create_account(session, persona, service="instagram", label="Instagram")

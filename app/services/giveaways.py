@@ -26,6 +26,7 @@ from app.models import (
     GiveawayCampaign,
     GiveawayChannel,
     GiveawayEntrant,
+    GiveawayEvidenceEvent,
     InstagramGiveaway,
     InstagramGiveawayEntry,
     InstagramGiveawayWebhookEvent,
@@ -575,6 +576,31 @@ def _find_instagram_channel_by_permalink(
     return None
 
 
+def _find_instagram_channel_by_parent_comment(
+    session: Session,
+    parent_comment_id: str | None,
+    *,
+    account_ids: list[str] | None = None,
+) -> GiveawayChannel | None:
+    normalized_parent_id = str(parent_comment_id or "").strip()
+    if not normalized_parent_id:
+        return None
+    stmt = (
+        select(GiveawayChannel)
+        .join(GiveawayEvidenceEvent, GiveawayEvidenceEvent.channel_id == GiveawayChannel.id)
+        .join(GiveawayChannel.campaign)
+        .where(
+            GiveawayChannel.service == "instagram",
+            GiveawayCampaign.status.in_([GIVEAWAY_STATUS_SCHEDULED, GIVEAWAY_STATUS_COLLECTING, GIVEAWAY_STATUS_REVIEW_REQUIRED]),
+            GiveawayEvidenceEvent.event_type == "instagram_comment",
+            GiveawayEvidenceEvent.provider_event_id == normalized_parent_id,
+        )
+    )
+    if account_ids:
+        stmt = stmt.where(GiveawayChannel.account_id.in_(account_ids))
+    return session.scalar(stmt)
+
+
 def _find_instagram_channel_for_event(
     session: Session,
     account_id: str | None,
@@ -616,6 +642,14 @@ def _find_instagram_channel_for_event(
         if account_ids:
             stmt = stmt.where(GiveawayChannel.account_id.in_(account_ids))
         channel = session.scalar(stmt)
+        if channel:
+            return channel
+
+        channel = _find_instagram_channel_by_parent_comment(
+            session,
+            normalized_provider_object_id,
+            account_ids=account_ids,
+        )
         if channel:
             return channel
 
@@ -664,8 +698,17 @@ def _comment_payload_summary(
     *,
     source: str = COMMENT_EVIDENCE_SOURCE_WEBHOOK,
 ) -> dict[str, Any]:
+    parent_id = str(
+        value.get("parent_id")
+        or value.get("parent_comment_id")
+        or value.get("reply_to_id")
+        or value.get("replied_to_comment_id")
+        or ""
+    ).strip() or None
     return {
         "comment_id": str(value.get("id") or value.get("comment_id") or "").strip() or None,
+        "parent_id": parent_id,
+        "is_reply": bool(parent_id),
         "text": str(value.get("text") or "").strip(),
         "created_time": str(value.get("created_time") or value.get("timestamp") or "").strip() or None,
         "source": source,
