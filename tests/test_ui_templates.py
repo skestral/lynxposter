@@ -1479,6 +1479,8 @@ def test_theme_runtime_uses_selected_colorway_tokens():
     assert ".planner-calendar-surface .scheduled-calendar {" in stylesheet
     assert "-webkit-overflow-scrolling: touch;" in stylesheet
     assert "grid-template-columns: repeat(7, minmax(12.5rem, 78vw));" in stylesheet
+    assert "grid-template-columns: repeat(7, minmax(6.75rem, 1fr));" in stylesheet
+    assert ".planner-calendar-surface .scheduled-calendar-cell .planner-calendar-card {\n        display: none;" not in stylesheet
     assert ".dashboard-v2-actions .btn" in stylesheet
     assert ".dashboard-v2-giveaway-kpi-signals" in stylesheet
     assert ".dashboard-v2-giveaway-kpi-signals::-webkit-scrollbar" not in stylesheet

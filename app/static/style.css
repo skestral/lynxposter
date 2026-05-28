@@ -5171,16 +5171,16 @@ body[data-ui-mode="dark"] .planner-calendar-surface .scheduled-calendar-day-numb
     }
 
     .planner-calendar-surface .scheduled-calendar-grid.is-month {
-        grid-template-columns: repeat(7, minmax(4.25rem, 1fr));
+        grid-template-columns: repeat(7, minmax(6.75rem, 1fr));
         gap: 0.35rem;
-        min-width: calc(29.75rem + 2.1rem);
+        min-width: calc(47.25rem + 2.1rem);
         overflow: visible;
     }
 
     .planner-calendar-surface .scheduled-calendar-weekdays {
-        grid-template-columns: repeat(7, minmax(4.25rem, 1fr));
+        grid-template-columns: repeat(7, minmax(6.75rem, 1fr));
         gap: 0.35rem;
-        min-width: calc(29.75rem + 2.1rem);
+        min-width: calc(47.25rem + 2.1rem);
     }
 
     .planner-calendar-surface .scheduled-calendar-weekday {
@@ -5190,16 +5190,46 @@ body[data-ui-mode="dark"] .planner-calendar-surface .scheduled-calendar-day-numb
     }
 
     .planner-calendar-surface .scheduled-calendar-cell {
-        min-height: 4.7rem;
+        min-height: 7.25rem;
         padding: 0.4rem;
     }
 
     .planner-calendar-surface .scheduled-calendar-cell-head {
-        margin-bottom: 0.35rem;
+        margin-bottom: 0.32rem;
     }
 
     .planner-calendar-surface .scheduled-calendar-cell .planner-calendar-card {
-        display: none;
+        display: flex;
+        min-height: 1.55rem;
+        padding: 0.24rem 0.32rem;
+        border-radius: calc(var(--lp-control-radius) - 6px);
+        gap: 0.06rem;
+    }
+
+    .planner-calendar-surface .scheduled-calendar-cell .planner-calendar-card-accent {
+        width: 1rem;
+        height: 0.14rem;
+    }
+
+    .planner-calendar-surface .scheduled-calendar-cell .planner-calendar-card-time,
+    .planner-calendar-surface .scheduled-calendar-cell .planner-calendar-card-title {
+        font-size: 0.6rem;
+        line-height: 1.08;
+    }
+
+    .planner-calendar-surface .scheduled-calendar-cell .planner-calendar-card-title {
+        -webkit-line-clamp: 1;
+    }
+
+    .planner-calendar-surface .scheduled-calendar-cell .scheduled-calendar-placeholder {
+        min-height: 1.55rem;
+        padding: 0.24rem 0.36rem;
+        font-size: 0.66rem;
+    }
+
+    .planner-calendar-surface .scheduled-calendar-cell .scheduled-calendar-more {
+        font-size: 0.66rem;
+        line-height: 1.15;
     }
 
     .planner-calendar-surface .scheduled-calendar-day-number {
