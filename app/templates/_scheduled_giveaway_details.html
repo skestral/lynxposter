@@ -87,9 +87,14 @@
     </div>
 </div>
 
-<div class="surface-panel">
-    <div class="fw-semibold mb-2">Activity Dashboard</div>
-    <div class="table-responsive">
+<details class="surface-panel giveaway-collapsible-section" open>
+    <summary class="giveaway-section-summary">
+        <span>
+            <span class="giveaway-section-title">Activity Dashboard</span>
+            <span class="giveaway-section-meta">{{ post.giveaway.channels|length }} channel{% if post.giveaway.channels|length != 1 %}s{% endif %}</span>
+        </span>
+    </summary>
+    <div class="giveaway-section-body table-responsive">
         <table class="table align-middle mb-0 giveaway-mobile-table giveaway-activity-table">
             <thead>
                 <tr><th>Channel</th><th>Activity</th><th>Eligible</th><th>Review</th><th>Out</th><th>Breakdown</th></tr>
@@ -129,10 +134,16 @@
             </tbody>
         </table>
     </div>
-</div>
+</details>
 
-<div class="surface-panel">
-    <div class="fw-semibold mb-3">Channel Posts</div>
+<details class="surface-panel giveaway-collapsible-section" open>
+    <summary class="giveaway-section-summary">
+        <span>
+            <span class="giveaway-section-title">Channel Posts</span>
+            <span class="giveaway-section-meta">{{ post.giveaway.channels|length }} post{% if post.giveaway.channels|length != 1 %}s{% endif %}</span>
+        </span>
+    </summary>
+    <div class="giveaway-section-body">
     <div class="row g-3">
         {% for channel in post.giveaway.channels %}
         <div class="col-12 col-lg-6">
@@ -153,12 +164,18 @@
         </div>
         {% endfor %}
     </div>
-</div>
+    </div>
+</details>
 
 {% for pool in post.giveaway.pools %}
-<div class="surface-panel {% if pool.status == 'review_required' %}bg-warning-subtle{% elif pool.final_winner %}bg-success-subtle{% endif %}">
-    <div class="fw-semibold">{{ pool.label }} Pool</div>
-    <div class="small text-secondary mt-1">{{ pool.status|replace('_', ' ')|title }} • {{ pool.candidate_count }} candidates</div>
+<details class="surface-panel giveaway-collapsible-section {% if pool.status == 'review_required' %}bg-warning-subtle{% elif pool.final_winner %}bg-success-subtle{% endif %}" {% if pool.status == "review_required" or pool.final_winner or pool.provisional_winner %}open{% endif %}>
+    <summary class="giveaway-section-summary">
+        <span>
+            <span class="giveaway-section-title">{{ pool.label }} Pool</span>
+            <span class="giveaway-section-meta">{{ pool.status|replace('_', ' ')|title }} · {{ pool.candidate_count }} candidates</span>
+        </span>
+    </summary>
+    <div class="giveaway-section-body">
     {% if pool.provisional_winner %}
     <div class="mt-2">
         <div class="small text-secondary">Provisional winner</div>
@@ -229,7 +246,8 @@
         {% endif %}
     </div>
     {% endif %}
-</div>
+    </div>
+</details>
 {% endfor %}
 
 {% if post.giveaway.last_error %}
@@ -241,11 +259,20 @@
 {% set entrant_count.value = entrant_count.value + (channel.entrants|length) %}
 {% endfor %}
 {% if entrant_count.value %}
-<div class="surface-panel">
-    <div class="fw-semibold mb-3">Entrant Audit Log</div>
+<details class="surface-panel giveaway-collapsible-section giveaway-audit-log-section">
+    <summary class="giveaway-section-summary">
+        <span>
+            <span class="giveaway-section-title">Entrant Audit Log</span>
+            <span class="giveaway-section-meta">{{ entrant_count.value }} entrant{% if entrant_count.value != 1 %}s{% endif %}</span>
+        </span>
+    </summary>
+    <div class="giveaway-section-body">
     {% for channel in post.giveaway.channels %}
-    <div class="{% if not loop.first %}mt-4{% endif %}">
-        <div class="fw-semibold mb-2">{{ channel.service|title }} Entrants</div>
+    <details class="giveaway-channel-audit" {% if channel.entrants|length == 1 %}open{% endif %}>
+        <summary class="giveaway-channel-audit-summary">
+            <span>{{ channel.service|title }} Entrants</span>
+            <span class="badge text-bg-light border rounded-pill">{{ channel.entrants|length }}</span>
+        </summary>
         {% if channel.entrants %}
         <div class="table-responsive">
             <table class="table align-middle mb-0 giveaway-mobile-table giveaway-entrant-table">
@@ -337,9 +364,10 @@
         {% else %}
         <div class="text-secondary">No {{ channel.service }} tracks yet.</div>
         {% endif %}
-    </div>
+    </details>
     {% endfor %}
-</div>
+    </div>
+</details>
 {% else %}
 <div class="surface-panel">
     <div class="text-secondary">No giveaway tracks yet.</div>

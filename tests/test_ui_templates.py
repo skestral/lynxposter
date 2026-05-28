@@ -724,6 +724,10 @@ def test_scheduled_post_templates_render_generic_giveaway_controls():
     assert 'id="detail-giveaway-details-tab"' in html
     assert 'id="detail-giveaway-details-pane"' in html
     assert "Activity Dashboard" in html
+    assert "giveaway-collapsible-section" in html
+    assert "giveaway-audit-log-section" in html
+    assert "giveaway-channel-audit-summary" in html
+    assert '<details class="surface-panel giveaway-collapsible-section giveaway-audit-log-section">' in html
     assert "giveaway-mobile-table giveaway-activity-table" in html
     assert "giveaway-mobile-table giveaway-entrant-table" in html
     assert 'data-label="Checks"' in html
