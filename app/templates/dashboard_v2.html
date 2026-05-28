@@ -31,17 +31,43 @@
 </div>
 {%- endmacro %}
 
-{% macro giveaway_compact_meter(title, value, detail, percent, tone) -%}
-<div class="dashboard-v2-giveaway-compact-meter is-{{ tone or 'pink' }}">
-    <div class="dashboard-v2-giveaway-compact-meter-head">
-        <span>{{ title }}</span>
-        <strong>{{ value }}</strong>
+{% macro giveaway_metric_card(dom_id, title, value, detail, percent, scope, tone, signal_rows) -%}
+<section class="dashboard-v2-metric dashboard-v2-giveaway-kpi-card is-{{ tone or 'pink' }}" aria-labelledby="{{ dom_id }}">
+    <div class="dashboard-v2-giveaway-kpi-main">
+        <div>
+            <div class="dashboard-v2-metric-accent"></div>
+            <div class="dashboard-v2-metric-label">Giveaways</div>
+            <div class="dashboard-v2-giveaway-kpi-title" id="{{ dom_id }}">{{ title }}</div>
+        </div>
+        <a href="/scheduled-posts/page" class="dashboard-v2-panel-link">Open</a>
     </div>
-    <div class="dashboard-v2-giveaway-compact-meter-detail">{{ detail }}</div>
-    <div class="dashboard-v2-giveaway-compact-track" aria-hidden="true">
-        <div class="dashboard-v2-giveaway-compact-fill" style="--meter-width: {{ percent }}%;"></div>
+    <div class="dashboard-v2-giveaway-kpi-meters">
+        <div class="dashboard-v2-giveaway-compact-meter is-{{ tone or 'pink' }}">
+            <div class="dashboard-v2-giveaway-compact-meter-head">
+                <span>Signal meter</span>
+                <strong>{{ value }}</strong>
+            </div>
+            <div class="dashboard-v2-giveaway-compact-meter-detail">{{ detail }}</div>
+            <div class="dashboard-v2-giveaway-compact-track" aria-hidden="true">
+                <div class="dashboard-v2-giveaway-compact-fill" style="--meter-width: {{ percent }}%;"></div>
+            </div>
+        </div>
     </div>
-</div>
+    <div class="dashboard-v2-giveaway-kpi-signals" aria-label="{{ title }} signal counts">
+        {% for row in signal_rows %}
+        {% set row_count = row.active_count if scope == "active" else row.all_time_count %}
+        <span class="dashboard-v2-giveaway-kpi-chip">
+            <span>{{ row.label }}</span>
+            <strong>{{ row_count }}</strong>
+        </span>
+        {% else %}
+        <span class="dashboard-v2-giveaway-kpi-chip">
+            <span>No tracks yet</span>
+            <strong>0</strong>
+        </span>
+        {% endfor %}
+    </div>
+</section>
 {%- endmacro %}
 
 {% macro post_card(card, compact=false) -%}
@@ -95,48 +121,35 @@
         <div class="tab-content dashboard-v2-tab-content" id="dashboard-v2-tab-content">
             <div class="tab-pane fade show active" id="dashboard-v2-overview" role="tabpanel" aria-labelledby="dashboard-v2-overview-tab" tabindex="0">
                 <div class="dashboard-v2-metrics-grid">
+                    {% set active_campaign_count = giveaway_active_tally.get("campaign_count", 0) %}
+                    {% set active_entrant_count = giveaway_active_tally.get("entrant_count", 0) %}
+                    {% set all_time_campaign_count = giveaway_all_time_tally.get("campaign_count", 0) %}
+                    {% set all_time_entrant_count = giveaway_all_time_tally.get("entrant_count", 0) %}
+                    {% if active_campaign_count %}
+                        {{ giveaway_metric_card(
+                            "dashboard-v2-current-giveaway-kpi-title",
+                            "Current Giveaway" if active_campaign_count == 1 else "Current Giveaways",
+                            giveaway_tally.get("active_signal_total", 0),
+                            active_campaign_count ~ " active campaign" ~ ("" if active_campaign_count == 1 else "s") ~ ", " ~ active_entrant_count ~ " entrant" ~ ("" if active_entrant_count == 1 else "s"),
+                            giveaway_tally.get("active_meter_pct", 0),
+                            "active",
+                            "pink",
+                            giveaway_tally.get("signal_rows", [])
+                        ) }}
+                    {% endif %}
+                    {{ giveaway_metric_card(
+                        "dashboard-v2-all-time-giveaway-kpi-title",
+                        "All-Time Giveaways",
+                        giveaway_tally.get("all_time_signal_total", 0),
+                        all_time_campaign_count ~ " campaign" ~ ("" if all_time_campaign_count == 1 else "s") ~ ", " ~ all_time_entrant_count ~ " entrant" ~ ("" if all_time_entrant_count == 1 else "s"),
+                        giveaway_tally.get("all_time_meter_pct", 0),
+                        "all_time",
+                        "blue",
+                        giveaway_tally.get("signal_rows", [])
+                    ) }}
                     {% for metric in model.overview_metrics %}
                         {{ metric_tile(metric) }}
                     {% endfor %}
-                    <section class="dashboard-v2-metric dashboard-v2-giveaway-kpi-card" aria-labelledby="dashboard-v2-giveaway-kpi-title">
-                        <div class="dashboard-v2-giveaway-kpi-main">
-                            <div>
-                                <div class="dashboard-v2-metric-accent"></div>
-                                <div class="dashboard-v2-metric-label">Giveaway Metrics</div>
-                                <div class="dashboard-v2-giveaway-kpi-title" id="dashboard-v2-giveaway-kpi-title">Giveaway meters</div>
-                            </div>
-                            <a href="/scheduled-posts/page" class="dashboard-v2-panel-link">Giveaways</a>
-                        </div>
-                        <div class="dashboard-v2-giveaway-kpi-meters">
-                            {{ giveaway_compact_meter(
-                                "Active meter",
-                                giveaway_tally.get("active_signal_total", 0),
-                                giveaway_active_tally.get("campaign_count", 0) ~ " active campaign" ~ ("" if giveaway_active_tally.get("campaign_count", 0) == 1 else "s") ~ " / " ~ giveaway_active_tally.get("entrant_count", 0) ~ " entrants",
-                                giveaway_tally.get("active_meter_pct", 0),
-                                "pink"
-                            ) }}
-                            {{ giveaway_compact_meter(
-                                "All-time meter",
-                                giveaway_tally.get("all_time_signal_total", 0),
-                                giveaway_all_time_tally.get("campaign_count", 0) ~ " campaign" ~ ("" if giveaway_all_time_tally.get("campaign_count", 0) == 1 else "s") ~ " / " ~ giveaway_all_time_tally.get("entrant_count", 0) ~ " entrants",
-                                giveaway_tally.get("all_time_meter_pct", 0),
-                                "blue"
-                            ) }}
-                        </div>
-                        <div class="dashboard-v2-giveaway-kpi-signals" aria-label="Giveaway metric active and all-time counts">
-                            {% for row in giveaway_tally.get("signal_rows", []) %}
-                            <span class="dashboard-v2-giveaway-kpi-chip">
-                                <span>{{ row.label }}</span>
-                                <strong>{{ row.active_count }} / {{ row.all_time_count }}</strong>
-                            </span>
-                            {% else %}
-                            <span class="dashboard-v2-giveaway-kpi-chip">
-                                <span>No tracks yet</span>
-                                <strong>0 / 0</strong>
-                            </span>
-                            {% endfor %}
-                        </div>
-                    </section>
                 </div>
 
                 <div class="dashboard-v2-overview-grid">

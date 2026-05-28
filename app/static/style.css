@@ -3230,7 +3230,7 @@ body[data-ui-mode="dark"] .mobile-bottom-nav-create {
     }
 
     .dashboard-v2-giveaway-kpi-meters {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: minmax(0, 1fr);
         gap: 0.45rem;
     }
 
@@ -3385,7 +3385,7 @@ body[data-ui-mode="dark"] .mobile-bottom-nav-create {
     display: grid;
     grid-column: span 2;
     gap: 0.65rem;
-    min-height: 6.7rem;
+    min-height: 7.1rem;
 }
 
 .dashboard-v2-giveaway-kpi-main,
@@ -3413,7 +3413,7 @@ body[data-ui-mode="dark"] .mobile-bottom-nav-create {
 
 .dashboard-v2-giveaway-kpi-meters {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
     gap: 0.55rem;
 }
 
@@ -5769,7 +5769,7 @@ body[data-ui-mode="dark"] .mobile-nav-drawer-link.active {
     }
 
     .dashboard-v2-giveaway-kpi-meters {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: minmax(0, 1fr);
         gap: 0.45rem;
     }
 

@@ -623,13 +623,14 @@ def test_dashboard_v2_route_renders_ops_health_for_admin(monkeypatch, tmp_path):
         assert "Dashboard V2 scheduled post" in response.text
         assert "Dashboard V2 alert" in response.text
         assert "Instagram Webhooks" in response.text
-        assert "Giveaway Metrics" in response.text
-        assert "Active meter" in response.text
-        assert "All-time meter" in response.text
-        assert "1 active campaign / 1 entrants" in response.text
-        assert "2 campaigns / 2 entrants" in response.text
+        assert "Current Giveaway" in response.text
+        assert "All-Time Giveaways" in response.text
+        assert "Signal meter" in response.text
+        assert "1 active campaign, 1 entrant" in response.text
+        assert "2 campaigns, 2 entrants" in response.text
         assert "Friend mentions" in response.text
         assert "Reposts + shares" in response.text
+        assert "1 / 2" not in response.text
         assert "dashboard-v2-giveaway-kpi-card" in response.text
         assert "dashboard-v2-tabs" not in response.text
         assert "dashboard-v2-live-update-status" in response.text
@@ -689,6 +690,8 @@ def test_dashboard_v2_route_respects_user_scope(monkeypatch, tmp_path):
         assert "Other user post" not in response.text
         assert "Instagram Webhooks" in response.text
         assert "Admin Only" in response.text
+        assert "Current Giveaway" not in response.text
+        assert "All-Time Giveaways" in response.text
     finally:
         Base.metadata.drop_all(engine)
         engine.dispose()

@@ -1290,10 +1290,11 @@ def test_dashboard_v2_template_renders_mobile_friendly_tab_shell():
     assert "dashboard-v2-bleed" in html
     assert "dashboard-v2-tabs" not in html
     assert "dashboard-v2-metrics-grid" in html
-    assert "Giveaway Metrics" in html
-    assert "Active meter" in html
-    assert "All-time meter" in html
+    assert "Current Giveaway" in html
+    assert "All-Time Giveaways" in html
+    assert "Signal meter" in html
     assert "Likes" in html
+    assert "2 / 6" not in html
     assert "dashboard-v2-giveaway-kpi-card" in html
     assert "dashboard-v2-giveaway-tally-panel" not in html
     assert "dashboard-v2-automation-panel" in html
