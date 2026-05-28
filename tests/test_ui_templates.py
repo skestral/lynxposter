@@ -1490,6 +1490,8 @@ def test_theme_runtime_uses_selected_colorway_tokens():
     assert "Edit post plan refresh" in stylesheet
     assert "scroll-padding-inline: 0.35rem;" in stylesheet
     assert ".scheduled-detail-giveaway-details" in stylesheet
+    assert ".scheduled-detail-tab-content > .tab-pane.active {\n    max-height: none;" in stylesheet
+    assert ".scheduled-detail-giveaway-details .table-responsive {\n    overflow-x: visible;" in stylesheet
     assert ".giveaway-entrant-table .giveaway-check-list" in stylesheet
     assert "grid-template-columns: repeat(2, minmax(11rem, 1fr));" in stylesheet
     assert "var(--lp-pride-border)" not in stylesheet

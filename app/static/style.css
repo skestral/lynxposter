@@ -5845,6 +5845,7 @@ body[data-ui-mode="dark"] .mobile-nav-drawer-link.active {
 .scheduled-detail-workbench {
     gap: 0.9rem;
     min-height: var(--composer-panel-height);
+    overflow: visible;
     padding: clamp(0.85rem, 1.4vw, 1.2rem);
 }
 
@@ -5869,12 +5870,10 @@ body[data-ui-mode="dark"] .mobile-nav-drawer-link.active {
     min-width: 0;
 }
 
-@media (min-width: 1280px) {
-    .scheduled-detail-tab-content > .tab-pane.active {
-        max-height: calc(var(--composer-panel-height) - 5.9rem);
-        overflow-y: auto;
-        padding-right: 0.2rem;
-    }
+.scheduled-detail-tab-content > .tab-pane.active {
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
 }
 
 .scheduled-detail-section,
@@ -5902,6 +5901,10 @@ body[data-ui-mode="dark"] .mobile-nav-drawer-link.active {
 
 .scheduled-detail-giveaway-details .row {
     row-gap: 0.9rem;
+}
+
+.scheduled-detail-giveaway-details .table-responsive {
+    overflow-x: visible;
 }
 
 .giveaway-summary-copy,
@@ -6184,6 +6187,10 @@ body[data-ui-mode="dark"] .scheduled-detail-alert {
 @media (max-width: 991.98px) {
     .scheduled-detail-section-grid {
         grid-template-columns: 1fr;
+    }
+
+    .scheduled-detail-giveaway-details .table-responsive {
+        overflow-x: auto;
     }
 }
 
