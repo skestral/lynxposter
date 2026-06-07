@@ -411,6 +411,7 @@ def test_update_scheduled_giveaway_api_moves_time(api_stack):
         giveaway = {
             "giveaway_end_at": giveaway_end_at.isoformat(),
             "pool_mode": "combined",
+            "winner_count": 3,
             "channels": [
                 {
                     "service": "bluesky",
@@ -464,6 +465,7 @@ def test_update_scheduled_giveaway_api_moves_time(api_stack):
     payload = response.json()
     assert payload["scheduled_for"] == "2026-05-16T13:30:00"
     assert payload["giveaway"]["giveaway_end_at"] == "2026-05-16T20:00:00"
+    assert payload["giveaway"]["winner_count"] == 3
 
     with SessionLocal() as session:
         saved = get_post(session, post_id)
@@ -472,6 +474,7 @@ def test_update_scheduled_giveaway_api_moves_time(api_stack):
         assert saved.scheduled_for.replace(tzinfo=timezone.utc) == datetime(2026, 5, 16, 13, 30, tzinfo=timezone.utc)
         assert saved.giveaway_campaign is not None
         assert saved.giveaway_campaign.giveaway_end_at.replace(tzinfo=timezone.utc) == giveaway_end_at
+        assert saved.giveaway_campaign.winner_count == 3
 
 
 def test_end_giveaway_api_collects_and_selects_winner(api_stack, monkeypatch):

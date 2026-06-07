@@ -296,6 +296,7 @@ def _giveaway_config_from_campaign(post: CanonicalPost):
         {
             "giveaway_end_at": post.giveaway_campaign.giveaway_end_at.isoformat() if post.giveaway_campaign.giveaway_end_at else None,
             "pool_mode": post.giveaway_campaign.pool_mode,
+            "winner_count": post.giveaway_campaign.winner_count,
             "channels": [
                 {
                     "service": channel.service,

@@ -34,6 +34,7 @@
             <div class="giveaway-detail-meta">
                 <span>Ends {{ post.giveaway.giveaway_end_at|datetime_display }}</span>
                 <span>Pool: {{ post.giveaway.pool_mode|replace('_', ' ')|title }}</span>
+                <span>Winners: {{ post.giveaway.winner_count }} per pool</span>
             </div>
             {% if instagram_scan.interval_hours is not none %}
             <div class="giveaway-detail-meta">
@@ -168,7 +169,9 @@
 </details>
 
 {% for pool in post.giveaway.pools %}
-<details class="surface-panel giveaway-collapsible-section {% if pool.status == 'review_required' %}bg-warning-subtle{% elif pool.final_winner %}bg-success-subtle{% endif %}" {% if pool.status == "review_required" or pool.final_winner or pool.provisional_winner %}open{% endif %}>
+{% set provisional_winners = pool.provisional_winners if pool.provisional_winners else ([pool.provisional_winner] if pool.provisional_winner else []) %}
+{% set final_winners = pool.final_winners if pool.final_winners else ([pool.final_winner] if pool.final_winner else []) %}
+<details class="surface-panel giveaway-collapsible-section {% if pool.status == 'review_required' %}bg-warning-subtle{% elif final_winners %}bg-success-subtle{% endif %}" {% if pool.status == "review_required" or final_winners or provisional_winners %}open{% endif %}>
     <summary class="giveaway-section-summary">
         <span>
             <span class="giveaway-section-title">{{ pool.label }} Pool</span>
@@ -176,24 +179,34 @@
         </span>
     </summary>
     <div class="giveaway-section-body">
-    {% if pool.provisional_winner %}
+    {% if provisional_winners %}
     <div class="mt-2">
-        <div class="small text-secondary">Provisional winner</div>
-        <div>{{ entrant_profile_link(pool.provisional_winner, "fw-semibold") }}</div>
-        {% if pool.provisional_winner.inconclusive_reasons %}
-        <div class="small text-secondary mt-2">{{ pool.provisional_winner.inconclusive_reasons|join("; ") }}</div>
+        <div class="small text-secondary">Provisional winner{% if provisional_winners|length != 1 %}s{% endif %}</div>
+        <div class="d-flex gap-2 flex-wrap">
+            {% for winner in provisional_winners %}
+            {{ entrant_profile_link(winner, "badge text-bg-warning-subtle border text-warning-emphasis") }}
+            {% endfor %}
+        </div>
+        {% for winner in provisional_winners %}
+        {% if winner.inconclusive_reasons %}
+        <div class="small text-secondary mt-2">{{ winner.display_label or winner.provider_username or winner.provider_user_id }}: {{ winner.inconclusive_reasons|join("; ") }}</div>
         {% endif %}
+        {% endfor %}
     </div>
     {% endif %}
-    {% if pool.final_winner %}
+    {% if final_winners %}
     <div class="mt-2">
-        <div class="small text-secondary">Final winner</div>
-        <div>{{ entrant_profile_link(pool.final_winner, "fw-semibold") }}</div>
+        <div class="small text-secondary">Final winner{% if final_winners|length != 1 %}s{% endif %}</div>
+        <div class="d-flex gap-2 flex-wrap">
+            {% for winner in final_winners %}
+            {{ entrant_profile_link(winner, "badge text-bg-success") }}
+            {% endfor %}
+        </div>
     </div>
     {% endif %}
-    {% if pool.status == "review_required" and pool.provisional_winner %}
+    {% if pool.status == "review_required" and provisional_winners %}
     <div class="d-flex gap-2 flex-wrap mt-3">
-        <button class="btn btn-sm btn-outline-success giveaway-review-action" type="button" data-action="confirm" data-pool-key="{{ pool.pool_key }}">Confirm Winner</button>
+        <button class="btn btn-sm btn-outline-success giveaway-review-action" type="button" data-action="confirm" data-pool-key="{{ pool.pool_key }}">Confirm Winner{% if provisional_winners|length != 1 %}s{% endif %}</button>
         <button class="btn btn-sm btn-outline-warning giveaway-review-action" type="button" data-action="advance" data-pool-key="{{ pool.pool_key }}">Advance To Next Candidate</button>
     </div>
     {% endif %}
@@ -222,16 +235,14 @@
         {% if pool.selection_log.candidates %}
         <div class="list-group">
             {% for candidate in pool.selection_log.candidates %}
-            <div class="list-group-item {% if candidate.rank == 1 %}list-group-item-success{% endif %}">
+            <div class="list-group-item {% if candidate.selected %}list-group-item-success{% endif %}">
                 <div class="d-flex flex-column flex-md-row justify-content-between gap-2">
                     <div>
                         <div class="d-flex align-items-center gap-2 flex-wrap">
-                            <span class="badge {% if candidate.rank == 1 %}text-bg-success{% else %}text-bg-light border{% endif %}">#{{ candidate.rank }}</span>
+                            <span class="badge {% if candidate.selected %}text-bg-success{% else %}text-bg-light border{% endif %}">#{{ candidate.rank }}</span>
                             {{ entrant_profile_link(candidate.entrant, "fw-semibold") }}
-                            {% if candidate.rank == 1 %}
+                            {% if candidate.selected %}
                             <span class="badge text-bg-success">{{ "Provisional Winner" if pool.status == "review_required" else "Winner" }}</span>
-                            {% elif candidate.selected %}
-                            <span class="badge text-bg-success">Selected</span>
                             {% endif %}
                         </div>
                         {% if candidate.note %}

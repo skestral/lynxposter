@@ -68,6 +68,20 @@ def _apply_additive_migrations() -> None:
             giveaway_channel_columns = {column["name"] for column in inspector.get_columns("giveaway_channels")}
             if "last_private_collected_at" not in giveaway_channel_columns:
                 connection.exec_driver_sql('ALTER TABLE "giveaway_channels" ADD COLUMN last_private_collected_at DATETIME')
+        if "giveaway_campaigns" in tables:
+            giveaway_campaign_columns = {column["name"] for column in inspector.get_columns("giveaway_campaigns")}
+            if "winner_count" not in giveaway_campaign_columns:
+                connection.exec_driver_sql('ALTER TABLE "giveaway_campaigns" ADD COLUMN winner_count INTEGER NOT NULL DEFAULT 1')
+        if "giveaway_pool_results" in tables:
+            giveaway_pool_columns = {column["name"] for column in inspector.get_columns("giveaway_pool_results")}
+            if "provisional_winner_entry_ids_json" not in giveaway_pool_columns:
+                connection.exec_driver_sql(
+                    'ALTER TABLE "giveaway_pool_results" ADD COLUMN provisional_winner_entry_ids_json JSON NOT NULL DEFAULT \'[]\''
+                )
+            if "final_winner_entry_ids_json" not in giveaway_pool_columns:
+                connection.exec_driver_sql(
+                    'ALTER TABLE "giveaway_pool_results" ADD COLUMN final_winner_entry_ids_json JSON NOT NULL DEFAULT \'[]\''
+                )
 
 
 def _migrate_legacy_giveaways() -> None:

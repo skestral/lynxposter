@@ -258,6 +258,7 @@ class GiveawayChannelConfigInput(BaseModel):
 class GiveawayConfigInput(BaseModel):
     giveaway_end_at: datetime | None = None
     pool_mode: Literal["combined", "separate"] = "combined"
+    winner_count: int = Field(default=1, ge=1, le=100)
     channels: list[GiveawayChannelConfigInput] = Field(default_factory=list)
 
     @model_validator(mode="before")
@@ -317,6 +318,7 @@ class GiveawayConfigInput(BaseModel):
         return {
             "giveaway_end_at": value.get("giveaway_end_at"),
             "pool_mode": value.get("pool_mode") or "combined",
+            "winner_count": value.get("winner_count") or 1,
             "channels": [
                 {
                     "service": "instagram",
@@ -383,6 +385,8 @@ class GiveawayPoolRead(BaseModel):
     candidate_count: int = 0
     provisional_winner: GiveawayEntrantRead | None = None
     final_winner: GiveawayEntrantRead | None = None
+    provisional_winners: list[GiveawayEntrantRead] = Field(default_factory=list)
+    final_winners: list[GiveawayEntrantRead] = Field(default_factory=list)
     selection_log: GiveawaySelectionLogRead | None = None
 
 
@@ -429,6 +433,7 @@ class GiveawayRead(BaseModel):
     post_id: str
     giveaway_end_at: datetime
     pool_mode: Literal["combined", "separate"]
+    winner_count: int = 1
     status: str
     frozen_at: datetime | None = None
     last_evaluated_at: datetime | None = None

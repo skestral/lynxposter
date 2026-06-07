@@ -279,6 +279,7 @@ def giveaway_config_input_from_json(config_json: dict[str, Any] | None) -> Givea
         payload = {
             "giveaway_end_at": payload.get("giveaway_end_at"),
             "pool_mode": "combined",
+            "winner_count": payload.get("winner_count") or 1,
             "channels": [
                 {
                     "service": "instagram",
@@ -303,6 +304,7 @@ def normalize_giveaway_config(config: GiveawayConfigInput | dict[str, Any] | Non
     return {
         "giveaway_end_at": normalize_datetime(parsed.giveaway_end_at).isoformat() if parsed.giveaway_end_at else None,
         "pool_mode": parsed.pool_mode,
+        "winner_count": parsed.winner_count,
         "channels": [
             {
                 "service": channel.service,
@@ -370,6 +372,7 @@ def migrate_legacy_instagram_giveaway(session: Session, post: CanonicalPost) -> 
         post_id=post.id,
         giveaway_end_at=normalize_datetime(legacy.giveaway_end_at) or utcnow(),
         pool_mode="combined",
+        winner_count=1,
         status=legacy.status,
         frozen_at=legacy.frozen_at,
         last_evaluated_at=legacy.last_evaluated_at,
@@ -422,11 +425,13 @@ def migrate_legacy_instagram_giveaway(session: Session, post: CanonicalPost) -> 
         if winner:
             matching = next((entrant for entrant in channel.entrants if entrant.provider_user_id == winner.instagram_user_id), None)
             pool.provisional_winner_entry = matching
+            pool.provisional_winner_entry_ids_json = [matching.id] if matching and matching.id else []
     if legacy.final_winner_rank:
         winner = _legacy_entry_by_rank(legacy, legacy.final_winner_rank)
         if winner:
             matching = next((entrant for entrant in channel.entrants if entrant.provider_user_id == winner.instagram_user_id), None)
             pool.final_winner_entry = matching
+            pool.final_winner_entry_ids_json = [matching.id] if matching and matching.id else []
     campaign.pools.append(pool)
     session.flush()
     return campaign
@@ -455,6 +460,7 @@ def sync_giveaway_campaign(
             post_id=post.id,
             giveaway_end_at=normalize_datetime(giveaway_config.giveaway_end_at) or utcnow(),
             pool_mode=giveaway_config.pool_mode,
+            winner_count=giveaway_config.winner_count,
             status=GIVEAWAY_STATUS_SCHEDULED,
         )
         post.giveaway_campaign = campaign
@@ -462,6 +468,7 @@ def sync_giveaway_campaign(
     else:
         campaign.giveaway_end_at = normalize_datetime(giveaway_config.giveaway_end_at) or utcnow()
         campaign.pool_mode = giveaway_config.pool_mode
+        campaign.winner_count = giveaway_config.winner_count
         if campaign.status == GIVEAWAY_STATUS_FAILED and not campaign.frozen_at:
             campaign.status = GIVEAWAY_STATUS_SCHEDULED
             campaign.last_error = None
@@ -1293,33 +1300,36 @@ def _selection_log(
         for entrant in entries
         if entrant.eligibility_status == ENTRY_STATUS_PROVISIONAL
     ]
+    selected_ids = set(_pool_final_winner_ids(pool) or _pool_provisional_winner_ids(pool))
     candidate_source = "eligible entrants" if eligible_members else "provisional fallback" if provisional_members else "no qualifying entrants"
-    selected_id = None
-    if pool.final_winner_entry is not None:
-        selected_id = pool.final_winner_entry.id
-    elif pool.provisional_winner_entry is not None:
-        selected_id = pool.provisional_winner_entry.id
     candidates: list[GiveawaySelectionCandidateRead] = []
     for index, entrant_id in enumerate(pool.candidate_entry_ids_json or [], start=1):
         entrant = serialized_entrant_map.get(entrant_id)
         if entrant is None:
             continue
         note = None
-        if entrant_id == selected_id:
-            note = "Selected as the top candidate after the randomized draw."
+        if entrant_id in selected_ids:
+            note = "Selected after the randomized draw."
             if pool.status == GIVEAWAY_STATUS_REVIEW_REQUIRED:
-                note = "Selected as the top provisional candidate pending review."
+                note = "Selected as a provisional winner pending review."
         candidates.append(
             GiveawaySelectionCandidateRead(
                 rank=index,
-                selected=entrant_id == selected_id,
+                selected=entrant_id in selected_ids,
                 note=note,
                 entrant=entrant,
             )
         )
-    note = "Candidates were shuffled with SystemRandom and the first candidate became the selected result for this pool."
+    winner_count = _campaign_winner_count(campaign)
+    note = (
+        f"Candidates were shuffled with SystemRandom and up to {winner_count} "
+        f"winner{'s' if winner_count != 1 else ''} were selected for this pool."
+    )
     if pool.status == GIVEAWAY_STATUS_REVIEW_REQUIRED:
-        note = "No fully verified winner was available, so the first provisional candidate was held for manual review."
+        note = (
+            f"No fully verified winner was available, so up to {winner_count} provisional "
+            f"candidate{'s' if winner_count != 1 else ''} were held for manual review."
+        )
     if pool.status == GIVEAWAY_STATUS_FAILED:
         note = pool.last_error or "No eligible or provisional entrants were available for this pool."
     return GiveawaySelectionLogRead(
@@ -1375,11 +1385,20 @@ def serialize_giveaway(campaign: GiveawayCampaign | None) -> GiveawayRead | None
             ],
         )
 
+    def serialize_winner_entries(ids: list[str]) -> list[GiveawayEntrantRead]:
+        winners: list[GiveawayEntrantRead] = []
+        for entrant_id in ids:
+            entrant = serialized_entrant_map.get(entrant_id)
+            if entrant is not None:
+                winners.append(entrant)
+        return winners
+
     return GiveawayRead(
         id=campaign.id,
         post_id=campaign.post_id,
         giveaway_end_at=campaign.giveaway_end_at,
         pool_mode=campaign.pool_mode,
+        winner_count=_campaign_winner_count(campaign),
         status=campaign.status,
         frozen_at=campaign.frozen_at,
         last_evaluated_at=campaign.last_evaluated_at,
@@ -1403,19 +1422,15 @@ def serialize_giveaway(campaign: GiveawayCampaign | None) -> GiveawayRead | None
                 last_evaluated_at=pool.last_evaluated_at,
                 last_error=pool.last_error,
                 candidate_count=len(pool.candidate_entry_ids_json or []),
-                provisional_winner=(
-                    serialized_entrant_map[pool.provisional_winner_entry.id]
-                    if pool.provisional_winner_entry and pool.provisional_winner_entry.id in entrant_channel_map
-                    else None
-                ),
-                final_winner=(
-                    serialized_entrant_map[pool.final_winner_entry.id]
-                    if pool.final_winner_entry and pool.final_winner_entry.id in entrant_channel_map
-                    else None
-                ),
+                provisional_winner=(provisional_winners[0] if provisional_winners else None),
+                final_winner=(final_winners[0] if final_winners else None),
+                provisional_winners=provisional_winners,
+                final_winners=final_winners,
                 selection_log=_selection_log(campaign, pool, serialized_entrant_map),
             )
             for pool in pools
+            for provisional_winners in [serialize_winner_entries(_pool_provisional_winner_ids(pool))]
+            for final_winners in [serialize_winner_entries(_pool_final_winner_ids(pool))]
         ],
     )
 
@@ -2292,6 +2307,52 @@ def _randomize_entries(entries: list[GiveawayEntrant]) -> list[GiveawayEntrant]:
     return ranked
 
 
+def _campaign_winner_count(campaign: GiveawayCampaign) -> int:
+    return max(1, int(getattr(campaign, "winner_count", 1) or 1))
+
+
+def _normalized_entry_ids(values: list[str] | None) -> list[str]:
+    entry_ids: list[str] = []
+    for value in values or []:
+        entry_id = str(value or "").strip()
+        if entry_id and entry_id not in entry_ids:
+            entry_ids.append(entry_id)
+    return entry_ids
+
+
+def _pool_provisional_winner_ids(pool: GiveawayPoolResult) -> list[str]:
+    entry_ids = _normalized_entry_ids(pool.provisional_winner_entry_ids_json)
+    if not entry_ids and pool.provisional_winner_entry_id:
+        entry_ids = [pool.provisional_winner_entry_id]
+    return entry_ids
+
+
+def _pool_final_winner_ids(pool: GiveawayPoolResult) -> list[str]:
+    entry_ids = _normalized_entry_ids(pool.final_winner_entry_ids_json)
+    if not entry_ids and pool.final_winner_entry_id:
+        entry_ids = [pool.final_winner_entry_id]
+    return entry_ids
+
+
+def _set_pool_provisional_winners(pool: GiveawayPoolResult, winners: list[GiveawayEntrant]) -> None:
+    selected = winners[:]
+    pool.provisional_winner_entry_ids_json = [entrant.id for entrant in selected if entrant.id]
+    pool.provisional_winner_entry = selected[0] if selected else None
+
+
+def _set_pool_final_winners(pool: GiveawayPoolResult, winners: list[GiveawayEntrant]) -> None:
+    selected = winners[:]
+    pool.final_winner_entry_ids_json = [entrant.id for entrant in selected if entrant.id]
+    pool.final_winner_entry = selected[0] if selected else None
+
+
+def _clear_pool_winners(pool: GiveawayPoolResult) -> None:
+    pool.provisional_winner_entry_ids_json = []
+    pool.final_winner_entry_ids_json = []
+    pool.provisional_winner_entry = None
+    pool.final_winner_entry = None
+
+
 def _pool_entries(campaign: GiveawayCampaign, pool: GiveawayPoolResult) -> list[GiveawayEntrant]:
     if pool.pool_key == "combined":
         return [entrant for channel in campaign.channels for entrant in channel.entrants]
@@ -2315,6 +2376,7 @@ def _campaign_status_from_pools(campaign: GiveawayCampaign) -> str:
 
 def _select_giveaway_pool_winners(campaign: GiveawayCampaign) -> None:
     _sync_campaign_pools(campaign)
+    winner_count = _campaign_winner_count(campaign)
     for pool in campaign.pools:
         entries = _pool_entries(campaign, pool)
         eligible = [entrant for entrant in entries if entrant.eligibility_status == ENTRY_STATUS_ELIGIBLE]
@@ -2322,8 +2384,7 @@ def _select_giveaway_pool_winners(campaign: GiveawayCampaign) -> None:
         candidate_pool = eligible if eligible else provisional
         ranked_entries = _randomize_entries(candidate_pool)
         pool.candidate_entry_ids_json = [entrant.id for entrant in ranked_entries]
-        pool.provisional_winner_entry = None
-        pool.final_winner_entry = None
+        _clear_pool_winners(pool)
         pool.frozen_at = utcnow()
         pool.last_evaluated_at = utcnow()
         pool.last_error = None
@@ -2331,13 +2392,13 @@ def _select_giveaway_pool_winners(campaign: GiveawayCampaign) -> None:
             pool.status = GIVEAWAY_STATUS_FAILED
             pool.last_error = "No qualifying giveaway entrants were found."
             continue
-        winner = ranked_entries[0]
-        if winner.eligibility_status == ENTRY_STATUS_PROVISIONAL:
+        winners = ranked_entries[:winner_count]
+        if winners[0].eligibility_status == ENTRY_STATUS_PROVISIONAL:
             pool.status = GIVEAWAY_STATUS_REVIEW_REQUIRED
-            pool.provisional_winner_entry = winner
+            _set_pool_provisional_winners(pool, winners)
         else:
             pool.status = GIVEAWAY_STATUS_WINNER_SELECTED
-            pool.final_winner_entry = winner
+            _set_pool_final_winners(pool, winners)
 
     campaign.status = _campaign_status_from_pools(campaign)
     campaign.last_error = "No qualifying giveaway entrants were found." if campaign.status == GIVEAWAY_STATUS_FAILED else None
@@ -2535,8 +2596,7 @@ def reopen_giveaway_campaign(
     for pool in campaign.pools:
         pool.status = GIVEAWAY_STATUS_COLLECTING
         pool.candidate_entry_ids_json = []
-        pool.provisional_winner_entry = None
-        pool.final_winner_entry = None
+        _clear_pool_winners(pool)
         pool.frozen_at = None
         pool.last_evaluated_at = None
         pool.last_error = None
@@ -2844,9 +2904,15 @@ def _resolve_pool(campaign: GiveawayCampaign, pool_key: str | None) -> GiveawayP
 
 def confirm_giveaway_winner(session: Session, campaign: GiveawayCampaign, *, run_id: str, pool_key: str | None = None) -> GiveawayCampaign:
     pool = _resolve_pool(campaign, pool_key)
-    if pool.status != GIVEAWAY_STATUS_REVIEW_REQUIRED or pool.provisional_winner_entry is None:
+    provisional_ids = _pool_provisional_winner_ids(pool)
+    if pool.status != GIVEAWAY_STATUS_REVIEW_REQUIRED or not provisional_ids:
         raise ValueError("This giveaway pool does not have a provisional winner to confirm.")
-    pool.final_winner_entry = pool.provisional_winner_entry
+    entrant_map = {entrant.id: entrant for channel in campaign.channels for entrant in channel.entrants}
+    confirmed = [entrant_map[entrant_id] for entrant_id in provisional_ids if entrant_id in entrant_map]
+    if not confirmed:
+        raise ValueError("Could not resolve the provisional giveaway winners.")
+    _set_pool_final_winners(pool, confirmed)
+    _set_pool_provisional_winners(pool, [])
     pool.status = GIVEAWAY_STATUS_WINNER_CONFIRMED
     campaign.status = _campaign_status_from_pools(campaign)
     session.flush()
@@ -2855,22 +2921,23 @@ def confirm_giveaway_winner(session: Session, campaign: GiveawayCampaign, *, run
 
 def advance_giveaway_winner(session: Session, campaign: GiveawayCampaign, *, run_id: str, pool_key: str | None = None) -> GiveawayCampaign:
     pool = _resolve_pool(campaign, pool_key)
-    if pool.status != GIVEAWAY_STATUS_REVIEW_REQUIRED or pool.provisional_winner_entry is None:
+    provisional_ids = _pool_provisional_winner_ids(pool)
+    if pool.status != GIVEAWAY_STATUS_REVIEW_REQUIRED or not provisional_ids:
         raise ValueError("This giveaway pool does not have a provisional winner to advance.")
     candidate_ids = list(pool.candidate_entry_ids_json or [])
-    current_id = pool.provisional_winner_entry.id
+    current_id = provisional_ids[0]
     try:
         current_index = candidate_ids.index(current_id)
     except ValueError as exc:
         raise ValueError("The provisional winner is not part of the current candidate pool.") from exc
     if current_index + 1 >= len(candidate_ids):
         raise ValueError("There are no remaining giveaway candidates to advance to.")
-    next_id = candidate_ids[current_index + 1]
+    next_ids = candidate_ids[current_index + 1 : current_index + 1 + _campaign_winner_count(campaign)]
     channel_entrant_map = {entrant.id: entrant for channel in campaign.channels for entrant in channel.entrants}
-    next_entry = channel_entrant_map.get(next_id)
-    if next_entry is None:
+    next_entries = [channel_entrant_map[entrant_id] for entrant_id in next_ids if entrant_id in channel_entrant_map]
+    if not next_entries:
         raise ValueError("Could not resolve the next giveaway candidate.")
-    pool.provisional_winner_entry = next_entry
+    _set_pool_provisional_winners(pool, next_entries)
     session.flush()
     return campaign
 

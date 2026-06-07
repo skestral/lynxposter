@@ -339,6 +339,7 @@
     const state = {
       giveaway_end_at: toDatetimeLocalValue(initial.giveaway_end_at),
       pool_mode: initial.pool_mode === "separate" ? "separate" : "combined",
+      winner_count: Math.max(1, Number.parseInt(initial.winner_count || "1", 10) || 1),
       channels: [],
     };
 
@@ -356,6 +357,7 @@
         return {
           giveaway_end_at: state.giveaway_end_at || null,
           pool_mode: state.pool_mode,
+          winner_count: Math.max(1, Number.parseInt(state.winner_count || "1", 10) || 1),
           channels: state.channels.map((channel) => ({
             service: channel.service,
             account_id: channel.account_id,
@@ -463,6 +465,10 @@
               <option value="separate" ${state.pool_mode === "separate" ? "selected" : ""}>Separate draw per channel</option>
             </select>
           </div>
+          <div class="col-md-6">
+            <label class="form-label">Winners Per Pool</label>
+            <input class="form-control" type="number" min="1" max="100" step="1" data-action="winner-count" value="${escapeHtml(state.winner_count)}">
+          </div>
         </div>
         <div class="surface-panel-soft mt-3">
           <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
@@ -569,6 +575,11 @@
       }
       if (action === "pool-mode") {
         state.pool_mode = event.target.value === "separate" ? "separate" : "combined";
+        notifyChange();
+        return;
+      }
+      if (action === "winner-count") {
+        state.winner_count = Math.max(1, Math.min(100, Number.parseInt(event.target.value || "1", 10) || 1));
         notifyChange();
         return;
       }

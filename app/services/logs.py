@@ -198,7 +198,12 @@ def _successful_publish_events(events: list[RunEventRead]) -> list[RunEventRead]
         and event.severity != "error"
         and ((event.metadata_json or {}).get("delivery_status") == "posted" or event.message.startswith("Published post "))
     ]
-    return sorted(published, key=lambda event: event.created_at, reverse=True)
+    return _newest_events_first(published)
+
+
+def _newest_events_first(events: list[RunEventRead]) -> list[RunEventRead]:
+    sorted_items = sorted(enumerate(events), key=lambda item: (item[1].created_at, item[0]), reverse=True)
+    return [event for _, event in sorted_items]
 
 
 def _published_posts_summary(events: list[RunEventRead]) -> list[dict[str, Any]]:
@@ -235,7 +240,12 @@ def _published_posts_summary(events: list[RunEventRead]) -> list[dict[str, Any]]
 
     summaries = list(posts_by_key.values())
     for summary in summaries:
-        summary["deliveries"] = sorted(summary["deliveries"], key=lambda delivery: delivery["created_at"], reverse=True)
+        summary["deliveries"] = sorted(
+            enumerate(summary["deliveries"]),
+            key=lambda item: (bool(item[1]["external_url"]), item[1]["created_at"], item[0]),
+            reverse=True,
+        )
+        summary["deliveries"] = [delivery for _, delivery in summary["deliveries"]]
     return summaries
 
 
@@ -256,7 +266,7 @@ def _count_summary(events: list[RunEventRead]) -> dict[str, int]:
 
 def summarize_run_events(events: list[RunEventRead], *, limit_runs: int | None = None) -> list[dict[str, Any]]:
     runs_by_id: OrderedDict[str, list[RunEventRead]] = OrderedDict()
-    for event in sorted(events, key=lambda item: item.created_at, reverse=True):
+    for event in _newest_events_first(events):
         if event.run_id not in runs_by_id:
             if limit_runs is not None and len(runs_by_id) >= limit_runs:
                 continue

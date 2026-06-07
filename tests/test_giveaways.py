@@ -161,6 +161,7 @@ def _generic_giveaway_payload(
     *,
     giveaway_end_at: datetime,
     pool_mode: str = "combined",
+    winner_count: int = 1,
     channels: list[dict[str, Any]],
 ) -> ScheduledPostCreate:
     return ScheduledPostCreate.model_validate(
@@ -176,6 +177,7 @@ def _generic_giveaway_payload(
             "giveaway": {
                 "giveaway_end_at": giveaway_end_at,
                 "pool_mode": pool_mode,
+                "winner_count": winner_count,
                 "channels": channels,
             },
         }
@@ -2667,6 +2669,76 @@ def test_process_giveaway_lifecycle_creates_separate_winners_for_mixed_channels(
     assert channels_by_service["bluesky"].entrants[0].profile_url == "https://bsky.app/profile/bsky.one"
     assert serialized.pools[0].selection_log is not None
     assert serialized.pools[0].selection_log.candidates
+
+
+def test_process_giveaway_lifecycle_selects_configured_winner_count(session, monkeypatch):
+    persona = _create_persona(session, slug="giveaway-multiple-winners")
+    bluesky = _create_account(session, persona, service="bluesky", label="Bluesky")
+    post = create_scheduled_post(
+        session,
+        _generic_giveaway_payload(
+            persona.id,
+            [bluesky.id],
+            giveaway_end_at=datetime.now(timezone.utc) - timedelta(minutes=5),
+            winner_count=2,
+            channels=[
+                {
+                    "service": "bluesky",
+                    "account_id": bluesky.id,
+                    "rules": {
+                        "kind": "all",
+                        "children": [{"kind": "atom", "atom": "reply_or_quote_present", "params": {}}],
+                    },
+                }
+            ],
+        ),
+        [],
+    )
+    _mark_posted(post, bluesky.id, external_id="bsky-multi", external_url="https://bsky.app/profile/savannah.test/post/bsky-multi")
+    campaign = post.giveaway_campaign
+    assert campaign is not None
+    channel = campaign.channels[0]
+    channel.target_post_external_id = "bsky-multi"
+    channel.target_post_uri = "at://did:plc:test/app.bsky.feed.post/bsky-multi"
+    for index in range(3):
+        channel.entrants.append(
+            GiveawayEntrant(
+                provider_user_id=f"did:plc:user-{index}",
+                provider_username=f"bsky.{index}",
+                display_label=f"bsky.{index}",
+                signal_state_json={
+                    "reply_present": True,
+                    "quote_present": False,
+                    "reply_posts": [{"uri": f"at://did:plc:user-{index}/app.bsky.feed.post/reply", "text": "in"}],
+                    "quote_posts": [],
+                    "reply_or_quote_mention_count": 0,
+                },
+            )
+        )
+    session.flush()
+
+    monkeypatch.setattr("app.services.giveaway_engine.hydrate_channel_targets", lambda campaign: None)
+    monkeypatch.setattr("app.services.giveaway_engine.collect_bluesky_channel_state", lambda session, channel, run_id: None)
+    monkeypatch.setattr("app.services.giveaway_engine._randomize_entries", lambda entries: list(entries))
+
+    process_giveaway_lifecycle(session, AlertDispatcher(), run_id="run-multiple-winners")
+
+    refreshed = get_post(session, post.id)
+    assert refreshed is not None
+    pool = refreshed.giveaway_campaign.pools[0]
+    assert pool.final_winner_entry is not None
+    assert pool.final_winner_entry.provider_username == "bsky.0"
+    assert pool.final_winner_entry_ids_json == [channel.entrants[0].id, channel.entrants[1].id]
+
+    serialized = serialize_giveaway(refreshed.giveaway_campaign)
+    assert serialized is not None
+    assert serialized.winner_count == 2
+    assert [winner.provider_username for winner in serialized.pools[0].final_winners] == ["bsky.0", "bsky.1"]
+    assert [
+        candidate.rank
+        for candidate in serialized.pools[0].selection_log.candidates
+        if candidate.selected
+    ] == [1, 2]
 
 
 def test_collect_bluesky_channel_state_captures_reply_quote_like_repost_and_follow(session, monkeypatch):
