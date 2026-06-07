@@ -136,6 +136,7 @@ The app also reads `BUILD_SHA` inside the image, which lets production keep show
 | Variable | Default | Purpose |
 |---|---|---|
 | `SCHEDULER_AUTORUN_INTERVAL_SECONDS` | `300` | Automation polling cadence |
+| `SCHEDULER_AUTORUN_IMPORT_DELIVERY_ENABLED` | `false` | Allow autorun to publish posts imported from source accounts; keep false on staging/local copies that share accounts with prod |
 
 ### Notification webhooks
 

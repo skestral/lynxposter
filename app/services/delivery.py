@@ -9,11 +9,14 @@ from sqlalchemy.orm import Session, selectinload
 from app.adapters import get_destination_adapter_for_account, get_source_adapter_for_account, supports_source
 from app.adapters.common import autorun_initial_import_guard_reason, logical_post_limit_reached, looks_like_historical_backfill, now_utc
 from app.adapters.discord import discord_link_preference_order, discord_should_wait_for_preferred_links
+from app.config import get_settings
 from app.domain import ExternalPostRefPayload
 from app.models import Account, AccountPostRef, AccountRoute, CanonicalPost, DeliveryAttempt, DeliveryJob, GiveawayCampaign, Persona
 from app.services.alerts import AlertDispatcher
 from app.services.events import log_run_event
 from app.services.posts import (
+    AUTORUN_IMPORT_DELIVERY_DISABLED_REASON,
+    IMPORT_DELIVERY_SUPPRESSED_REASON_KEY,
     can_remove_post_media_after_delivery,
     get_or_create_sync_state,
     persona_max_retries,
@@ -88,8 +91,17 @@ def _published_posts_within_hour(session: Session, persona_id: str) -> int:
     return int(session.scalar(stmt) or 0)
 
 
+def _autorun_import_delivery_enabled() -> bool:
+    return get_settings().scheduler_autorun_import_delivery_enabled
+
+
+def _queue_import_delivery_for_trigger(trigger: str) -> bool:
+    return trigger != "autorun" or _autorun_import_delivery_enabled()
+
+
 def poll_sources(session: Session, alerts: AlertDispatcher, *, run_id: str | None = None, trigger: str = "manual") -> str:
     run_id = run_id or new_run_id()
+    queue_import_delivery = _queue_import_delivery_for_trigger(trigger)
     stmt = select(Persona).options(selectinload(Persona.accounts)).where(Persona.is_enabled.is_(True)).order_by(Persona.name)
     personas = list(session.scalars(stmt))
     for persona in personas:
@@ -126,9 +138,23 @@ def poll_sources(session: Session, alerts: AlertDispatcher, *, run_id: str | Non
                 )
                 result = get_source_adapter_for_account(account).poll(session, persona, account, sync_state)
                 imported = 0
+                delivery_suppressed = 0
                 for payload in result.posts:
-                    upsert_polled_post(session, persona, account, payload)
+                    upsert_polled_post(
+                        session,
+                        persona,
+                        account,
+                        payload,
+                        queue_delivery=queue_import_delivery,
+                        delivery_suppressed_reason=(
+                            AUTORUN_IMPORT_DELIVERY_DISABLED_REASON
+                            if not queue_import_delivery
+                            else None
+                        ),
+                    )
                     imported += 1
+                    if not queue_import_delivery:
+                        delivery_suppressed += 1
                 sync_state.state_json = result.next_state
                 sync_state.cursor = result.cursor
                 sync_state.last_polled_at = now_utc()
@@ -143,7 +169,13 @@ def poll_sources(session: Session, alerts: AlertDispatcher, *, run_id: str | Non
                     service=account.service,
                     operation="poll",
                     message=result.note or f"Imported {imported} posts from {account.label}",
-                    metadata={"imported_count": imported, "initial_sync_note": result.note, "trigger": trigger},
+                    metadata={
+                        "imported_count": imported,
+                        "initial_sync_note": result.note,
+                        "trigger": trigger,
+                        "autorun_import_delivery_enabled": _autorun_import_delivery_enabled(),
+                        "delivery_suppressed_count": delivery_suppressed,
+                    },
                 )
             except Exception as exc:
                 account.last_health_status = "error"
@@ -317,6 +349,7 @@ def process_delivery_queue(
     *,
     run_id: str | None = None,
     post_id: str | None = None,
+    trigger: str = "manual",
 ) -> str:
     run_id = run_id or new_run_id()
     stmt = (
@@ -382,6 +415,34 @@ def process_delivery_queue(
             continue
         if not _route_is_enabled(session, post, target_account):
             job.status = "cancelled"
+            refresh_post_status(post)
+            continue
+        if post.origin_kind == "account_import" and trigger == "autorun" and not _autorun_import_delivery_enabled():
+            job.status = "skipped"
+            job.last_error = "Skipped autorun delivery for an imported source post because source fan-out is disabled."
+            job.last_error_class = "AutorunImportDeliveryDisabled"
+            metadata = dict(post.metadata_json or {})
+            metadata[IMPORT_DELIVERY_SUPPRESSED_REASON_KEY] = AUTORUN_IMPORT_DELIVERY_DISABLED_REASON
+            post.metadata_json = metadata
+            post.last_error = job.last_error
+            log_run_event(
+                session,
+                run_id=run_id,
+                persona_id=persona.id,
+                persona_name=persona.name,
+                account_id=target_account.id,
+                service=target_account.service,
+                operation="publish",
+                severity="warning",
+                message=job.last_error,
+                post_id=post.id,
+                delivery_job_id=job.id,
+                metadata={
+                    "delivery_status": "skipped",
+                    "reason": AUTORUN_IMPORT_DELIVERY_DISABLED_REASON,
+                    "trigger": trigger,
+                },
+            )
             refresh_post_status(post)
             continue
         if post.origin_kind == "account_import" and looks_like_historical_backfill(post, persona, post.origin_account):

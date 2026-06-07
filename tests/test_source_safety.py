@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from app.adapters.instagram import InstagramSourceAdapter
 from app.adapters.mastodon import MastodonSourceAdapter
 from app.adapters.telegram import TelegramSourceAdapter
-from app.domain import CanonicalPostPayload, ExternalPostRefPayload
+from app.domain import CanonicalPostPayload, ExternalPostRefPayload, PollResult
 from app.models import AccountSyncState, CanonicalPost, DeliveryJob, RunEvent
 from app.services.alerts import AlertDispatcher
 from app.services.delivery import poll_sources, process_delivery_queue
@@ -423,3 +423,170 @@ def test_manual_run_can_still_poll_first_sync_import_account(session, monkeypatc
 
     assert session.query(CanonicalPost).filter(CanonicalPost.origin_kind == "account_import").count() == 1
     assert session.query(RunEvent).filter(RunEvent.operation == "poll", RunEvent.severity == "warning").count() == 0
+
+
+def test_autorun_source_poll_imports_without_fanout_when_disabled(session, monkeypatch):
+    persona = _create_persona(session, slug="autorun-import-only")
+    source = _create_account(
+        session,
+        persona,
+        service="mastodon",
+        label="Mastodon",
+        source_enabled=True,
+        destination_enabled=False,
+        credentials_json={"instance": "https://example.social", "token": "secret"},
+    )
+    destination = _create_account(
+        session,
+        persona,
+        service="bluesky",
+        label="Bluesky",
+        source_enabled=False,
+        destination_enabled=True,
+        credentials_json={"handle": "me.bsky.social", "password": "pw"},
+    )
+    replace_routes(
+        session,
+        get_persona(session, persona.id),
+        [{"source_account_id": source.id, "destination_account_id": destination.id, "is_enabled": True}],
+    )
+
+    class FakeSourceAdapter:
+        def poll(self, session, persona, account, sync_state):
+            return PollResult(
+                posts=[
+                    CanonicalPostPayload(
+                        body="Prod already fanned this out",
+                        external_refs=[ExternalPostRefPayload(external_id="source-1", external_url="https://example.social/@me/source-1")],
+                    )
+                ],
+                next_state={"last_seen_id": "source-1"},
+                cursor="source-1",
+            )
+
+    monkeypatch.setattr("app.services.delivery.get_source_adapter_for_account", lambda account: FakeSourceAdapter())
+    monkeypatch.setattr("app.services.delivery._autorun_import_delivery_enabled", lambda: False)
+
+    poll_sources(session, AlertDispatcher(), run_id="autorun-import-only", trigger="autorun")
+
+    post = session.query(CanonicalPost).filter(CanonicalPost.origin_kind == "account_import").one()
+    assert post.status == "posted"
+    assert post.metadata_json["delivery_suppressed_reason"] == "autorun_import_delivery_disabled"
+    assert session.query(DeliveryJob).count() == 0
+    event = (
+        session.query(RunEvent)
+        .filter(RunEvent.run_id == "autorun-import-only", RunEvent.operation == "poll")
+        .order_by(RunEvent.created_at.desc())
+        .first()
+    )
+    assert event.metadata_json["delivery_suppressed_count"] == 1
+    assert event.metadata_json["autorun_import_delivery_enabled"] is False
+
+
+def test_manual_source_poll_still_queues_fanout_when_autorun_delivery_is_disabled(session, monkeypatch):
+    persona = _create_persona(session, slug="manual-import-fanout")
+    source = _create_account(
+        session,
+        persona,
+        service="mastodon",
+        label="Mastodon",
+        source_enabled=True,
+        destination_enabled=False,
+        credentials_json={"instance": "https://example.social", "token": "secret"},
+    )
+    destination = _create_account(
+        session,
+        persona,
+        service="bluesky",
+        label="Bluesky",
+        source_enabled=False,
+        destination_enabled=True,
+        credentials_json={"handle": "me.bsky.social", "password": "pw"},
+    )
+    replace_routes(
+        session,
+        get_persona(session, persona.id),
+        [{"source_account_id": source.id, "destination_account_id": destination.id, "is_enabled": True}],
+    )
+
+    class FakeSourceAdapter:
+        def poll(self, session, persona, account, sync_state):
+            return PollResult(
+                posts=[
+                    CanonicalPostPayload(
+                        body="Manual import should fan out",
+                        external_refs=[ExternalPostRefPayload(external_id="source-2", external_url="https://example.social/@me/source-2")],
+                    )
+                ],
+                next_state={"last_seen_id": "source-2"},
+                cursor="source-2",
+            )
+
+    monkeypatch.setattr("app.services.delivery.get_source_adapter_for_account", lambda account: FakeSourceAdapter())
+    monkeypatch.setattr("app.services.delivery._autorun_import_delivery_enabled", lambda: False)
+
+    poll_sources(session, AlertDispatcher(), run_id="manual-import-fanout", trigger="manual")
+
+    post = session.query(CanonicalPost).filter(CanonicalPost.origin_kind == "account_import").one()
+    job = session.query(DeliveryJob).filter_by(post_id=post.id, target_account_id=destination.id).one()
+    assert post.status == "queued"
+    assert "delivery_suppressed_reason" not in post.metadata_json
+    assert job.status == "queued"
+
+
+def test_autorun_delivery_skips_existing_queued_imports_when_fanout_is_disabled(session, monkeypatch):
+    persona = _create_persona(session, slug="autorun-skip-queued-import")
+    source = _create_account(
+        session,
+        persona,
+        service="mastodon",
+        label="Mastodon",
+        source_enabled=True,
+        destination_enabled=False,
+        credentials_json={"instance": "https://example.social", "token": "secret"},
+    )
+    destination = _create_account(
+        session,
+        persona,
+        service="bluesky",
+        label="Bluesky",
+        source_enabled=False,
+        destination_enabled=True,
+        credentials_json={"handle": "me.bsky.social", "password": "pw"},
+    )
+    replace_routes(
+        session,
+        get_persona(session, persona.id),
+        [{"source_account_id": source.id, "destination_account_id": destination.id, "is_enabled": True}],
+    )
+    post = upsert_polled_post(
+        session,
+        get_persona(session, persona.id),
+        source,
+        CanonicalPostPayload(
+            body="Already queued import",
+            external_refs=[ExternalPostRefPayload(external_id="source-3", external_url="https://example.social/@me/source-3")],
+        ),
+    )
+    publish_called = {"value": False}
+
+    class FakeDestinationAdapter:
+        def validate(self, post, persona, account):
+            return []
+
+        def publish(self, session, post, persona, account, *, context=None):
+            publish_called["value"] = True
+            raise AssertionError("Autorun should not publish source imports when fan-out is disabled.")
+
+    monkeypatch.setattr("app.services.delivery.get_destination_adapter_for_account", lambda account: FakeDestinationAdapter())
+    monkeypatch.setattr("app.services.delivery._autorun_import_delivery_enabled", lambda: False)
+
+    process_delivery_queue(session, AlertDispatcher(), run_id="autorun-skip-queued-import", trigger="autorun")
+
+    job = session.query(DeliveryJob).filter_by(post_id=post.id, target_account_id=destination.id).one()
+    assert publish_called["value"] is False
+    assert job.status == "skipped"
+    assert job.last_error_class == "AutorunImportDeliveryDisabled"
+    assert post.metadata_json["delivery_suppressed_reason"] == "autorun_import_delivery_disabled"
+    event = session.query(RunEvent).filter_by(run_id="autorun-skip-queued-import", delivery_job_id=job.id).one()
+    assert event.metadata_json["reason"] == "autorun_import_delivery_disabled"

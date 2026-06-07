@@ -79,6 +79,7 @@ class AppSettingsUpdate(BaseModel):
     app_base_url: str = ""
     app_port: int = Field(default=8000, ge=1, le=65535)
     scheduler_automation_interval_seconds: int = Field(default=300, ge=30, le=86400)
+    scheduler_autorun_import_delivery_enabled: bool = False
     webhook_logging_enabled: bool = False
     webhook_logging_endpoint: str = ""
     webhook_logging_bearer_token: str = ""

@@ -90,6 +90,7 @@ class CrossposterScheduler:
             "scheduler_started": self._scheduler is not None,
             "cycle_in_progress": self._cycle_lock.locked(),
             "autorun_interval_seconds": self._current_interval_seconds(),
+            "autorun_import_delivery_enabled": get_settings().scheduler_autorun_import_delivery_enabled,
             "next_run_at": next_run_at.isoformat() if next_run_at else None,
             "last_run_started_at": self._last_run_started_at.isoformat() if self._last_run_started_at else None,
             "last_run_finished_at": self._last_run_finished_at.isoformat() if self._last_run_finished_at else None,
@@ -132,7 +133,7 @@ class CrossposterScheduler:
                 poll_sources(session, self.alerts, run_id=run_id, trigger=trigger)
                 enqueue_due_scheduled_posts(session, run_id=run_id)
                 reconcile_pending_posts(session, run_id=run_id)
-                process_delivery_queue(session, self.alerts, run_id=run_id)
+                process_delivery_queue(session, self.alerts, run_id=run_id, trigger=trigger)
                 process_instagram_giveaway_lifecycle(
                     session,
                     self.alerts,
@@ -202,6 +203,7 @@ class CrossposterScheduler:
                 metadata={
                     "trigger": trigger,
                     "autorun_interval_seconds": self._current_interval_seconds(),
+                    "autorun_import_delivery_enabled": get_settings().scheduler_autorun_import_delivery_enabled,
                 },
             )
 

@@ -522,6 +522,9 @@ async def _read_app_settings_payload(request: Request) -> dict[str, Any]:
         "app_base_url": form.get("app_base_url", ""),
         "app_port": int(form.get("app_port", 8000)),
         "scheduler_automation_interval_seconds": int(form.get("scheduler_automation_interval_seconds", 300)),
+        "scheduler_autorun_import_delivery_enabled": (
+            str(form.get("scheduler_autorun_import_delivery_enabled", "false")).lower() in {"1", "true", "on", "yes"}
+        ),
         "webhook_logging_enabled": str(form.get("webhook_logging_enabled", "false")).lower() in {"1", "true", "on", "yes"},
         "webhook_logging_endpoint": form.get("webhook_logging_endpoint", ""),
         "webhook_logging_bearer_token": form.get("webhook_logging_bearer_token", ""),
@@ -1387,6 +1390,7 @@ def health() -> dict[str, Any]:
             "persona_count": len(list_personas(session)),
             "scheduler": {
                 "autorun_interval_seconds": current_settings.scheduler_automation_interval_seconds,
+                "autorun_import_delivery_enabled": current_settings.scheduler_autorun_import_delivery_enabled,
             },
         }
 

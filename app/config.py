@@ -163,6 +163,7 @@ class Settings:
     instagram_private_scan_mode: str
     instagram_private_scan_interval_hours: int
     scheduler_automation_interval_seconds: int
+    scheduler_autorun_import_delivery_enabled: bool
     media_orphan_retention_seconds: int
     media_orphan_retention_days: int
     app_port: int
@@ -234,6 +235,7 @@ def get_settings() -> Settings:
         instagram_private_scan_mode=_instagram_private_scan_mode(),
         instagram_private_scan_interval_hours=_env_int("INSTAGRAM_PRIVATE_SCAN_INTERVAL_HOURS", 168),
         scheduler_automation_interval_seconds=_env_int("SCHEDULER_AUTORUN_INTERVAL_SECONDS", 300),
+        scheduler_autorun_import_delivery_enabled=_env_bool("SCHEDULER_AUTORUN_IMPORT_DELIVERY_ENABLED", False),
         media_orphan_retention_seconds=media_orphan_retention_seconds,
         media_orphan_retention_days=max(1, media_orphan_retention_seconds // 86400),
         app_port=_env_int("APP_PORT", 8000),

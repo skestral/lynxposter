@@ -17,6 +17,7 @@ APP_SETTING_KEYS = [
     "APP_INSTANCE_NAME",
     "APP_PORT",
     "SCHEDULER_AUTORUN_INTERVAL_SECONDS",
+    "SCHEDULER_AUTORUN_IMPORT_DELIVERY_ENABLED",
     "WEBHOOK_LOGGING_ENABLED",
     "WEBHOOK_LOGGING_ENDPOINT",
     "WEBHOOK_LOGGING_BEARER_TOKEN",
@@ -96,6 +97,7 @@ def test_update_app_settings_writes_env_and_refreshes_runtime(tmp_path):
                 app_base_url="https://lynxposter.example.com",
                 app_port=8123,
                 scheduler_automation_interval_seconds=600,
+                scheduler_autorun_import_delivery_enabled=True,
                 webhook_logging_enabled=True,
                 webhook_logging_endpoint="https://ha.example/api/webhook/lynxposter",
                 webhook_logging_bearer_token="bearer-secret",
@@ -129,6 +131,7 @@ def test_update_app_settings_writes_env_and_refreshes_runtime(tmp_path):
         assert "EXTRA_SETTING=keep" in text
         assert "APP_INSTANCE_NAME=Test Node" in text
         assert "APP_BASE_URL=https://lynxposter.example.com" in text
+        assert "SCHEDULER_AUTORUN_IMPORT_DELIVERY_ENABLED=true" in text
         assert "WEBHOOK_LOGGING_ENDPOINT=https://ha.example/api/webhook/lynxposter" in text
         assert "DISCORD_NOTIFICATION_WEBHOOK_URL=https://discord.com/api/webhooks/123/test" in text
         assert "AUTH_OIDC_ENABLED=true" in text
@@ -141,6 +144,7 @@ def test_update_app_settings_writes_env_and_refreshes_runtime(tmp_path):
         assert updated.instance_name == "Test Node"
         assert updated.app_base_url == "https://lynxposter.example.com"
         assert updated.scheduler_automation_interval_seconds == 600
+        assert updated.scheduler_autorun_import_delivery_enabled is True
         assert updated.instagram_private_scan_interval_hours == 12
         assert updated.media_orphan_retention_seconds == 900
 
@@ -148,6 +152,7 @@ def test_update_app_settings_writes_env_and_refreshes_runtime(tmp_path):
         assert current.instance_name == "Test Node"
         assert current.app_base_url == "https://lynxposter.example.com"
         assert current.app_port == 8123
+        assert current.scheduler_autorun_import_delivery_enabled is True
         assert current.webhook_logging_enabled is True
         assert current.webhook_logging_retry_count == 4
         assert current.discord_notification_enabled is True
@@ -318,3 +323,17 @@ def test_settings_default_env_file_lives_under_app_data_config(tmp_path):
         _restore_env(previous)
         if previous.get("APP_DATA_DIR") is None:
             os.environ.pop("APP_DATA_DIR", None)
+
+
+def test_autorun_import_delivery_is_disabled_by_default(tmp_path):
+    env_path = tmp_path / ".env"
+    previous = {key: os.environ.get(key) for key in APP_SETTING_KEYS}
+    try:
+        for key in APP_SETTING_KEYS:
+            os.environ.pop(key, None)
+        os.environ["APP_ENV_FILE"] = str(env_path)
+        reload_settings()
+
+        assert get_settings().scheduler_autorun_import_delivery_enabled is False
+    finally:
+        _restore_env(previous)

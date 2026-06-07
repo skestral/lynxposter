@@ -24,6 +24,8 @@ from app.services.storage import delete_managed_media_file
 
 NEEDS_ATTENTION_DISPLAY_STATUSES = {"partial_failure", "failure", "cancelled"}
 DELETABLE_DISPLAY_STATUSES = {"draft", *NEEDS_ATTENTION_DISPLAY_STATUSES}
+IMPORT_DELIVERY_SUPPRESSED_REASON_KEY = "delivery_suppressed_reason"
+AUTORUN_IMPORT_DELIVERY_DISABLED_REASON = "autorun_import_delivery_disabled"
 
 
 def utcnow() -> datetime:
@@ -593,7 +595,32 @@ def _upsert_account_post_refs(
         )
 
 
-def upsert_polled_post(session: Session, persona: Persona, source_account: Account, payload: CanonicalPostPayload) -> CanonicalPost:
+def _set_import_delivery_suppression(post: CanonicalPost, reason: str) -> None:
+    metadata = dict(post.metadata_json or {})
+    metadata[IMPORT_DELIVERY_SUPPRESSED_REASON_KEY] = reason
+    post.metadata_json = metadata
+
+
+def _clear_import_delivery_suppression(post: CanonicalPost) -> None:
+    metadata = dict(post.metadata_json or {})
+    if IMPORT_DELIVERY_SUPPRESSED_REASON_KEY in metadata:
+        metadata.pop(IMPORT_DELIVERY_SUPPRESSED_REASON_KEY, None)
+        post.metadata_json = metadata
+
+
+def _import_delivery_is_suppressed(post: CanonicalPost) -> bool:
+    return bool((post.metadata_json or {}).get(IMPORT_DELIVERY_SUPPRESSED_REASON_KEY))
+
+
+def upsert_polled_post(
+    session: Session,
+    persona: Persona,
+    source_account: Account,
+    payload: CanonicalPostPayload,
+    *,
+    queue_delivery: bool = True,
+    delivery_suppressed_reason: str | None = None,
+) -> CanonicalPost:
     existing_post: CanonicalPost | None = None
     for external_ref in payload.external_refs:
         stmt = select(AccountPostRef).where(
@@ -607,7 +634,14 @@ def upsert_polled_post(session: Session, persona: Persona, source_account: Accou
 
     if existing_post is not None:
         _upsert_account_post_refs(session, existing_post, source_account, payload.external_refs)
-        if existing_post.origin_account_id == source_account.id:
+        if queue_delivery:
+            _clear_import_delivery_suppression(existing_post)
+        elif existing_post.origin_kind == "account_import" and existing_post.origin_account_id == source_account.id:
+            _set_import_delivery_suppression(
+                existing_post,
+                delivery_suppressed_reason or "import_delivery_disabled",
+            )
+        if queue_delivery and existing_post.origin_account_id == source_account.id:
             target_accounts = routed_destination_accounts(session, source_account)
             if target_accounts:
                 sync_delivery_jobs(session, existing_post, target_accounts, "queued")
@@ -620,13 +654,15 @@ def upsert_polled_post(session: Session, persona: Persona, source_account: Accou
         metadata["pending_reply_external_id"] = payload.reply_to_external.external_id
     if payload.quote_of_external:
         metadata["pending_quote_external_id"] = payload.quote_of_external.external_id
+    if not queue_delivery:
+        metadata[IMPORT_DELIVERY_SUPPRESSED_REASON_KEY] = delivery_suppressed_reason or "import_delivery_disabled"
 
     post = CanonicalPost(
         persona_id=persona.id,
         origin_kind="account_import",
         post_type=POST_TYPE_STANDARD,
         origin_account_id=source_account.id,
-        status="queued",
+        status="queued" if queue_delivery else "posted",
         body=payload.body,
         publish_overrides_json=payload.publish_overrides,
         metadata_json=metadata,
@@ -654,7 +690,7 @@ def upsert_polled_post(session: Session, persona: Persona, source_account: Accou
     session.flush()
 
     target_accounts = routed_destination_accounts(session, source_account)
-    if target_accounts and (
+    if queue_delivery and target_accounts and (
         not metadata.get("pending_reply_external_id") or post.reply_to_post_id
     ) and (
         not metadata.get("pending_quote_external_id") or post.quote_of_post_id
@@ -680,6 +716,8 @@ def reconcile_pending_relationships(session: Session, post: CanonicalPost) -> bo
     if changed and post.origin_account_id:
         source_account = session.get(Account, post.origin_account_id)
         if source_account:
+            if _import_delivery_is_suppressed(post):
+                return changed
             target_accounts = routed_destination_accounts(session, source_account)
             sync_delivery_jobs(session, post, target_accounts, "queued")
             refresh_post_status(post)

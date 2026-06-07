@@ -16,6 +16,7 @@ LynxPoster is a self-hosted FastAPI service for multi-persona social scheduling 
 - Outbound publishing for `bluesky`, `instagram`, `mastodon`, `twitter`, `discord`, `telegram`, and `tumblr`
 - One-click manual automation runs plus pause/start controls for the 5-minute autorun cycle
 - A dry-run sandbox that previews per-account payload shapes, validations, and expectation checks without hitting live sites
+- Autorun source fan-out is opt-in, so local or staging copies can poll sources without reposting content that production already published
 - Safe first-scan baselining so new or reset source accounts do not repost historical content; autorun never performs first-sync historical imports, and any intentional backfill is manual-only
 - Bootstrap admin UI with persona, account, routing, scheduled post, settings, sandbox, and logs pages
 - Local run/alert logging plus optional notification webhooks for Home Assistant, Discord, or other receivers
@@ -106,6 +107,7 @@ The Settings page currently lets you:
 - Change the instance name
 - Set the public base URL used by authentication callbacks
 - Adjust the scheduler autorun interval
+- Enable or disable autorun publishing for imported source posts
 - Set the orphaned media cleanup retention window
 - Configure OIDC login for Authelia or another OpenID Connect provider
 - Save notification settings for Home Assistant or other JSON webhook receivers
@@ -168,6 +170,8 @@ For the full Linux and Docker deployment guide, including ports, environment var
 
 - `APP_PORT`
   Default: `8000`
+- `SCHEDULER_AUTORUN_IMPORT_DELIVERY_ENABLED`
+  Default: `false`. Set to `true` only on the instance that should automatically fan out posts imported from source accounts. Manual automation runs can still publish imports when this is false.
 - `APP_DATA_DIR`
   Container default: `/data`
 - `APP_CONFIG_DIR`
