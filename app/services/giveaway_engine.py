@@ -698,11 +698,40 @@ def _relationship_followed_by(relationship: Any) -> bool:
     return bool(_object_value(relationship, "followed_by"))
 
 
+def _instagram_raw_user_friendships(client: Any, user_ids: list[str]) -> dict[str, bool]:
+    relationships: dict[str, bool] = {}
+    for chunk in _chunked(user_ids, INSTAGRAM_PRIVATE_FRIENDSHIP_BATCH_SIZE):
+        data = {"user_ids": ",".join(chunk)}
+        uuid = str(getattr(client, "uuid", "") or "").strip()
+        if uuid:
+            data["_uuid"] = uuid
+        result = _call_instagram_private(
+            lambda data=data: client.private_request(
+                "friendships/show_many/",
+                data=data,
+                with_signature=False,
+            )
+        ) or {}
+        statuses = result.get("friendship_statuses") if isinstance(result, dict) else {}
+        if not isinstance(statuses, dict):
+            continue
+        for raw_user_id, raw_status in statuses.items():
+            user_id = str(raw_user_id or "").strip()
+            if not user_id:
+                continue
+            status = dict(raw_status or {}) if isinstance(raw_status, dict) else {}
+            relationships[user_id] = bool(status.get("followed_by"))
+    return relationships
+
+
 def _instagram_user_friendships(client: Any, user_ids: list[str]) -> dict[str, bool]:
     requested_ids = [str(user_id or "").strip() for user_id in user_ids if str(user_id or "").strip()]
     requested_ids = list(dict.fromkeys(requested_ids))
     if not requested_ids:
         return {}
+
+    if hasattr(client, "private_request"):
+        return _instagram_raw_user_friendships(client, requested_ids)
 
     if hasattr(client, "user_friendships_v1"):
         relationships: dict[str, bool] = {}

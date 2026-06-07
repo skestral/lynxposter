@@ -971,6 +971,88 @@ def test_manual_instagram_scan_batches_follow_verification(session, monkeypatch)
     assert session.query(GiveawayEntrant).filter_by(channel_id=channel.id, eligibility_status=ENTRY_STATUS_ELIGIBLE).count() == 205
 
 
+def test_manual_instagram_scan_handles_sparse_follow_batch_response(session, monkeypatch):
+    persona = _create_persona(session, slug="giveaway-manual-follow-sparse")
+    instagram = _create_account(session, persona, service="instagram", label="Instagram")
+    post = create_scheduled_post(
+        session,
+        _generic_giveaway_payload(
+            persona.id,
+            [instagram.id],
+            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            channels=[
+                {
+                    "service": "instagram",
+                    "account_id": instagram.id,
+                    "rules": {
+                        "kind": "all",
+                        "children": [{"kind": "atom", "atom": "follow_present", "params": {}}],
+                    },
+                }
+            ],
+        ),
+        [],
+    )
+    _mark_posted(post, instagram.id, external_id="ig-media-follow-sparse")
+    channel = post.giveaway_campaign.channels[0]
+    channel.entrants.extend(
+        [
+            GiveawayEntrant(
+                provider_user_id="1000373192696665",
+                provider_username="sparse.response",
+                display_label="sparse.response",
+                signal_state_json={},
+            ),
+            GiveawayEntrant(
+                provider_user_id="1000373192696666",
+                provider_username="full.response",
+                display_label="full.response",
+                signal_state_json={},
+            ),
+        ]
+    )
+    session.flush()
+    private_requests: list[dict[str, str]] = []
+
+    class _SparseFollowClient:
+        uuid = "test-uuid"
+
+        def private_request(self, endpoint, data=None, with_signature=True):
+            assert endpoint == "friendships/show_many/"
+            assert with_signature is False
+            private_requests.append(dict(data or {}))
+            return {
+                "status": "ok",
+                "friendship_statuses": {
+                    "1000373192696665": {"user_id": "1000373192696665"},
+                    "1000373192696666": {"followed_by": True},
+                },
+            }
+
+        def user_friendships_v1(self, user_ids):
+            raise AssertionError("Raw friendship parsing should avoid instagrapi RelationshipShort validation.")
+
+    monkeypatch.setattr("app.services.giveaway_engine._instagram_destination_dependency_issue", lambda: None)
+    monkeypatch.setattr("app.services.giveaway_engine._authenticated_publish_client", lambda credentials: _SparseFollowClient())
+
+    scan_instagram_giveaway_channels(session, post.giveaway_campaign, run_id="run-manual-follow-sparse")
+
+    sparse = session.query(GiveawayEntrant).filter_by(channel_id=channel.id, provider_user_id="1000373192696665").one()
+    full = session.query(GiveawayEntrant).filter_by(channel_id=channel.id, provider_user_id="1000373192696666").one()
+    assert channel.last_error is None
+    assert sparse.signal_state_json["follow_collection_checked"] is True
+    assert sparse.signal_state_json["follow_present"] is False
+    assert sparse.eligibility_status == ENTRY_STATUS_DISQUALIFIED
+    assert full.signal_state_json["follow_present"] is True
+    assert full.eligibility_status == ENTRY_STATUS_ELIGIBLE
+    assert private_requests == [
+        {
+            "user_ids": "1000373192696665,1000373192696666",
+            "_uuid": "test-uuid",
+        }
+    ]
+
+
 def test_instagram_like_follow_private_scan_skips_unneeded_comment_and_story_calls(session, monkeypatch):
     persona = _create_persona(session, slug="giveaway-like-follow-skip-story")
     instagram = _create_account(session, persona, service="instagram", label="Instagram")
