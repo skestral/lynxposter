@@ -5932,7 +5932,22 @@ body[data-ui-mode="dark"] .mobile-nav-drawer-link.active {
 }
 
 .giveaway-summary-actions {
+    align-items: center;
+    align-content: flex-start;
     justify-content: flex-end;
+}
+
+.giveaway-summary-actions .btn,
+.giveaway-summary-actions .badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.45rem;
+    line-height: 1.1;
+}
+
+.giveaway-summary-actions .badge {
+    padding-inline: 0.85rem !important;
 }
 
 .giveaway-channel-stats span,
