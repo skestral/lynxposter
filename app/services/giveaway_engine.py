@@ -97,6 +97,13 @@ INSTAGRAM_WEBHOOK_CAPTURE_SOURCE = "webhook_capture"
 INSTAGRAM_MESSAGE_SHARE_CAPTURE_SOURCE = "message_share_capture"
 INSTAGRAM_LIVE_COLLECTION_SOURCE = "live_collection"
 INSTAGRAM_PRIVATE_MAX_ATTEMPTS = 3
+INSTAGRAM_PRIVATE_FRIENDSHIP_BATCH_SIZE = 100
+INSTAGRAM_COMMENT_RULE_ATOMS = {
+    "comment_present",
+    "friend_mention_count_gte",
+    "comment_keywords_all",
+    "comment_hashtags_all",
+}
 BLUESKY_COLLECTION_MAX_ATTEMPTS = 3
 INSTAGRAM_ACTIVITY_EVENT_TYPES = (
     "instagram_comment",
@@ -200,6 +207,19 @@ def _normalized_terms(values: list[str] | None, *, prefix: str = "") -> list[str
         if value not in normalized:
             normalized.append(value)
     return normalized
+
+
+def _rule_tree_atoms(rule: dict[str, Any] | None) -> set[str]:
+    payload = dict(rule or {})
+    atoms: set[str] = set()
+    if str(payload.get("kind") or "").strip().lower() == "atom":
+        atom = str(payload.get("atom") or "").strip()
+        if atom:
+            atoms.add(atom)
+    for child in payload.get("children") or []:
+        if isinstance(child, dict):
+            atoms.update(_rule_tree_atoms(child))
+    return atoms
 
 
 def instagram_rule_tree_from_legacy(raw_config: dict[str, Any] | None) -> dict[str, Any]:
@@ -663,6 +683,43 @@ def _object_value(item: Any, *keys: str) -> Any:
         if value not in (None, ""):
             return value
     return None
+
+
+def _chunked(values: list[str], size: int) -> list[list[str]]:
+    chunk_size = max(1, int(size or 1))
+    return [values[index:index + chunk_size] for index in range(0, len(values), chunk_size)]
+
+
+def _relationship_user_id(relationship: Any) -> str | None:
+    return str(_object_value(relationship, "user_id", "pk", "id") or "").strip() or None
+
+
+def _relationship_followed_by(relationship: Any) -> bool:
+    return bool(_object_value(relationship, "followed_by"))
+
+
+def _instagram_user_friendships(client: Any, user_ids: list[str]) -> dict[str, bool]:
+    requested_ids = [str(user_id or "").strip() for user_id in user_ids if str(user_id or "").strip()]
+    requested_ids = list(dict.fromkeys(requested_ids))
+    if not requested_ids:
+        return {}
+
+    if hasattr(client, "user_friendships_v1"):
+        relationships: dict[str, bool] = {}
+        for chunk in _chunked(requested_ids, INSTAGRAM_PRIVATE_FRIENDSHIP_BATCH_SIZE):
+            results = _call_instagram_private(lambda chunk=chunk: client.user_friendships_v1(chunk)) or []
+            for relationship in results:
+                user_id = _relationship_user_id(relationship)
+                if user_id:
+                    relationships[user_id] = _relationship_followed_by(relationship)
+        return relationships
+
+    if len(requested_ids) == 1 and hasattr(client, "user_friendship_v1"):
+        user_id = requested_ids[0]
+        relationship = _call_instagram_private(lambda: client.user_friendship_v1(user_id))
+        return {user_id: _relationship_followed_by(relationship)}
+
+    raise RuntimeError("Instagram batch follow verification is unavailable for this private client.")
 
 
 def _instagram_target_media_codes(channel: GiveawayChannel) -> set[str]:
@@ -1453,15 +1510,12 @@ def _evaluate_instagram_atom(
             )
         return False, "No Instagram repost or share evidence was captured during the latest private/manual check."
     if atom == "follow_present":
-        if allow_private_verification:
-            verified, reason = _instagram_verify_follow(channel, entrant)
-            if verified is None and state.get("follow_collection_checked") is True:
-                return bool(state.get("follow_present")), None
-            return verified, reason
         if state.get("follow_present") is True:
             return True, None
         if state.get("follow_collection_checked") is True:
             return False, None
+        if allow_private_verification:
+            return _instagram_verify_follow(channel, entrant)
         return None, "Instagram follow verification is waiting for a manual, due, or end-of-giveaway private check."
     return False, f"Unsupported Instagram atom: {atom}"
 
@@ -2797,150 +2851,181 @@ def refresh_instagram_channel_state(
                 channel.last_error = dependency_issue
             else:
                 try:
-                    client = _authenticated_publish_client(_account_credentials(channel.account))
-                    live_comments, live_media_id = _instagram_media_comments(client, channel)
-                    observed_comments: list[tuple[GiveawayEntrant, dict[str, Any], dict[str, Any]]] = []
-                    if force_private_scan:
-                        for state in state_by_user.values():
-                            state["comments"] = []
-                            state["comment_replies"] = []
-                            state["comment_count"] = 0
-                            state["friend_mention_count"] = 0
-                            state["friend_mentions"] = []
-                    for comment in live_comments or []:
-                        user = getattr(comment, "user", None)
-                        provider_user_id = str(getattr(user, "pk", "") or "").strip()
-                        provider_username = str(getattr(user, "username", "") or "").strip() or None
-                        if not provider_user_id:
-                            continue
-                        existing = state_by_user.setdefault(provider_user_id, _normalized_instagram_signal_state({}))
-                        parent_id = str(
-                            getattr(comment, "parent_pk", "")
-                            or getattr(comment, "parent_id", "")
-                            or getattr(comment, "parent_comment_id", "")
-                            or getattr(comment, "replied_to_comment_id", "")
-                            or ""
-                        ).strip() or None
-                        existing["comments"].append(
-                            {
-                                "comment_id": str(getattr(comment, "pk", "") or "").strip() or None,
-                                "parent_id": parent_id,
-                                "is_reply": bool(parent_id),
-                                "text": str(getattr(comment, "text", "") or "").strip(),
-                                "source": "close_time_live",
-                            }
-                        )
-                        entrant = get_or_create_channel_entrant(
-                            channel,
-                            provider_user_id=provider_user_id,
-                            provider_username=provider_username,
-                            display_label=provider_username or provider_user_id,
-                            prefer_provider_user_id=True,
-                        )
-                        entrant.signal_state_json = dict(entrant.signal_state_json or {})
-                        observed_comments.append(
-                            (
-                                entrant,
-                                existing["comments"][-1],
-                                {
-                                    "created_time": (
-                                        normalize_datetime(getattr(comment, "created_at_utc", None)).isoformat()
-                                        if getattr(comment, "created_at_utc", None)
-                                        else None
-                                    ),
-                                },
-                            )
-                        )
-                    session.flush()
-                    _sync_instagram_live_comment_events(session, channel, observed_comments)
+                    rule_atoms = _rule_tree_atoms(channel.rules_json)
+                    needs_comment_scan = bool(rule_atoms.intersection(INSTAGRAM_COMMENT_RULE_ATOMS))
+                    needs_like_scan = "like_present" in rule_atoms
+                    needs_follow_scan = "follow_present" in rule_atoms
+                    needs_repost_scan = "repost_present" in rule_atoms
+                    needs_private_client = (
+                        needs_comment_scan
+                        or needs_like_scan
+                        or (needs_repost_scan and bool(state_by_user))
+                        or (needs_follow_scan and bool(state_by_user))
+                    )
+                    client = _authenticated_publish_client(_account_credentials(channel.account)) if needs_private_client else None
+                    live_media_id: str | None = None
 
-                    live_likers, live_media_id = _instagram_media_likers(client, channel)
-                    observed_likes: list[tuple[GiveawayEntrant, dict[str, Any]]] = []
-                    if force_private_scan:
-                        for state in state_by_user.values():
-                            state["likes"] = []
-                            state["like_present"] = False
-                            state["like_collection_checked"] = True
-                    for liker in live_likers or []:
-                        provider_user_id, provider_username = _instagram_user_identity(liker)
-                        if not provider_user_id:
-                            continue
-                        existing = state_by_user.setdefault(provider_user_id, _normalized_instagram_signal_state({}))
-                        existing["like_collection_checked"] = True
-                        entrant = get_or_create_channel_entrant(
-                            channel,
-                            provider_user_id=provider_user_id,
-                            provider_username=provider_username,
-                            display_label=provider_username or provider_user_id,
-                            prefer_provider_user_id=True,
-                        )
-                        like_summary = {
-                            "like_id": f"like:{provider_user_id}:{live_media_id}",
-                            "media_id": live_media_id,
-                            "actor_id": provider_user_id,
-                            "actor_username": provider_username,
-                            "source": INSTAGRAM_LIVE_COLLECTION_SOURCE,
-                        }
-                        existing["likes"] = _append_unique_evidence_item(
-                            list(existing.get("likes") or []),
-                            like_summary,
-                            key_fields=("like_id",),
-                        )
-                        existing["like_present"] = True
-                        entrant.signal_state_json = dict(entrant.signal_state_json or {})
-                        observed_likes.append((entrant, like_summary))
-                    session.flush()
-                    _sync_instagram_live_like_events(session, channel, observed_likes)
-
-                    target_media_ids = set(_instagram_media_identifier_candidates(client, channel))
-                    if live_media_id:
-                        target_media_ids.add(str(live_media_id))
-                    target_media_codes = _instagram_target_media_codes(channel)
-                    observed_reposts: list[tuple[GiveawayEntrant, dict[str, Any]]] = []
-                    for provider_user_id, state in list(state_by_user.items()):
-                        provider_username = str(state.get("provider_username") or "").strip() or None
-                        entrant = next(
-                            (
-                                item
-                                for item in channel.entrants
-                                if item.provider_user_id == provider_user_id
-                            ),
-                            None,
-                        )
-                        if entrant is not None:
-                            provider_username = entrant.provider_username or provider_username
-                        try:
-                            stories = _instagram_user_stories(client, provider_user_id)
-                        except Exception:
-                            continue
-                        for story in stories:
-                            repost_summary = _instagram_story_share_summary(
-                                story,
-                                target_media_ids=target_media_ids,
-                                target_media_codes=target_media_codes,
-                                provider_user_id=provider_user_id,
-                                provider_username=provider_username,
-                            )
-                            if repost_summary is None:
+                    if client is not None and needs_comment_scan:
+                        live_comments, live_media_id = _instagram_media_comments(client, channel)
+                        observed_comments: list[tuple[GiveawayEntrant, dict[str, Any], dict[str, Any]]] = []
+                        if force_private_scan:
+                            for state in state_by_user.values():
+                                state["comments"] = []
+                                state["comment_replies"] = []
+                                state["comment_count"] = 0
+                                state["friend_mention_count"] = 0
+                                state["friend_mentions"] = []
+                        for comment in live_comments or []:
+                            user = getattr(comment, "user", None)
+                            provider_user_id = str(getattr(user, "pk", "") or "").strip()
+                            provider_username = str(getattr(user, "username", "") or "").strip() or None
+                            if not provider_user_id:
                                 continue
-                            entrant = entrant or get_or_create_channel_entrant(
+                            existing = state_by_user.setdefault(provider_user_id, _normalized_instagram_signal_state({}))
+                            parent_id = str(
+                                getattr(comment, "parent_pk", "")
+                                or getattr(comment, "parent_id", "")
+                                or getattr(comment, "parent_comment_id", "")
+                                or getattr(comment, "replied_to_comment_id", "")
+                                or ""
+                            ).strip() or None
+                            existing["comments"].append(
+                                {
+                                    "comment_id": str(getattr(comment, "pk", "") or "").strip() or None,
+                                    "parent_id": parent_id,
+                                    "is_reply": bool(parent_id),
+                                    "text": str(getattr(comment, "text", "") or "").strip(),
+                                    "source": "close_time_live",
+                                }
+                            )
+                            entrant = get_or_create_channel_entrant(
                                 channel,
                                 provider_user_id=provider_user_id,
                                 provider_username=provider_username,
                                 display_label=provider_username or provider_user_id,
                                 prefer_provider_user_id=True,
                             )
-                            state["reposts"] = _append_unique_evidence_item(
-                                list(state.get("reposts") or []),
-                                repost_summary,
-                                key_fields=("repost_id",),
-                            )
-                            state["repost_present"] = True
                             entrant.signal_state_json = dict(entrant.signal_state_json or {})
-                            observed_reposts.append((entrant, repost_summary))
-                            break
-                    session.flush()
-                    _sync_instagram_live_repost_events(session, channel, observed_reposts)
+                            observed_comments.append(
+                                (
+                                    entrant,
+                                    existing["comments"][-1],
+                                    {
+                                        "created_time": (
+                                            normalize_datetime(getattr(comment, "created_at_utc", None)).isoformat()
+                                            if getattr(comment, "created_at_utc", None)
+                                            else None
+                                        ),
+                                    },
+                                )
+                            )
+                        session.flush()
+                        _sync_instagram_live_comment_events(session, channel, observed_comments)
+
+                    if client is not None and needs_like_scan:
+                        live_likers, live_media_id = _instagram_media_likers(client, channel)
+                        observed_likes: list[tuple[GiveawayEntrant, dict[str, Any]]] = []
+                        for state in state_by_user.values():
+                            if force_private_scan:
+                                state["likes"] = []
+                                state["like_present"] = False
+                                state["like_collection_checked"] = True
+                            elif not state.get("like_present"):
+                                state["like_present"] = False
+                                state["like_collection_checked"] = True
+                        for liker in live_likers or []:
+                            provider_user_id, provider_username = _instagram_user_identity(liker)
+                            if not provider_user_id:
+                                continue
+                            existing = state_by_user.setdefault(provider_user_id, _normalized_instagram_signal_state({}))
+                            existing["like_collection_checked"] = True
+                            entrant = get_or_create_channel_entrant(
+                                channel,
+                                provider_user_id=provider_user_id,
+                                provider_username=provider_username,
+                                display_label=provider_username or provider_user_id,
+                                prefer_provider_user_id=True,
+                            )
+                            like_summary = {
+                                "like_id": f"like:{provider_user_id}:{live_media_id}",
+                                "media_id": live_media_id,
+                                "actor_id": provider_user_id,
+                                "actor_username": provider_username,
+                                "source": INSTAGRAM_LIVE_COLLECTION_SOURCE,
+                            }
+                            existing["likes"] = _append_unique_evidence_item(
+                                list(existing.get("likes") or []),
+                                like_summary,
+                                key_fields=("like_id",),
+                            )
+                            existing["like_present"] = True
+                            entrant.signal_state_json = dict(entrant.signal_state_json or {})
+                            observed_likes.append((entrant, like_summary))
+                        session.flush()
+                        _sync_instagram_live_like_events(session, channel, observed_likes)
+
+                    if client is not None and needs_follow_scan and state_by_user:
+                        requested_user_ids = sorted(state_by_user)
+                        for provider_user_id in requested_user_ids:
+                            state = state_by_user.setdefault(provider_user_id, _normalized_instagram_signal_state({}))
+                            state["follow_present"] = False
+                            state["follow_collection_checked"] = True
+                        friendship_statuses = _instagram_user_friendships(client, requested_user_ids)
+                        for provider_user_id, follows_account in friendship_statuses.items():
+                            state = state_by_user.setdefault(provider_user_id, _normalized_instagram_signal_state({}))
+                            state["follow_present"] = bool(follows_account)
+                            state["follow_collection_checked"] = True
+
+                    if client is not None and needs_repost_scan:
+                        target_media_ids = set(_instagram_media_identifier_candidates(client, channel))
+                        if live_media_id:
+                            target_media_ids.add(str(live_media_id))
+                        target_media_codes = _instagram_target_media_codes(channel)
+                        observed_reposts: list[tuple[GiveawayEntrant, dict[str, Any]]] = []
+                        for provider_user_id, state in list(state_by_user.items()):
+                            provider_username = str(state.get("provider_username") or "").strip() or None
+                            entrant = next(
+                                (
+                                    item
+                                    for item in channel.entrants
+                                    if item.provider_user_id == provider_user_id
+                                ),
+                                None,
+                            )
+                            if entrant is not None:
+                                provider_username = entrant.provider_username or provider_username
+                            try:
+                                stories = _instagram_user_stories(client, provider_user_id)
+                            except Exception:
+                                continue
+                            for story in stories:
+                                repost_summary = _instagram_story_share_summary(
+                                    story,
+                                    target_media_ids=target_media_ids,
+                                    target_media_codes=target_media_codes,
+                                    provider_user_id=provider_user_id,
+                                    provider_username=provider_username,
+                                )
+                                if repost_summary is None:
+                                    continue
+                                entrant = entrant or get_or_create_channel_entrant(
+                                    channel,
+                                    provider_user_id=provider_user_id,
+                                    provider_username=provider_username,
+                                    display_label=provider_username or provider_user_id,
+                                    prefer_provider_user_id=True,
+                                )
+                                state["reposts"] = _append_unique_evidence_item(
+                                    list(state.get("reposts") or []),
+                                    repost_summary,
+                                    key_fields=("repost_id",),
+                                )
+                                state["repost_present"] = True
+                                entrant.signal_state_json = dict(entrant.signal_state_json or {})
+                                observed_reposts.append((entrant, repost_summary))
+                                break
+                        session.flush()
+                        _sync_instagram_live_repost_events(session, channel, observed_reposts)
                     channel.last_error = None
                 except Exception as exc:
                     channel.last_error = f"Instagram live activity collection failed: {exc}"

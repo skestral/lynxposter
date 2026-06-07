@@ -917,6 +917,127 @@ def test_manual_instagram_scan_ignores_private_scan_interval(session, monkeypatc
     assert scan_event.metadata_json["private_scan_reason"] == "manual"
 
 
+def test_manual_instagram_scan_batches_follow_verification(session, monkeypatch):
+    persona = _create_persona(session, slug="giveaway-manual-follow-batch")
+    instagram = _create_account(session, persona, service="instagram", label="Instagram")
+    post = create_scheduled_post(
+        session,
+        _generic_giveaway_payload(
+            persona.id,
+            [instagram.id],
+            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            channels=[
+                {
+                    "service": "instagram",
+                    "account_id": instagram.id,
+                    "rules": {
+                        "kind": "all",
+                        "children": [{"kind": "atom", "atom": "follow_present", "params": {}}],
+                    },
+                }
+            ],
+        ),
+        [],
+    )
+    _mark_posted(post, instagram.id, external_id="ig-media-follow-batch")
+    channel = post.giveaway_campaign.channels[0]
+    for index in range(205):
+        user_id = f"ig-user-{index:03d}"
+        channel.entrants.append(
+            GiveawayEntrant(
+                provider_user_id=user_id,
+                provider_username=f"follower.{index:03d}",
+                display_label=f"follower.{index:03d}",
+                signal_state_json={},
+            )
+        )
+    session.flush()
+    friendship_batches: list[list[str]] = []
+
+    class _BatchFollowClient:
+        def user_friendships_v1(self, user_ids):
+            friendship_batches.append(list(user_ids))
+            return [SimpleNamespace(user_id=user_id, followed_by=True) for user_id in user_ids]
+
+        def user_friendship_v1(self, user_id):
+            raise AssertionError("Private scan should batch follow verification.")
+
+    monkeypatch.setattr("app.services.giveaway_engine._instagram_destination_dependency_issue", lambda: None)
+    monkeypatch.setattr("app.services.giveaway_engine._authenticated_publish_client", lambda credentials: _BatchFollowClient())
+
+    scan_instagram_giveaway_channels(session, post.giveaway_campaign, run_id="run-manual-follow-batch")
+
+    assert [len(batch) for batch in friendship_batches] == [100, 100, 5]
+    assert session.query(GiveawayEntrant).filter_by(channel_id=channel.id, eligibility_status=ENTRY_STATUS_ELIGIBLE).count() == 205
+
+
+def test_instagram_like_follow_private_scan_skips_unneeded_comment_and_story_calls(session, monkeypatch):
+    persona = _create_persona(session, slug="giveaway-like-follow-skip-story")
+    instagram = _create_account(session, persona, service="instagram", label="Instagram")
+    post = create_scheduled_post(
+        session,
+        _generic_giveaway_payload(
+            persona.id,
+            [instagram.id],
+            giveaway_end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            channels=[
+                {
+                    "service": "instagram",
+                    "account_id": instagram.id,
+                    "rules": {
+                        "kind": "all",
+                        "children": [
+                            {"kind": "atom", "atom": "like_present", "params": {}},
+                            {"kind": "atom", "atom": "follow_present", "params": {}},
+                        ],
+                    },
+                }
+            ],
+        ),
+        [],
+    )
+    _mark_posted(post, instagram.id, external_id="ig-media-like-follow")
+    channel = post.giveaway_campaign.channels[0]
+    channel.entrants.append(
+        GiveawayEntrant(
+            provider_user_id="ig-user-like-follow",
+            provider_username="liker.follower",
+            display_label="liker.follower",
+            signal_state_json={},
+        )
+    )
+    session.flush()
+    calls = {"likers": 0, "friendships": 0}
+
+    class _LikeFollowClient:
+        def media_comments(self, media_id, amount=0):
+            raise AssertionError("Like+follow scans should not fetch comments when no comment rule is present.")
+
+        def media_likers(self, media_id):
+            calls["likers"] += 1
+            assert media_id == "ig-media-like-follow"
+            return [SimpleNamespace(pk="ig-user-like-follow", username="liker.follower")]
+
+        def user_friendships_v1(self, user_ids):
+            calls["friendships"] += 1
+            assert user_ids == ["ig-user-like-follow"]
+            return [SimpleNamespace(user_id="ig-user-like-follow", followed_by=True)]
+
+        def user_stories(self, user_id):
+            raise AssertionError("Like+follow scans should not inspect stories without a repost rule.")
+
+    monkeypatch.setattr("app.services.giveaway_engine._instagram_destination_dependency_issue", lambda: None)
+    monkeypatch.setattr("app.services.giveaway_engine._authenticated_publish_client", lambda credentials: _LikeFollowClient())
+
+    scan_instagram_giveaway_channels(session, post.giveaway_campaign, run_id="run-like-follow-skip-story")
+
+    entrant = session.query(GiveawayEntrant).filter_by(channel_id=channel.id, provider_user_id="ig-user-like-follow").one()
+    assert entrant.eligibility_status == ENTRY_STATUS_ELIGIBLE
+    assert entrant.signal_state_json["like_present"] is True
+    assert entrant.signal_state_json["follow_present"] is True
+    assert calls == {"likers": 1, "friendships": 1}
+
+
 def test_end_giveaway_uses_graph_only_by_default_and_logs_blocked_private_scan(session, monkeypatch):
     persona = _create_persona(session, slug="giveaway-end-graph-only")
     instagram = _create_account(session, persona, service="instagram", label="Instagram")
@@ -1502,7 +1623,7 @@ def test_instagram_follow_verification_persists_for_public_rechecks(session, mon
     assert entrant.signal_state_json["follow_present"] is True
 
 
-def test_instagram_follow_verification_can_record_a_real_unfollow(session, monkeypatch):
+def test_instagram_private_scan_can_record_a_real_unfollow(session, monkeypatch):
     persona = _create_persona(session, slug="giveaway-follow-unfollow")
     instagram = _create_account(session, persona, service="instagram", label="Instagram")
     post = create_scheduled_post(
@@ -1536,13 +1657,14 @@ def test_instagram_follow_verification_can_record_a_real_unfollow(session, monke
     session.flush()
 
     class _NotFollowingClient:
-        def user_friendship_v1(self, user_id):
-            assert user_id == "ig-user-follow"
-            return SimpleNamespace(followed_by=False)
+        def user_friendships_v1(self, user_ids):
+            assert user_ids == ["ig-user-follow"]
+            return [SimpleNamespace(user_id="ig-user-follow", followed_by=False)]
 
     monkeypatch.setattr("app.services.giveaway_engine._instagram_destination_dependency_issue", lambda: None)
     monkeypatch.setattr("app.services.giveaway_engine._authenticated_publish_client", lambda credentials: _NotFollowingClient())
 
+    refresh_instagram_channel_state(session, channel, force_private_scan=True)
     evaluate_channel_entrants(channel, allow_instagram_private_verification=True)
 
     entrant = session.query(GiveawayEntrant).filter_by(channel_id=channel.id, provider_user_id="ig-user-follow").one()
