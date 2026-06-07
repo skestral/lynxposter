@@ -6394,6 +6394,23 @@ body[data-ui-mode="dark"] .scheduled-detail-alert {
     }
 
     .scheduled-detail-actions {
+        display: grid !important;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 10.5rem), 1fr));
+        align-items: stretch;
+        gap: 0.5rem !important;
+        padding-top: 0.72rem;
+    }
+
+    .scheduled-detail-actions .btn {
+        width: 100%;
+        min-height: 2.8rem;
+        min-width: 0;
+        white-space: normal;
+        text-align: center;
+        line-height: 1.15;
+    }
+
+    .scheduled-detail-mobile-actionbar {
         display: none !important;
     }
 

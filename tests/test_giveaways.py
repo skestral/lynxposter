@@ -917,7 +917,7 @@ def test_manual_instagram_scan_ignores_private_scan_interval(session, monkeypatc
     assert scan_event.metadata_json["private_scan_reason"] == "manual"
 
 
-def test_manual_instagram_scan_batches_follow_verification(session, monkeypatch):
+def test_manual_instagram_scan_uses_follower_list_for_follow_verification(session, monkeypatch):
     persona = _create_persona(session, slug="giveaway-manual-follow-batch")
     instagram = _create_account(session, persona, service="instagram", label="Instagram")
     post = create_scheduled_post(
@@ -952,26 +952,34 @@ def test_manual_instagram_scan_batches_follow_verification(session, monkeypatch)
             )
         )
     session.flush()
-    friendship_batches: list[list[str]] = []
+    follower_calls: list[tuple[str, bool, int]] = []
 
     class _BatchFollowClient:
+        user_id = "ig-account-id"
+
+        def user_followers(self, user_id, use_cache=True, amount=0):
+            follower_calls.append((user_id, use_cache, amount))
+            return {
+                f"ig-user-{index:03d}": SimpleNamespace(pk=f"ig-user-{index:03d}")
+                for index in range(205)
+            }
+
         def user_friendships_v1(self, user_ids):
-            friendship_batches.append(list(user_ids))
-            return [SimpleNamespace(user_id=user_id, followed_by=True) for user_id in user_ids]
+            raise AssertionError("Private scan should use follower list membership for follow verification.")
 
         def user_friendship_v1(self, user_id):
-            raise AssertionError("Private scan should batch follow verification.")
+            raise AssertionError("Private scan should not verify each follow individually.")
 
     monkeypatch.setattr("app.services.giveaway_engine._instagram_destination_dependency_issue", lambda: None)
     monkeypatch.setattr("app.services.giveaway_engine._authenticated_publish_client", lambda credentials: _BatchFollowClient())
 
     scan_instagram_giveaway_channels(session, post.giveaway_campaign, run_id="run-manual-follow-batch")
 
-    assert [len(batch) for batch in friendship_batches] == [100, 100, 5]
+    assert follower_calls == [("ig-account-id", False, 0)]
     assert session.query(GiveawayEntrant).filter_by(channel_id=channel.id, eligibility_status=ENTRY_STATUS_ELIGIBLE).count() == 205
 
 
-def test_manual_instagram_scan_handles_sparse_follow_batch_response(session, monkeypatch):
+def test_manual_instagram_scan_marks_absent_follower_list_membership_false(session, monkeypatch):
     persona = _create_persona(session, slug="giveaway-manual-follow-sparse")
     instagram = _create_account(session, persona, service="instagram", label="Instagram")
     post = create_scheduled_post(
@@ -1012,25 +1020,22 @@ def test_manual_instagram_scan_handles_sparse_follow_batch_response(session, mon
         ]
     )
     session.flush()
-    private_requests: list[dict[str, str]] = []
+    follower_calls: list[tuple[str, bool, int]] = []
 
     class _SparseFollowClient:
-        uuid = "test-uuid"
+        user_id = "ig-account-id"
 
-        def private_request(self, endpoint, data=None, with_signature=True):
-            assert endpoint == "friendships/show_many/"
-            assert with_signature is False
-            private_requests.append(dict(data or {}))
+        def user_followers(self, user_id, use_cache=True, amount=0):
+            follower_calls.append((user_id, use_cache, amount))
             return {
-                "status": "ok",
-                "friendship_statuses": {
-                    "1000373192696665": {"user_id": "1000373192696665"},
-                    "1000373192696666": {"followed_by": True},
-                },
+                "1000373192696666": SimpleNamespace(pk="1000373192696666"),
             }
 
-        def user_friendships_v1(self, user_ids):
-            raise AssertionError("Raw friendship parsing should avoid instagrapi RelationshipShort validation.")
+        def private_request(self, endpoint, data=None, with_signature=True):
+            raise AssertionError("Follow verification should not use friendships/show_many.")
+
+        def user_friendship_v1(self, user_id):
+            raise AssertionError("Private scan should not verify each follow individually.")
 
     monkeypatch.setattr("app.services.giveaway_engine._instagram_destination_dependency_issue", lambda: None)
     monkeypatch.setattr("app.services.giveaway_engine._authenticated_publish_client", lambda credentials: _SparseFollowClient())
@@ -1045,12 +1050,7 @@ def test_manual_instagram_scan_handles_sparse_follow_batch_response(session, mon
     assert sparse.eligibility_status == ENTRY_STATUS_DISQUALIFIED
     assert full.signal_state_json["follow_present"] is True
     assert full.eligibility_status == ENTRY_STATUS_ELIGIBLE
-    assert private_requests == [
-        {
-            "user_ids": "1000373192696665,1000373192696666",
-            "_uuid": "test-uuid",
-        }
-    ]
+    assert follower_calls == [("ig-account-id", False, 0)]
 
 
 def test_instagram_like_follow_private_scan_skips_unneeded_comment_and_story_calls(session, monkeypatch):
@@ -1089,9 +1089,11 @@ def test_instagram_like_follow_private_scan_skips_unneeded_comment_and_story_cal
         )
     )
     session.flush()
-    calls = {"likers": 0, "friendships": 0}
+    calls = {"likers": 0, "followers": 0}
 
     class _LikeFollowClient:
+        user_id = "ig-account-id"
+
         def media_comments(self, media_id, amount=0):
             raise AssertionError("Like+follow scans should not fetch comments when no comment rule is present.")
 
@@ -1100,10 +1102,13 @@ def test_instagram_like_follow_private_scan_skips_unneeded_comment_and_story_cal
             assert media_id == "ig-media-like-follow"
             return [SimpleNamespace(pk="ig-user-like-follow", username="liker.follower")]
 
+        def user_followers(self, user_id, use_cache=True, amount=0):
+            calls["followers"] += 1
+            assert (user_id, use_cache, amount) == ("ig-account-id", False, 0)
+            return {"ig-user-like-follow": SimpleNamespace(pk="ig-user-like-follow")}
+
         def user_friendships_v1(self, user_ids):
-            calls["friendships"] += 1
-            assert user_ids == ["ig-user-like-follow"]
-            return [SimpleNamespace(user_id="ig-user-like-follow", followed_by=True)]
+            raise AssertionError("Like+follow scans should use follower list membership.")
 
         def user_stories(self, user_id):
             raise AssertionError("Like+follow scans should not inspect stories without a repost rule.")
@@ -1117,7 +1122,7 @@ def test_instagram_like_follow_private_scan_skips_unneeded_comment_and_story_cal
     assert entrant.eligibility_status == ENTRY_STATUS_ELIGIBLE
     assert entrant.signal_state_json["like_present"] is True
     assert entrant.signal_state_json["follow_present"] is True
-    assert calls == {"likers": 1, "friendships": 1}
+    assert calls == {"likers": 1, "followers": 1}
 
 
 def test_end_giveaway_uses_graph_only_by_default_and_logs_blocked_private_scan(session, monkeypatch):
@@ -1739,9 +1744,14 @@ def test_instagram_private_scan_can_record_a_real_unfollow(session, monkeypatch)
     session.flush()
 
     class _NotFollowingClient:
-        def user_friendships_v1(self, user_ids):
-            assert user_ids == ["ig-user-follow"]
-            return [SimpleNamespace(user_id="ig-user-follow", followed_by=False)]
+        user_id = "ig-account-id"
+
+        def user_followers(self, user_id, use_cache=True, amount=0):
+            assert (user_id, use_cache, amount) == ("ig-account-id", False, 0)
+            return {}
+
+        def user_friendship_v1(self, user_id):
+            raise AssertionError("Private scans should use follower list membership.")
 
     monkeypatch.setattr("app.services.giveaway_engine._instagram_destination_dependency_issue", lambda: None)
     monkeypatch.setattr("app.services.giveaway_engine._authenticated_publish_client", lambda credentials: _NotFollowingClient())
@@ -2144,16 +2154,18 @@ def test_instagram_webhook_observability_summarizes_recent_events(session):
 def test_process_giveaway_lifecycle_selects_verified_instagram_winner(session, monkeypatch):
     persona = _create_persona(session, slug="giveaway-finalize-instagram")
     instagram = _create_account(session, persona, service="instagram", label="Instagram")
+    giveaway_end_at = datetime.now(timezone.utc) - timedelta(minutes=5)
     post = create_scheduled_post(
         session,
         _legacy_instagram_giveaway_payload(
             persona.id,
             [instagram.id],
-            giveaway_end_at=datetime.now(timezone.utc) - timedelta(minutes=5),
+            giveaway_end_at=giveaway_end_at,
         ),
         [],
     )
     _mark_posted(post, instagram.id, external_id="ig-media-finalize")
+    post.published_at = giveaway_end_at - timedelta(hours=1)
     session.flush()
 
     payload = {
@@ -2188,7 +2200,7 @@ def test_process_giveaway_lifecycle_selects_verified_instagram_winner(session, m
         def __init__(self):
             self.pk = "comment-1"
             self.text = "Count me in @friend"
-            self.created_at_utc = datetime.now(timezone.utc)
+            self.created_at_utc = giveaway_end_at - timedelta(minutes=1)
             self.user = SimpleNamespace(pk="user-1", username="entrant.one")
 
     class _LiveCommentClient:
@@ -2225,6 +2237,56 @@ def test_process_giveaway_lifecycle_selects_verified_instagram_winner(session, m
         .one()
     )
     assert live_comment_event.entrant_id == pool.final_winner_entry.id
+
+
+def test_instagram_private_scan_ignores_comments_after_giveaway_end(session, monkeypatch):
+    persona = _create_persona(session, slug="giveaway-private-late-comment")
+    instagram = _create_account(session, persona, service="instagram", label="Instagram")
+    giveaway_end_at = datetime.now(timezone.utc) - timedelta(days=1)
+    post = create_scheduled_post(
+        session,
+        _generic_giveaway_payload(
+            persona.id,
+            [instagram.id],
+            giveaway_end_at=giveaway_end_at,
+            channels=[
+                {
+                    "service": "instagram",
+                    "account_id": instagram.id,
+                    "rules": {"kind": "all", "children": [{"kind": "atom", "atom": "comment_present", "params": {}}]},
+                }
+            ],
+        ),
+        [],
+    )
+    _mark_posted(post, instagram.id, external_id="ig-media-late-comment")
+    post.published_at = giveaway_end_at - timedelta(days=1)
+    channel = post.giveaway_campaign.channels[0]
+    session.flush()
+
+    class _LateComment:
+        pk = "late-comment-1"
+        text = "I am late"
+        created_at_utc = giveaway_end_at + timedelta(hours=2)
+        user = SimpleNamespace(pk="late-user", username="late.entrant")
+
+    class _LateCommentClient:
+        def media_comments(self, media_id, amount=0):
+            assert media_id == "ig-media-late-comment"
+            return [_LateComment()]
+
+    monkeypatch.setattr("app.services.giveaway_engine._instagram_destination_dependency_issue", lambda: None)
+    monkeypatch.setattr("app.services.giveaway_engine._authenticated_publish_client", lambda credentials: _LateCommentClient())
+
+    refresh_instagram_channel_state(session, channel, force_private_scan=True)
+    evaluate_channel_entrants(channel, allow_instagram_private_verification=True)
+
+    assert session.query(GiveawayEntrant).filter_by(channel_id=channel.id, provider_user_id="late-user").one_or_none() is None
+    assert session.query(GiveawayEvidenceEvent).filter_by(
+        channel_id=channel.id,
+        event_type="instagram_comment",
+        provider_event_id="late-comment-1",
+    ).one_or_none() is None
 
 
 def test_giveaway_lifecycle_collects_ready_channels_before_all_platforms_publish(session, monkeypatch):

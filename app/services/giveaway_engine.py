@@ -97,7 +97,6 @@ INSTAGRAM_WEBHOOK_CAPTURE_SOURCE = "webhook_capture"
 INSTAGRAM_MESSAGE_SHARE_CAPTURE_SOURCE = "message_share_capture"
 INSTAGRAM_LIVE_COLLECTION_SOURCE = "live_collection"
 INSTAGRAM_PRIVATE_MAX_ATTEMPTS = 3
-INSTAGRAM_PRIVATE_FRIENDSHIP_BATCH_SIZE = 100
 INSTAGRAM_COMMENT_RULE_ATOMS = {
     "comment_present",
     "friend_mention_count_gte",
@@ -685,43 +684,86 @@ def _object_value(item: Any, *keys: str) -> Any:
     return None
 
 
-def _chunked(values: list[str], size: int) -> list[list[str]]:
-    chunk_size = max(1, int(size or 1))
-    return [values[index:index + chunk_size] for index in range(0, len(values), chunk_size)]
-
-
-def _relationship_user_id(relationship: Any) -> str | None:
-    return str(_object_value(relationship, "user_id", "pk", "id") or "").strip() or None
-
-
 def _relationship_followed_by(relationship: Any) -> bool:
     return bool(_object_value(relationship, "followed_by"))
 
 
-def _instagram_raw_user_friendships(client: Any, user_ids: list[str]) -> dict[str, bool]:
-    relationships: dict[str, bool] = {}
-    for chunk in _chunked(user_ids, INSTAGRAM_PRIVATE_FRIENDSHIP_BATCH_SIZE):
-        data = {"user_ids": ",".join(chunk)}
-        uuid = str(getattr(client, "uuid", "") or "").strip()
-        if uuid:
-            data["_uuid"] = uuid
-        result = _call_instagram_private(
-            lambda data=data: client.private_request(
-                "friendships/show_many/",
-                data=data,
-                with_signature=False,
-            )
-        ) or {}
-        statuses = result.get("friendship_statuses") if isinstance(result, dict) else {}
-        if not isinstance(statuses, dict):
+def _instagram_authenticated_user_id(client: Any) -> str | None:
+    for key in ("user_id", "uid", "ds_user_id"):
+        value = getattr(client, key, None)
+        if callable(value):
+            try:
+                value = value()
+            except TypeError:
+                value = None
+        normalized = str(value or "").strip()
+        if normalized:
+            return normalized
+
+    for source_key in ("authorization_data", "settings", "last_json"):
+        source = getattr(client, source_key, None)
+        if callable(source):
+            try:
+                source = source()
+            except TypeError:
+                source = None
+        if not isinstance(source, dict):
             continue
-        for raw_user_id, raw_status in statuses.items():
-            user_id = str(raw_user_id or "").strip()
-            if not user_id:
-                continue
-            status = dict(raw_status or {}) if isinstance(raw_status, dict) else {}
-            relationships[user_id] = bool(status.get("followed_by"))
-    return relationships
+        for key in ("user_id", "ds_user_id", "pk", "id"):
+            normalized = str(source.get(key) or "").strip()
+            if normalized:
+                return normalized
+
+    cookie_dict = getattr(client, "cookie_dict", None)
+    if callable(cookie_dict):
+        try:
+            cookie_dict = cookie_dict()
+        except TypeError:
+            cookie_dict = None
+    if isinstance(cookie_dict, dict):
+        for key in ("ds_user_id", "user_id"):
+            normalized = str(cookie_dict.get(key) or "").strip()
+            if normalized:
+                return normalized
+    return None
+
+
+def _instagram_user_id_set(users: Any) -> set[str]:
+    user_ids: set[str] = set()
+    if isinstance(users, dict):
+        iterable = users.items()
+        for raw_user_id, user in iterable:
+            for value in (raw_user_id, _object_value(user, "pk", "id", "user_id")):
+                normalized = str(value or "").strip()
+                if normalized:
+                    user_ids.add(normalized)
+    else:
+        for user in list(users or []):
+            normalized = str(_object_value(user, "pk", "id", "user_id") or "").strip()
+            if normalized:
+                user_ids.add(normalized)
+    return user_ids
+
+
+def _instagram_account_followers(client: Any) -> set[str]:
+    account_user_id = _instagram_authenticated_user_id(client)
+    if not account_user_id:
+        raise RuntimeError("Instagram follower verification requires the authenticated account user ID.")
+
+    if hasattr(client, "user_followers"):
+        try:
+            followers = _call_instagram_private(
+                lambda: client.user_followers(account_user_id, use_cache=False, amount=0)
+            )
+        except TypeError:
+            followers = _call_instagram_private(lambda: client.user_followers(account_user_id, amount=0))
+        return _instagram_user_id_set(followers)
+
+    if hasattr(client, "user_followers_v1"):
+        followers = _call_instagram_private(lambda: client.user_followers_v1(account_user_id, amount=0))
+        return _instagram_user_id_set(followers)
+
+    raise RuntimeError("Instagram follower list verification is unavailable for this private client.")
 
 
 def _instagram_user_friendships(client: Any, user_ids: list[str]) -> dict[str, bool]:
@@ -730,25 +772,16 @@ def _instagram_user_friendships(client: Any, user_ids: list[str]) -> dict[str, b
     if not requested_ids:
         return {}
 
-    if hasattr(client, "private_request"):
-        return _instagram_raw_user_friendships(client, requested_ids)
-
-    if hasattr(client, "user_friendships_v1"):
-        relationships: dict[str, bool] = {}
-        for chunk in _chunked(requested_ids, INSTAGRAM_PRIVATE_FRIENDSHIP_BATCH_SIZE):
-            results = _call_instagram_private(lambda chunk=chunk: client.user_friendships_v1(chunk)) or []
-            for relationship in results:
-                user_id = _relationship_user_id(relationship)
-                if user_id:
-                    relationships[user_id] = _relationship_followed_by(relationship)
-        return relationships
+    if hasattr(client, "user_followers") or hasattr(client, "user_followers_v1"):
+        follower_ids = _instagram_account_followers(client)
+        return {user_id: user_id in follower_ids for user_id in requested_ids}
 
     if len(requested_ids) == 1 and hasattr(client, "user_friendship_v1"):
         user_id = requested_ids[0]
         relationship = _call_instagram_private(lambda: client.user_friendship_v1(user_id))
         return {user_id: _relationship_followed_by(relationship)}
 
-    raise RuntimeError("Instagram batch follow verification is unavailable for this private client.")
+    raise RuntimeError("Instagram follower list verification is unavailable for this private client.")
 
 
 def _instagram_target_media_codes(channel: GiveawayChannel) -> set[str]:
@@ -2905,6 +2938,9 @@ def refresh_instagram_channel_state(
                                 state["friend_mention_count"] = 0
                                 state["friend_mentions"] = []
                         for comment in live_comments or []:
+                            comment_created_at = normalize_datetime(getattr(comment, "created_at_utc", None))
+                            if not _instagram_campaign_window_accepts_event(channel.campaign, occurred_at=comment_created_at):
+                                continue
                             user = getattr(comment, "user", None)
                             provider_user_id = str(getattr(user, "pk", "") or "").strip()
                             provider_username = str(getattr(user, "username", "") or "").strip() or None
@@ -2925,6 +2961,7 @@ def refresh_instagram_channel_state(
                                     "is_reply": bool(parent_id),
                                     "text": str(getattr(comment, "text", "") or "").strip(),
                                     "source": "close_time_live",
+                                    "created_time": comment_created_at.isoformat() if comment_created_at else None,
                                 }
                             )
                             entrant = get_or_create_channel_entrant(
@@ -2939,13 +2976,7 @@ def refresh_instagram_channel_state(
                                 (
                                     entrant,
                                     existing["comments"][-1],
-                                    {
-                                        "created_time": (
-                                            normalize_datetime(getattr(comment, "created_at_utc", None)).isoformat()
-                                            if getattr(comment, "created_at_utc", None)
-                                            else None
-                                        ),
-                                    },
+                                    {"created_time": existing["comments"][-1].get("created_time")},
                                 )
                             )
                         session.flush()
