@@ -662,10 +662,21 @@ def test_scheduled_post_templates_render_generic_giveaway_controls():
                 "selection_log": {
                     "selection_method": "system_random_shuffle",
                     "candidate_source": "provisional fallback",
-                    "qualified_member_count": 0,
+                    "qualified_member_count": 2,
                     "candidate_count": 1,
                     "note": "No fully verified winner was available, so the first provisional candidate was held for manual review.",
-                    "qualified_members": [],
+                    "qualified_members": [
+                        {
+                            "display_label": "qualified.one",
+                            "provider_user_id": "qualified-1",
+                            "profile_url": "https://www.instagram.com/qualified.one/",
+                        },
+                        {
+                            "display_label": "qualified.two",
+                            "provider_user_id": "qualified-2",
+                            "profile_url": "https://www.instagram.com/qualified.two/",
+                        },
+                    ],
                     "candidates": [
                         {
                             "rank": 1,
@@ -742,6 +753,10 @@ def test_scheduled_post_templates_render_generic_giveaway_controls():
     assert "Timezone: America/Los_Angeles" in html
     assert "Entrant Audit Log" in html
     assert "Raffle Results" in html
+    assert "giveaway-qualified-members-section" in html
+    assert "giveaway-qualified-members-summary" in html
+    assert "2 total" in html
+    assert 'href="https://www.instagram.com/qualified.one/"' in html
     assert "Provisional Winner" in html
     assert 'href="https://www.instagram.com/entrant.one/"' in html
     assert 'href="https://bsky.app/profile/bsky.one"' in html

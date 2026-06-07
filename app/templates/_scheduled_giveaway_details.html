@@ -222,15 +222,20 @@
         {% if pool.selection_log.note %}
         <div class="small text-secondary mb-3">{{ pool.selection_log.note }}</div>
         {% endif %}
-        {% if pool.selection_log.qualified_members %}
-        <div class="mb-3">
-            <div class="small text-secondary mb-1">Qualified Members</div>
-            <div class="d-flex gap-2 flex-wrap">
+        {% set qualified_members = pool.selection_log.qualified_members or [] %}
+        {% set qualified_total = pool.selection_log.qualified_member_count | default(qualified_members|length, true) %}
+        {% if qualified_members %}
+        <details class="giveaway-qualified-members-section mb-3">
+            <summary class="giveaway-qualified-members-summary">
+                <span>Qualified Members</span>
+                <span class="badge text-bg-light border">{{ qualified_total }} total</span>
+            </summary>
+            <div class="d-flex gap-2 flex-wrap mt-2">
                 {% for member in pool.selection_log.qualified_members %}
                 {{ entrant_profile_link(member, "badge text-bg-light border") }}
                 {% endfor %}
             </div>
-        </div>
+        </details>
         {% endif %}
         {% if pool.selection_log.candidates %}
         <div class="list-group">

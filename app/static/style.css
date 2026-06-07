@@ -5941,6 +5941,25 @@ body[data-ui-mode="dark"] .mobile-nav-drawer-link.active {
     min-width: 0;
 }
 
+.giveaway-qualified-members-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    min-width: 0;
+    padding: 0.45rem 0.6rem;
+    border: 1px solid var(--lp-border-soft);
+    border-radius: var(--lp-control-radius);
+    background: var(--lp-panel-soft);
+    cursor: pointer;
+    font-size: 0.88rem;
+    font-weight: 600;
+}
+
+.giveaway-qualified-members-summary .badge {
+    flex: 0 0 auto;
+}
+
 .giveaway-check-list {
     display: flex;
     flex-wrap: wrap;

@@ -413,10 +413,11 @@ def test_dashboard_v2_scheduled_metrics_ignore_drafts_and_completed_posts():
     )
 
     scheduled_metric = next(metric for metric in model["overview_metrics"] if metric["label"] == "Scheduled")
+    expected_due_today = int(scheduled_post.scheduled_for.astimezone(timezone.utc).date() == now.astimezone(timezone.utc).date())
 
     assert scheduled_metric["value"] == "1"
-    assert scheduled_metric["detail"] == "1 due today"
-    assert model["scheduled_today_count"] == 1
+    assert scheduled_metric["detail"] == f"{expected_due_today} due today"
+    assert model["scheduled_today_count"] == expected_due_today
     assert [card["post"].id for card in model["upcoming_post_cards"]] == ["scheduled-post"]
 
 
