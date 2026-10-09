@@ -4028,6 +4028,7 @@ body[data-ui-mode="dark"] .form-select option {
 .planner-calendar-surface,
 .planner-board-surface,
 .planner-selected-surface {
+    min-width: 0;
     padding: 1.45rem 1.65rem;
 }
 

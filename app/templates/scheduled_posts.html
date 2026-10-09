@@ -398,10 +398,6 @@ let plannerPosts = scheduledPostsPlannerData.map(normalizePlannerPost);
 let activeDragPostId = null;
 let currentMoveContext = null;
 
-if (plannerPosts.find((post) => post.scheduledDate)) {
-  plannerState.anchorDate = new Date(plannerPosts.find((post) => post.scheduledDate).scheduledDate);
-}
-
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -760,6 +756,7 @@ function moveCalendar(direction) {
   if (plannerState.viewMode === "week") {
     next.setDate(next.getDate() + (direction * 7));
   } else {
+    next.setDate(1);
     next.setMonth(next.getMonth() + direction);
   }
   plannerState.anchorDate = next;
@@ -858,14 +855,6 @@ function renderCalendar() {
   const visibleGiveaways = visibleProperlyScheduled.filter((post) => post.postType === "giveaway");
   calendarSummaryTotal.textContent = `${visibleProperlyScheduled.length} scheduled`;
   calendarSummaryGiveaways.textContent = `${visibleGiveaways.length} giveaways`;
-
-  if (!visibleScheduled.length) {
-    calendarRoot.classList.add("d-none");
-    calendarEmpty.classList.remove("d-none");
-    calendarRangeLabel.textContent = "No post plans yet";
-    bindPlannerInteractions();
-    return;
-  }
 
   calendarRoot.classList.remove("d-none");
   calendarEmpty.classList.add("d-none");
