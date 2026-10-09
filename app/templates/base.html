@@ -30,7 +30,7 @@
     {% set page_path = current_path if current_path is defined else (request.url.path if request is defined else '/') %}
     {% set workspace_active = page_path.startswith('/personas') or page_path.startswith('/scheduled-posts') or page_path.startswith('/sandbox') or page_path.startswith('/logs') %}
     {% set admin_active = page_path.startswith('/admin/users') or page_path.startswith('/settings') %}
-    <div class="app-layout">
+    <div class="app-layout{% if not current_principal.is_authenticated %} app-layout-public{% endif %}">
         {% if current_principal.is_authenticated %}
         <aside class="app-sidebar" aria-label="Primary navigation">
             <a class="app-brand app-sidebar-brand" href="/">

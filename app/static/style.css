@@ -2453,6 +2453,10 @@ body::after,
     min-height: 100vh;
 }
 
+.app-layout-public {
+    grid-template-columns: minmax(0, 1fr);
+}
+
 .app-sidebar {
     position: sticky;
     top: 0;
