@@ -566,6 +566,7 @@ class ScheduledPostRead(ScheduledPostBase):
 
 
 class SandboxAttachmentInput(BaseModel):
+    id: str | None = None
     filename: str
     mime_type: str
     alt_text: str = ""

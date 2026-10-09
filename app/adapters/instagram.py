@@ -3,10 +3,12 @@ from __future__ import annotations
 import sys
 import shutil
 import time
+from contextlib import contextmanager, ExitStack
 from datetime import datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
+from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
 
 import requests
@@ -19,8 +21,9 @@ from app.domain import CanonicalPostPayload, ExternalPostRefPayload, PollResult,
 from app.models import Account, AccountSyncState, CanonicalPost, MediaAttachment, Persona
 from app.services.instagram_private_api import apply_instagram_private_settings, get_instagram_private_settings
 from app.services.instagram_private_policy import INSTAGRAM_PRIVATE_REASON_DIAGNOSTIC, ensure_instagram_private_access_allowed
-from app.services.storage import delete_managed_media_file, download_media, normalize_media_file, public_instagram_media_url
-from app.utils import detect_mime_type, stable_checksum
+from app.services.storage import download_media, public_instagram_media_url
+from app.services.media_preparation import ImageLimits, prepare_image
+from app.services.video_preparation import VideoLimits, prepare_video
 
 INSTAGRAM_API_VERSION = "v25.0"
 INSTAGRAM_GRAPH_API_BASE_URL = f"https://graph.instagram.com/{INSTAGRAM_API_VERSION}"
@@ -34,6 +37,8 @@ INSTAGRAM_GRAPH_VIDEO_MIME_TYPES = {"video/mp4"}
 INSTAGRAM_CONTAINER_READY_STATUSES = {"FINISHED", "PUBLISHED"}
 INSTAGRAM_CONTAINER_PENDING_STATUSES = {"IN_PROGRESS", "PROCESSING", "CREATED"}
 INSTAGRAM_CONTAINER_PUBLISH_ATTEMPTS = 4
+INSTAGRAM_CONTAINER_READY_ATTEMPTS = 100
+INSTAGRAM_CONTAINER_POLL_SECONDS = 3
 
 
 def _load_instagram_dependencies() -> tuple[Any | None, Any | None, type[Exception]]:
@@ -160,6 +165,8 @@ def _instagram_graph_destination_issue(config: dict[str, Any]) -> str | None:
 
 
 def _instagram_public_media_url(attachment: MediaAttachment) -> str:
+    if getattr(attachment, "prepared_public_url", None):
+        return attachment.prepared_public_url
     return public_instagram_media_url(attachment.id, attachment.storage_path, base_url=get_settings().app_base_url)
 
 
@@ -241,23 +248,24 @@ def _graph_container_id(payload: dict[str, Any]) -> str:
 
 
 def _wait_for_container_ready(container_id: str, access_token: str, *, base_url: str) -> dict[str, Any]:
-    last_payload: dict[str, Any] = {}
-    for attempt in range(8):
+    deadline = time.monotonic() + 300
+    for attempt in range(INSTAGRAM_CONTAINER_READY_ATTEMPTS):
+        if time.monotonic() >= deadline:
+            break
         payload = _get_graph(
             container_id,
             {"fields": "status_code,status", "access_token": access_token},
             base_url=base_url,
         )
-        last_payload = payload
         status_code = str(payload.get("status_code") or "").upper()
-        if status_code in INSTAGRAM_CONTAINER_READY_STATUSES or not status_code:
+        if status_code in INSTAGRAM_CONTAINER_READY_STATUSES:
             return payload
         if status_code == "ERROR":
             raise RuntimeError(f"Instagram Graph media container {container_id} failed processing: {payload.get('status') or 'unknown error'}")
         if status_code not in INSTAGRAM_CONTAINER_PENDING_STATUSES:
-            return payload
-        if attempt < 7:
-            time.sleep(2)
+            raise RuntimeError(f"Instagram Graph media container {container_id} returned an unknown processing status: {status_code or 'missing status'}")
+        if attempt < INSTAGRAM_CONTAINER_READY_ATTEMPTS - 1:
+            time.sleep(INSTAGRAM_CONTAINER_POLL_SECONDS)
     raise RuntimeError(f"Instagram Graph media container {container_id} was not ready before the publish timeout.")
 
 
@@ -341,34 +349,44 @@ def _prepared_upload_paths(attachments: list[Any], *, temp_dir: str) -> list[Pat
     return prepared
 
 
-def _prepare_graph_attachment(attachment: Any) -> None:
-    source_path = Path(str(attachment.storage_path))
-    if not source_path.exists():
-        return
-
-    try:
-        normalized_path, mime_type, size_bytes, checksum = normalize_media_file(source_path, getattr(attachment, "mime_type", None))
-    except OSError:
-        return
-
-    source_path = normalized_path
-    attachment.storage_path = str(normalized_path)
-    attachment.mime_type = mime_type
-    attachment.size_bytes = size_bytes
-    attachment.checksum = checksum
-
-    if mime_type in INSTAGRAM_GRAPH_IMAGE_MIME_TYPES or mime_type in INSTAGRAM_GRAPH_VIDEO_MIME_TYPES:
-        return
-    if mime_type not in INSTAGRAM_SUPPORTED_IMAGE_MIME_TYPES:
-        return
-
-    target_path = source_path.with_name(f"{source_path.stem}-instagram-{stable_checksum(source_path)[:12]}.jpg")
-    _flatten_image_to_jpeg(source_path, target_path)
-    delete_managed_media_file(source_path)
-    attachment.storage_path = str(target_path)
-    attachment.mime_type = detect_mime_type(target_path)
-    attachment.size_bytes = target_path.stat().st_size
-    attachment.checksum = stable_checksum(target_path)
+@contextmanager
+def _prepared_graph_attachments(attachments: list[Any], account: Account):
+    settings = get_settings()
+    staging_root = settings.uploads_dir / ".instagram-prepared"
+    staging_root.mkdir(parents=True, exist_ok=True)
+    video_type = str((account.publish_settings_json or {}).get("video_media_type") or "REELS").upper()
+    max_duration = 60 if len(attachments) > 1 or video_type == "STORIES" else 900
+    with TemporaryDirectory(prefix="instagram-", dir=staging_root) as temp_dir, ExitStack() as stack:
+        temp_root = Path(temp_dir)
+        prepared_attachments = []
+        for attachment in attachments:
+            source = Path(attachment.storage_path)
+            mime_type = str(attachment.mime_type or "").lower()
+            if mime_type.startswith("image/"):
+                prepared = stack.enter_context(prepare_image(source, limits=ImageLimits(max_bytes=8_000_000, max_dimension=1440, min_width=320, supported_mime_types=("image/jpeg",))))
+                if not 0.8 <= prepared.width / prepared.height <= 1.91:
+                    raise ValueError("Instagram images need an aspect ratio between 4:5 and 1.91:1. Resize the canvas before publishing.")
+                filename = "image.jpg"
+            elif mime_type.startswith("video/"):
+                # This conservative transport budget also fits older Graph hosts.
+                limits = VideoLimits(max_bytes=300_000_000, max_duration=max_duration, max_dimension=1920, max_frame_rate=60, min_frame_rate=23, max_video_bitrate=25_000_000)
+                prepared = stack.enter_context(prepare_video(source, limits=limits))
+                if prepared.duration < 3:
+                    raise ValueError("Instagram videos must be at least 3 seconds long.")
+                if not 0.01 <= prepared.width / prepared.height <= 10:
+                    raise ValueError("Instagram videos need an aspect ratio between 0.01:1 and 10:1.")
+                filename = "video.mp4"
+            else:
+                raise ValueError("Instagram attachments must be images or videos.")
+            target = temp_root / attachment.id / filename
+            target.parent.mkdir(exist_ok=True)
+            shutil.copyfile(prepared.path, target)
+            prepared_attachments.append(SimpleNamespace(
+                id=attachment.id, storage_path=str(target), mime_type=prepared.mime_type,
+                alt_text=attachment.alt_text,
+                prepared_public_url=f"{settings.app_base_url.rstrip('/')}/media/instagram/{attachment.id}/prepared/{temp_root.name}/{filename}",
+            ))
+        yield prepared_attachments
 
 
 def _authenticated_publish_client(config: dict[str, Any]) -> Any:
@@ -587,35 +605,10 @@ class InstagramDestinationAdapter(DestinationAdapter):
             issues.append(ValidationIssue(service="instagram", field="media", message="Instagram carousel posts support up to 10 attachments."))
 
         for attachment in attachments:
-            _prepare_graph_attachment(attachment)
             mime_type = str(attachment.mime_type or "").lower()
-            if mime_type in INSTAGRAM_GRAPH_IMAGE_MIME_TYPES:
-                continue
-            if mime_type in INSTAGRAM_GRAPH_VIDEO_MIME_TYPES:
-                continue
             if mime_type.startswith("image/"):
-                issues.append(
-                    ValidationIssue(
-                        service="instagram",
-                        field="media",
-                        message=(
-                            f"{attachment.storage_path} must be JPEG for Instagram Graph publishing. "
-                            f"Media URL: {_attachment_media_url_for_log(attachment)}"
-                        ),
-                    )
-                )
                 continue
             if mime_type.startswith("video/"):
-                issues.append(
-                    ValidationIssue(
-                        service="instagram",
-                        field="media",
-                        message=(
-                            f"{attachment.storage_path} must be MP4 for Instagram publishing. "
-                            f"Media URL: {_attachment_media_url_for_log(attachment)}"
-                        ),
-                    )
-                )
                 continue
             issues.append(
                 ValidationIssue(
@@ -654,6 +647,7 @@ class InstagramDestinationAdapter(DestinationAdapter):
         notes = [
             "Instagram destination publishing uses the official Graph content publishing flow.",
             "Meta fetches each attachment from LynxPoster's public /media/instagram/... URL.",
+            "Images and videos are prepared before container creation; temporary public copies remain available through processing and stored originals are preserved.",
         ]
         graph_issue = _instagram_graph_destination_issue(get_account_credentials(account))
         if graph_issue:
@@ -692,9 +686,10 @@ class InstagramDestinationAdapter(DestinationAdapter):
             raise ConfigurationError("Instagram publishing requires at least one image or video attachment.")
         if len(attachments) > 10:
             raise ConfigurationError("Instagram carousel posts support up to 10 attachments.")
-        for attachment in attachments:
-            _prepare_graph_attachment(attachment)
+        with _prepared_graph_attachments(attachments, account) as prepared:
+            return self._publish_graph(post, account, config, prepared)
 
+    def _publish_graph(self, post: CanonicalPost, account: Account, config: dict[str, Any], attachments: list[Any]) -> PublishResult:
         caption = service_body(post, account)
         access_token = _configured_graph_access_token(config)
         instagram_user_id = _configured_instagram_user_id(config)

@@ -10,6 +10,7 @@ from app.services.storage import (
     download_media,
     prune_unreferenced_managed_media_files,
     settings,
+    store_upload,
 )
 
 
@@ -20,6 +21,36 @@ class _FakeResponse:
 
     def raise_for_status(self):
         return None
+
+
+def test_store_upload_detects_actual_avif_as_image(monkeypatch, tmp_path):
+    import asyncio
+    from fastapi import UploadFile
+    from PIL import Image
+    monkeypatch.setattr("app.services.storage.settings", replace(settings, app_data_dir=tmp_path, uploads_dir=tmp_path / "uploads", imported_media_dir=tmp_path / "imported"))
+    data = BytesIO()
+    Image.new("RGB", (32, 32), "red").save(data, format="AVIF")
+    original = data.getvalue()
+    media = asyncio.run(store_upload(UploadFile(filename="image.bin", file=BytesIO(original))))
+    assert media.mime_type == "image/avif"
+    assert media.storage_path.suffix == ".avif"
+    assert media.storage_path.read_bytes() == original
+
+
+def test_orphan_cleanup_keeps_active_instagram_copies_then_removes_abandoned_ones(monkeypatch, tmp_path):
+    import os
+    now = datetime.now(timezone.utc)
+    uploads_dir = tmp_path / "uploads"
+    monkeypatch.setattr("app.services.storage.settings", replace(settings, uploads_dir=uploads_dir, imported_media_dir=tmp_path / "imported"))
+    active = uploads_dir / ".instagram-prepared" / "instagram-1234abcd" / "photo" / "image.jpg"
+    active.parent.mkdir(parents=True)
+    active.write_bytes(b"prepared")
+    old_timestamp = (now - timedelta(minutes=10)).timestamp()
+    os.utime(active, (old_timestamp, old_timestamp))
+    assert prune_unreferenced_managed_media_files(set(), retention_seconds=60, now=now)["deleted"] == 0
+    assert active.exists()
+    assert prune_unreferenced_managed_media_files(set(), retention_seconds=60, now=now + timedelta(minutes=30))["deleted"] == 1
+    assert not active.exists()
 
 
 def test_normalized_filename_strips_query_params_and_truncates_length():

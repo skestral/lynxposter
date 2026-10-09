@@ -205,6 +205,8 @@
     </div>
 </div>
 <script src="/static/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+<script src="/static/composer_text.js"></script>
+<script src="/static/composer_media.js"></script>
 <script>
 const uiThemeCatalog = {{ ui_theme_catalog_for_client() | tojson }};
 const uiThemeById = Object.fromEntries(uiThemeCatalog.map((theme) => [theme.id, theme]));

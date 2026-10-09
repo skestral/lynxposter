@@ -41,6 +41,15 @@ def detect_mime_type(path: Path) -> str:
     if header.startswith(b"GIF87a") or header.startswith(b"GIF89a"):
         return "image/gif"
     if len(header) >= 12 and header[4:8] == b"ftyp":
+        brand = header[8:12]
+        if brand in {b"avif", b"avis"}:
+            return "image/avif"
+        if brand in {b"heic", b"heix", b"hevc", b"hevx"}:
+            return "image/heic"
+        if brand in {b"mif1", b"msf1"}:
+            return "image/heif"
+        if brand == b"qt  ":
+            return "video/quicktime"
         return "video/mp4"
     mime_type, _ = mimetypes.guess_type(path.name)
     return mime_type or "application/octet-stream"

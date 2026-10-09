@@ -50,7 +50,7 @@
             {% endif %}
         </div>
         <div class="giveaway-summary-actions">
-            {% if instagram_scan.available %}
+            {% if instagram_scan.available and post.giveaway.status != "cancelled" %}
             <button class="btn btn-sm btn-outline-secondary" type="button" id="instagram-scan-button">Scan Instagram Now</button>
             {% endif %}
             <span class="badge text-bg-light border rounded-pill">{{ post.giveaway.audit_summary.entrants }} entrants</span>
@@ -310,7 +310,7 @@
                             {% if entry.manual_review_status %}
                             <div class="badge text-bg-success mt-2">Manually Approved</div>
                             {% endif %}
-                            {% if entry.id %}
+                            {% if entry.id and post.giveaway.status != "cancelled" %}
                             <div class="giveaway-entrant-actions d-flex gap-2 flex-wrap mt-2">
                                 {% if entry.manual_review_status == "approved" %}
                                 <button

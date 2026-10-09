@@ -46,6 +46,26 @@ python crosspost.py
 
 The app serves on `http://127.0.0.1:8000/`.
 
+The supported runtime is `app/`, started by `crosspost.py`. The older `input/`, `output/`, and `local/` modules remain as legacy reference code for migration; they are not supported publishing entry points. Current Bluesky gallery and media preparation support lives in `app/adapters/bluesky.py`.
+
+## Media preparation
+
+Install FFmpeg, including `ffprobe`, on `PATH` when running outside Docker. The Docker image already includes it. Before publishing, each destination prepares its own upload copies and keeps the stored originals unchanged. Unreadable files, unsupported animations, and videos exceeding duration limits fail before posting.
+
+Static images are resized and compressed when needed. Bluesky uses the current 2,000,000-byte image limit and a 4000-pixel maximum edge; one to four images use an image embed and five to ten use a gallery with aspect ratios. Mastodon uses the destination instance's advertised image byte and pixel limits, with compatibility defaults if it does not advertise them. The other destinations apply their upload limits and required formats.
+
+Videos are inspected with `ffprobe`. Compatible, streamable MP4s pass through; other videos are remuxed or transcoded to progressive H.264/yuv420p and AAC-LC, with rotation, frame rate, dimensions, duration, and output file size checked. Preparation does not trim videos. Telegram sends prepared videos through `sendVideo` or photo/video albums, and Mastodon waits for media processing before posting a status.
+
+Instagram validation leaves attachments unchanged. Publishing creates temporary JPEG/MP4 copies under `uploads/.instagram-prepared/`, serves those copies through public media URLs, and keeps them available until Graph container processing and publishing finish. Ordinary completion or failure removes the copies; orphan cleanup gives abandoned copies a minimum 30-minute grace period.
+
+Bluesky videos continue to use the supported PDS `uploadBlob` flow, with a 300,000,000-byte preparation budget and a ten-minute duration limit. A PDS may impose lower upload limits, and video processing can continue briefly after the post appears. Live delivery still depends on account permissions, quotas, and the destination's configuration.
+
+## Recovering a failed destination
+
+Open the post in Planner, edit its text or replace the failed media, then choose **Save and Retry Unsent**. Successful destinations stay locked and are never sent again. The action saves edits and queues the remaining destinations together, with a fresh retry budget and the earlier attempts kept in history. Replacing media selected for a failed destination also selects the replacement uploads for that destination.
+
+Failed imported posts use the same recovery screen and keep their original source and delivery references. Saving a repaired draft does not publish it, and later source scans preserve the recovery plan. Rejected edits keep the original media; removed files are deleted only after the edit commits.
+
 ## Telegram notes
 
 - Telegram accounts use a bot token plus a channel ID or `@channelusername`.

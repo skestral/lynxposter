@@ -7,6 +7,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.adapters import account_is_configured, get_destination_adapter_for_account
+from app.adapters.common import service_attachments
 from app.domain import ValidationIssue
 from app.models import CanonicalPost, MediaAttachment
 from app.schemas import (
@@ -37,6 +38,7 @@ def _build_transient_post(request: SandboxPreviewRequest) -> CanonicalPost:
     )
     post.attachments = [
         MediaAttachment(
+            id=attachment.id or f"sandbox-{index}",
             storage_path=attachment.storage_path or f"sandbox/{attachment.filename}",
             mime_type=attachment.mime_type,
             alt_text=attachment.alt_text,
@@ -44,7 +46,7 @@ def _build_transient_post(request: SandboxPreviewRequest) -> CanonicalPost:
             checksum="sandbox",
             sort_order=attachment.sort_order,
         )
-        for attachment in sorted(request.attachment_inputs, key=lambda item: (item.sort_order, item.filename))
+        for index, attachment in enumerate(sorted(request.attachment_inputs, key=lambda item: (item.sort_order, item.filename)))
     ]
     return post
 
@@ -252,8 +254,9 @@ def build_sandbox_preview(session: Session, request: SandboxPreviewRequest) -> S
 
     previews: list[SandboxAccountPreviewRead] = []
     for account in target_accounts:
+        attachments = service_attachments(post, account)
         configured = account_is_configured(account)
-        notes: list[str] = []
+        notes = ["Preview checks do not read or prepare media files. Media preparation and destination acceptance are checked during publishing."]
         issues: list[ValidationIssue] = []
         try:
             adapter = get_destination_adapter_for_account(account)
@@ -297,7 +300,7 @@ def build_sandbox_preview(session: Session, request: SandboxPreviewRequest) -> S
             expectations=request.expectations,
             rendered_body=rendered_body,
             request_shape=request_shape,
-            attachment_count=len(post.attachments),
+            attachment_count=len(attachments),
             source_link=(post.metadata_json or {}).get("link"),
         )
         error_issues = [issue for issue in issues if issue.level == "error"]
@@ -314,7 +317,7 @@ def build_sandbox_preview(session: Session, request: SandboxPreviewRequest) -> S
                 endpoint_label=endpoint_label,
                 rendered_body=rendered_body,
                 body_length=len(rendered_body),
-                attachment_count=len(post.attachments),
+                attachment_count=len(attachments),
                 request_shape=request_shape,
                 validation_issues=_serialize_issues(issues),
                 expectation_checks=expectation_checks,

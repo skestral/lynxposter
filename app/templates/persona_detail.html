@@ -252,6 +252,12 @@
                                         {% for field in definition.publish_setting_fields %}
                                         {{ render_account_field(field, "publish", "", "col-12", definition.service) }}
                                         {% endfor %}
+                                        {% if definition.composer_constraints and definition.composer_constraints.notes %}
+                                        <div class="col-12 service-field small text-secondary" data-service="{{ definition.service }}" style="display:none;">
+                                            <div class="fw-semibold">Publishing limits</div>
+                                            {% for note in definition.composer_constraints.notes %}<div>{{ note }}</div>{% endfor %}
+                                        </div>
+                                        {% endif %}
                                     {% endfor %}
                                 </div>
                             </div>
@@ -303,8 +309,8 @@
                                     </div>
                                 </summary>
                                 <div class="px-3 pb-3">
-                                    {% if can_manage_persona_credentials %}
-                                    <form class="account-update-form tab-pane-stack" data-account-id="{{ entry.account.id }}" data-service="{{ entry.account.service }}">
+                                    {% if can_edit_persona %}
+                                    <form class="account-update-form tab-pane-stack" data-account-id="{{ entry.account.id }}" data-service="{{ entry.account.service }}" data-can-manage-credentials="{{ 'true' if can_manage_persona_credentials else 'false' }}">
                                         <div class="surface-panel">
                                             <div class="section-kicker mb-2">Basics</div>
                                             <div class="row g-3">
@@ -340,7 +346,7 @@
                                             </div>
                                         </div>
 
-                                        {% if entry.definition.credential_fields %}
+                                        {% if can_manage_persona_credentials and entry.definition.credential_fields %}
                                         <div class="surface-panel">
                                             <div class="section-kicker mb-2">Credentials</div>
                                             {% if entry.account.service == "instagram" %}
@@ -361,6 +367,8 @@
                                                 {% endfor %}
                                             </div>
                                         </div>
+                                        {% elif not can_manage_persona_credentials %}
+                                        <div class="small text-secondary">Connection credentials are managed by the owner or an administrator.</div>
                                         {% endif %}
 
                                         {% if entry.definition.source_setting_fields %}
@@ -374,7 +382,7 @@
                                         </div>
                                         {% endif %}
 
-                                        {% if entry.definition.publish_setting_fields %}
+                                        {% if entry.definition.publish_setting_fields or (entry.definition.composer_constraints and entry.definition.composer_constraints.notes) %}
                                         <div class="surface-panel">
                                             <div class="section-kicker mb-2">Publishing</div>
                                             <div class="row g-3">
@@ -382,6 +390,9 @@
                                                 {{ render_account_field(field, "publish", entry.publish_field_values.get(field.name, ""), "col-md-6") }}
                                                 {% endfor %}
                                             </div>
+                                            {% if entry.definition.composer_constraints %}
+                                            {% for note in entry.definition.composer_constraints.notes %}<div class="small text-secondary mt-2">{{ note }}</div>{% endfor %}
+                                            {% endif %}
                                         </div>
                                         {% endif %}
 
@@ -434,7 +445,7 @@
 
                                         <div class="d-flex gap-2 flex-wrap">
                                             <button class="btn btn-outline-primary" type="submit">Save Account</button>
-                                            {% if entry.account.service == "instagram" and (entry.account.credentials_json.get("instagrapi_sessionid") or (entry.account.credentials_json.get("instagrapi_username") and entry.account.credentials_json.get("instagrapi_password"))) %}
+                                            {% if can_manage_persona_credentials and entry.account.service == "instagram" and (entry.account.credentials_json.get("instagrapi_sessionid") or (entry.account.credentials_json.get("instagrapi_username") and entry.account.credentials_json.get("instagrapi_password"))) %}
                                             <button
                                                 class="btn btn-outline-secondary instagram-login-validate-button"
                                                 type="button"
@@ -444,6 +455,7 @@
                                                 Check Login
                                             </button>
                                             {% endif %}
+                                            {% if can_manage_persona_credentials %}
                                             <button
                                                 class="btn btn-outline-danger delete-account-button"
                                                 type="button"
@@ -452,6 +464,7 @@
                                             >
                                                 Delete Account
                                             </button>
+                                            {% endif %}
                                         </div>
                                     </form>
                                     {% else %}
@@ -559,7 +572,7 @@
                                 <label class="form-label">Permission</label>
                                 <select class="form-select" name="permission">
                                     <option value="view">View only</option>
-                                    <option value="edit">Edit posts and routes</option>
+                                    <option value="edit">Edit settings, posts and routes</option>
                                 </select>
                             </div>
                             <button class="btn btn-primary" type="submit">Share Persona</button>
@@ -635,16 +648,19 @@ function collectScopedFields(form) {
 
 function buildAccountPayload(form) {
   const scoped = collectScopedFields(form);
-  return {
+  const payload = {
     label: form.label.value,
     handle_or_identifier: form.handle_or_identifier.value,
     is_enabled: form.is_enabled.checked,
     source_enabled: form.source_enabled.checked,
     destination_enabled: form.destination_enabled.checked,
-    credentials_json: scoped.credentials,
     source_settings_json: scoped.sourceSettings,
     publish_settings_json: scoped.publishSettings,
   };
+  if (form.dataset.canManageCredentials === "true") {
+    payload.credentials_json = scoped.credentials;
+  }
+  return payload;
 }
 
 function toggleCreateServiceFields() {

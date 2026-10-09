@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import ExitStack
 from pathlib import Path
 from typing import Any
 
@@ -8,9 +9,22 @@ import requests
 from sqlalchemy.orm import Session
 
 from app.adapters.base import ConfigurationError, DestinationAdapter, get_account_credentials, get_account_publish_setting
-from app.adapters.common import service_attachments, service_body
+from app.adapters.common import is_image_attachment, is_video_attachment, service_attachments, service_body
 from app.domain import PublishPreview, PublishResult, ValidationIssue
 from app.models import Account, CanonicalPost, DeliveryJob, Persona
+from app.services.media_preparation import ImageLimits, prepare_image
+from app.services.video_preparation import VideoLimits, prepare_video
+
+
+def _discord_upload_limit(persona: Persona, account: Account) -> int:
+    raw = get_account_publish_setting(persona, account, "max_upload_bytes", 20 * 1024 * 1024)
+    try:
+        limit = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise ConfigurationError("Discord max_upload_bytes must be a positive byte count.") from exc
+    if limit <= 0:
+        raise ConfigurationError("Discord max_upload_bytes must be a positive byte count.")
+    return limit
 
 
 def discord_link_preference_order(persona: Persona, account: Account) -> list[str]:
@@ -146,12 +160,25 @@ class DiscordDestinationAdapter(DestinationAdapter):
         payload = {"content": render_discord_content(post, persona, account)}
 
         files = {}
-        handles = []
-        try:
+        with ExitStack() as stack:
+            upload_limit = _discord_upload_limit(persona, account)
             for index, attachment in enumerate(_discord_uploadable_attachments(post, account)):
-                handle = Path(attachment.storage_path).open("rb")
-                handles.append(handle)
-                files[f"files[{index}]"] = (Path(attachment.storage_path).name, handle, attachment.mime_type)
+                source_path = Path(attachment.storage_path)
+                upload_path = source_path
+                mime_type = attachment.mime_type
+                if is_video_attachment(attachment):
+                    prepared = stack.enter_context(prepare_video(source_path, limits=VideoLimits(max_bytes=upload_limit)))
+                    upload_path, mime_type = prepared.path, prepared.mime_type
+                elif is_image_attachment(attachment):
+                    prepared = stack.enter_context(
+                        prepare_image(source_path, limits=ImageLimits(max_bytes=upload_limit, supported_mime_types=("image/jpeg", "image/png", "image/webp", "image/gif", "image/avif")))
+                    )
+                    upload_path, mime_type = prepared.path, prepared.mime_type
+                elif source_path.stat().st_size > upload_limit:
+                    raise ConfigurationError(f"Discord audio exceeds the configured {upload_limit:,}-byte file upload limit.")
+                suffix = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/gif": ".gif", "image/avif": ".avif", "video/mp4": ".mp4"}.get(mime_type, source_path.suffix)
+                handle = stack.enter_context(upload_path.open("rb"))
+                files[f"files[{index}]"] = (f"{source_path.stem}{suffix}", handle, mime_type)
             request_kwargs = {
                 "params": {"wait": "true"},
                 "timeout": 30,
@@ -163,9 +190,6 @@ class DiscordDestinationAdapter(DestinationAdapter):
                 request_kwargs["json"] = payload
             response = requests.post(webhook_url, **request_kwargs)
             response.raise_for_status()
-        finally:
-            for handle in handles:
-                handle.close()
 
         raw = response.json() if response.content else {}
         message_id = raw.get("id") if isinstance(raw, dict) else None

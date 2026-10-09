@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import shutil
+import subprocess
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
+from html.parser import HTMLParser
 from pathlib import Path
 
 import pytest
@@ -11,13 +14,16 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.database import Base
-from app.models import AlertEvent, GiveawayEntrant
+from app.models import AlertEvent, GiveawayEntrant, GiveawayEvidenceEvent
 from app.main import app
 from app.services.auth import Principal
+from app.services.alerts import AlertDispatcher
+from app.services.giveaway_engine import process_giveaway_lifecycle
+from app.services.giveaways import ingest_instagram_webhook_payload
 from app.services.personas import create_account, create_persona
-from app.services.posts import create_scheduled_post, get_post
+from app.services.posts import create_scheduled_post, get_post, update_scheduled_post
 from app.domain import MediaItem
-from app.schemas import ScheduledPostCreate
+from app.schemas import ScheduledPostCreate, ScheduledPostUpdate
 
 
 def _create_persona(
@@ -1287,3 +1293,516 @@ def test_delete_scheduled_post_api_rejects_active_post(api_stack):
 
     with SessionLocal() as session:
         assert get_post(session, post_id) is not None
+
+
+def _create_target_selection_post(session, *, status="queued"):
+    persona = _create_persona(session, slug="target-selection")
+    succeeded = _create_destination_account(session, persona, service="mastodon", label="Succeeded")
+    removable = _create_destination_account(session, persona, service="discord", label="Removable")
+    remaining = _create_destination_account(session, persona, service="bluesky", label="Remaining")
+    post = create_scheduled_post(
+        session,
+        ScheduledPostCreate(
+            persona_id=persona.id,
+            body="Original body",
+            status=status,
+            target_account_ids=[succeeded.id, removable.id, remaining.id],
+        ),
+        [],
+    )
+    return post, succeeded, removable, remaining
+
+
+def test_target_selection_rejects_removing_success_before_mutating_post(api_stack):
+    _, SessionLocal = api_stack
+    with SessionLocal() as session:
+        post, succeeded, removable, remaining = _create_target_selection_post(session)
+        jobs = {job.target_account_id: job for job in post.delivery_jobs}
+        jobs[succeeded.id].status = "posted"
+        session.flush()
+
+        with pytest.raises(ValueError, match="Successfully published destinations cannot be removed: Succeeded"):
+            update_scheduled_post(
+                session,
+                post,
+                ScheduledPostUpdate(body="Changed body", target_account_ids=[removable.id, remaining.id]),
+            )
+
+        assert post.body == "Original body"
+        assert jobs[succeeded.id].status == "posted"
+        assert jobs[removable.id].status == "queued"
+
+
+def test_target_selection_api_rejects_removing_success(api_stack):
+    client, SessionLocal = api_stack
+    with SessionLocal() as session:
+        post, succeeded, removable, remaining = _create_target_selection_post(session)
+        jobs = {job.target_account_id: job for job in post.delivery_jobs}
+        jobs[succeeded.id].status = "posted"
+        jobs[succeeded.id].external_id = "published-1"
+        session.commit()
+        post_id, succeeded_id = post.id, succeeded.id
+        requested_ids = [removable.id, remaining.id]
+
+    response = client.put(
+        f"/scheduled-posts/{post_id}",
+        json={"body": "Changed body", "target_account_ids": requested_ids},
+    )
+
+    assert response.status_code == 400
+    assert "Successfully published destinations cannot be removed" in response.json()["detail"]
+    with SessionLocal() as session:
+        saved = get_post(session, post_id)
+        assert saved.body == "Original body"
+        assert next(job for job in saved.delivery_jobs if job.target_account_id == succeeded_id).external_id == "published-1"
+        assert all(job.status != "cancelled" for job in saved.delivery_jobs)
+
+
+@pytest.mark.parametrize("post_status", ["scheduled", "queued"])
+@pytest.mark.parametrize("removable_status", ["scheduled", "queued", "failed"])
+def test_target_selection_can_remove_unsuccessful_destinations(api_stack, post_status, removable_status):
+    client, SessionLocal = api_stack
+    with SessionLocal() as session:
+        post, succeeded, removable, remaining = _create_target_selection_post(session, status=post_status)
+        jobs = {job.target_account_id: job for job in post.delivery_jobs}
+        jobs[succeeded.id].status = "posted"
+        jobs[succeeded.id].external_id = "published-1"
+        jobs[removable.id].status = removable_status
+        succeeded.is_enabled = False
+        succeeded.credentials_json = {}
+        session.commit()
+        post_id, succeeded_id, removable_id, remaining_id = post.id, succeeded.id, removable.id, remaining.id
+
+    response = client.put(
+        f"/scheduled-posts/{post_id}",
+        json={"status": post_status, "target_account_ids": [succeeded_id, remaining_id]},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == post_status
+    assert set(payload["target_account_ids"]) == {succeeded_id, remaining_id}
+    assert payload["deliveries"][succeeded_id]["status"] == "posted"
+    assert payload["deliveries"][succeeded_id]["external_id"] == "published-1"
+    assert payload["deliveries"][removable_id]["status"] == "cancelled"
+    assert payload["deliveries"][remaining_id]["status"] == post_status
+
+
+@pytest.mark.parametrize("post_status", ["scheduled", "queued"])
+def test_target_selection_can_cancel_all_unsent_destinations_without_reselecting_them(api_stack, post_status):
+    client, SessionLocal = api_stack
+    with SessionLocal() as session:
+        post, _, removable, _ = _create_target_selection_post(session, status=post_status)
+        next(job for job in post.delivery_jobs if job.target_account_id == removable.id).status = "failed"
+        session.commit()
+        post_id = post.id
+
+    response = client.put(f"/scheduled-posts/{post_id}", json={"target_account_ids": []})
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "cancelled"
+    assert response.json()["target_account_ids"] == []
+    assert all(delivery["status"] == "cancelled" for delivery in response.json()["deliveries"].values())
+    retry_response = client.post(f"/scheduled-posts/{post_id}/send-now")
+    assert retry_response.status_code == 400
+    assert retry_response.json()["detail"] == "Select at least one destination account."
+    with SessionLocal() as session:
+        saved = get_post(session, post_id)
+        assert saved.status == "cancelled"
+        assert all(job.status == "cancelled" for job in saved.delivery_jobs)
+
+
+class _TargetInputParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.targets = {}
+
+    def handle_starttag(self, tag, attrs):
+        attributes = dict(attrs)
+        if tag == "input" and "target-checkbox" in attributes.get("class", "").split():
+            self.targets[attributes["value"]] = attributes
+
+
+@pytest.mark.parametrize("post_status", ["scheduled", "queued"])
+def test_target_selection_page_locks_only_successful_destinations(api_stack, post_status):
+    client, SessionLocal = api_stack
+    with SessionLocal() as session:
+        post, succeeded, removable, remaining = _create_target_selection_post(session, status=post_status)
+        jobs = {job.target_account_id: job for job in post.delivery_jobs}
+        jobs[succeeded.id].status = "posted"
+        jobs[removable.id].status = "failed"
+        succeeded.is_enabled = False
+        session.commit()
+        post_id, succeeded_id, removable_id, remaining_id = post.id, succeeded.id, removable.id, remaining.id
+
+    response = client.get(f"/scheduled-posts/{post_id}/page")
+
+    assert response.status_code == 200
+    parser = _TargetInputParser()
+    parser.feed(response.text)
+    successful_input = parser.targets[succeeded_id]
+    assert "checked" in successful_input
+    assert "disabled" in successful_input
+    assert successful_input["aria-describedby"] == f"target-lock-reason-{succeeded_id}"
+    assert 'title="This destination has already published this post successfully and cannot be removed."' in response.text
+    for account_id in [removable_id, remaining_id]:
+        assert "checked" in parser.targets[account_id]
+        assert "disabled" not in parser.targets[account_id]
+
+
+def test_target_selection_completion_and_publish_now_ignore_disabled_successful_account(api_stack, monkeypatch):
+    client, SessionLocal = api_stack
+    background_calls = []
+    monkeypatch.setattr("app.main._process_send_now_delivery", lambda *args: background_calls.append(args))
+    with SessionLocal() as session:
+        post, succeeded, _, _ = _create_target_selection_post(session)
+        next(job for job in post.delivery_jobs if job.target_account_id == succeeded.id).status = "posted"
+        succeeded.is_enabled = False
+        succeeded.credentials_json = {}
+        session.commit()
+        post_id, succeeded_id = post.id, succeeded.id
+
+    response = client.put(f"/scheduled-posts/{post_id}", json={"target_account_ids": [succeeded_id]})
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "posted"
+    assert response.json()["display_status"] == "success"
+    retry_response = client.post(f"/scheduled-posts/{post_id}/send-now")
+    assert retry_response.status_code == 200
+    assert retry_response.json()["status"] == "posted"
+    assert retry_response.json()["target_account_ids"] == [succeeded_id]
+    assert len(background_calls) == 1
+    with SessionLocal() as session:
+        saved = get_post(session, post_id)
+        assert all(job.status in {"posted", "cancelled"} for job in saved.delivery_jobs)
+
+
+def test_target_selection_giveaway_cannot_drop_successful_channel(api_stack):
+    client, SessionLocal = api_stack
+    giveaway_end_at = datetime.now(timezone.utc) + timedelta(days=30)
+    with SessionLocal() as session:
+        persona = _create_persona(session, slug="target-selection-giveaway")
+        succeeded = _create_destination_account(session, persona, service="bluesky", label="Succeeded")
+        removable = create_account(session, persona, {
+            "service": "instagram", "label": "Removable", "handle_or_identifier": "test-account",
+            "is_enabled": True, "source_enabled": False, "destination_enabled": True,
+            "credentials_json": {}, "source_settings_json": {}, "publish_settings_json": {},
+        })
+        remaining_channel = {
+            "service": "instagram", "account_id": removable.id,
+            "rules": {"kind": "atom", "atom": "comment_present", "params": {}},
+        }
+        post = create_scheduled_post(
+            session,
+            ScheduledPostCreate.model_validate({
+                "persona_id": persona.id,
+                "body": "Giveaway",
+                "post_type": "giveaway",
+                "status": "draft",
+                "target_account_ids": [succeeded.id, removable.id],
+                "giveaway": {
+                    "giveaway_end_at": giveaway_end_at.isoformat(),
+                    "channels": [{
+                        "service": "bluesky",
+                        "account_id": succeeded.id,
+                        "rules": {"kind": "atom", "atom": "reply_or_quote_present", "params": {}},
+                    }, remaining_channel],
+                },
+            }),
+            [],
+        )
+        jobs = {job.target_account_id: job for job in post.delivery_jobs}
+        jobs[succeeded.id].status = "posted"
+        jobs[removable.id].status = "queued"
+        post.status = "queued"
+        session.commit()
+        post_id, succeeded_id, removable_id = post.id, succeeded.id, removable.id
+
+    response = client.put(f"/scheduled-posts/{post_id}", json={
+        "target_account_ids": [succeeded_id, removable_id],
+        "giveaway": {"giveaway_end_at": giveaway_end_at.isoformat(), "channels": [remaining_channel]},
+    })
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Giveaway posts must only target accounts that are configured as giveaway channels."
+    with SessionLocal() as session:
+        saved = get_post(session, post_id)
+        assert {channel.account_id for channel in saved.giveaway_campaign.channels} == {succeeded_id, removable_id}
+        assert next(job for job in saved.delivery_jobs if job.target_account_id == succeeded_id).status == "posted"
+
+
+@pytest.mark.parametrize("requested_kind", ["missing", "foreign"])
+@pytest.mark.parametrize("include_valid_target", [False, True])
+def test_target_selection_rejects_unresolved_ids_without_cancelling_jobs(api_stack, requested_kind, include_valid_target):
+    client, SessionLocal = api_stack
+    with SessionLocal() as session:
+        post, _, _, remaining = _create_target_selection_post(session)
+        invalid_id = "missing-account"
+        if requested_kind == "foreign":
+            other_persona = _create_persona(session, slug="foreign-persona")
+            invalid_id = _create_destination_account(session, other_persona).id
+        session.commit()
+        post_id = post.id
+        requested_ids = [invalid_id] + ([remaining.id] if include_valid_target else [])
+
+    response = client.put(f"/scheduled-posts/{post_id}", json={
+        "body": "Changed body", "target_account_ids": requested_ids,
+    })
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Selected destination accounts must exist and belong to the selected persona."
+    with SessionLocal() as session:
+        saved = get_post(session, post_id)
+        assert saved.body == "Original body"
+        assert saved.status == "queued"
+        assert len(saved.delivery_jobs) == 3
+        assert all(job.status == "queued" for job in saved.delivery_jobs)
+
+
+def _create_unsent_giveaway(session, *, status="queued", service="bluesky"):
+    persona = _create_persona(session, slug="cancel-unsent-giveaway")
+    if service == "instagram":
+        destination = create_account(session, persona, {
+            "service": "instagram", "label": "Instagram", "handle_or_identifier": "test-account",
+            "is_enabled": True, "source_enabled": False, "destination_enabled": True,
+            "credentials_json": {"instagram_user_id": "ig-provider"},
+            "source_settings_json": {}, "publish_settings_json": {},
+        })
+    else:
+        destination = _create_destination_account(session, persona, service=service, label="Giveaway destination")
+    end_at = datetime.now(timezone.utc) + timedelta(days=30)
+    post = create_scheduled_post(session, ScheduledPostCreate.model_validate({
+        "persona_id": persona.id, "body": "Giveaway", "post_type": "giveaway", "status": "draft",
+        "target_account_ids": [destination.id],
+        "giveaway": {
+            "giveaway_end_at": end_at.isoformat(),
+            "channels": [{
+                "service": service, "account_id": destination.id,
+                "rules": {"kind": "atom", "atom": "comment_present" if service == "instagram" else "reply_or_quote_present", "params": {}},
+            }],
+        },
+    }), [])
+    post.status = status
+    post.delivery_jobs[0].status = status
+    channel = post.giveaway_campaign.channels[0]
+    entrant = GiveawayEntrant(channel_id=channel.id, provider_user_id="historical-user", signal_state_json={"retained": True})
+    session.add(entrant)
+    session.flush()
+    evidence = GiveawayEvidenceEvent(
+        campaign_id=post.giveaway_campaign.id, channel_id=channel.id, entrant_id=entrant.id,
+        provider_event_id="historical-event", event_type="historical_signal", payload_json={"retained": True},
+    )
+    session.add(evidence)
+    session.flush()
+    return post, destination, entrant, evidence
+
+
+@pytest.mark.parametrize("post_status", ["scheduled", "queued"])
+def test_target_selection_can_cancel_and_resume_final_unsent_giveaway_destination(api_stack, post_status):
+    client, SessionLocal = api_stack
+    with SessionLocal() as session:
+        post, destination, entrant, evidence = _create_unsent_giveaway(session, status=post_status)
+        session.commit()
+        post_id, destination_id = post.id, destination.id
+        campaign_id, channel_id, pool_id = post.giveaway_campaign.id, post.giveaway_campaign.channels[0].id, post.giveaway_campaign.pools[0].id
+        entrant_id, evidence_id = entrant.id, evidence.id
+
+    response = client.put(f"/scheduled-posts/{post_id}", json={"target_account_ids": [], "giveaway": {"channels": []}})
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "cancelled"
+    assert response.json()["target_account_ids"] == []
+    assert response.json()["giveaway"]["status"] == "cancelled"
+    assert response.json()["giveaway"]["channels"][0]["id"] == channel_id
+    with SessionLocal() as session:
+        saved = get_post(session, post_id)
+        assert saved.giveaway_campaign.id == campaign_id
+        assert saved.giveaway_campaign.channels[0].status == "cancelled"
+        assert saved.giveaway_campaign.pools[0].id == pool_id
+        assert saved.giveaway_campaign.pools[0].status == "cancelled"
+        assert session.get(GiveawayEntrant, entrant_id).signal_state_json == {"retained": True}
+        assert session.get(GiveawayEvidenceEvent, evidence_id).payload_json == {"retained": True}
+    page = client.get(f"/scheduled-posts/{post_id}/page")
+    assert page.status_code == 200
+    initial = page.text.split("const initialGiveaway = ", 1)[1].split("const existingAttachments", 1)[0].rsplit(";", 1)[0]
+    assert json.loads(initial)["channels"] == []
+    parser = _TargetInputParser()
+    parser.feed(page.text)
+    assert "checked" not in parser.targets[destination_id]
+    assert 'id="recalculate-giveaway-button"' not in page.text
+
+    resumed = client.put(f"/scheduled-posts/{post_id}", json={"status": "scheduled", "target_account_ids": [destination_id]})
+    assert resumed.status_code == 200
+    assert resumed.json()["status"] == "scheduled"
+    assert resumed.json()["giveaway"]["id"] == campaign_id
+    assert resumed.json()["giveaway"]["status"] == "scheduled"
+    assert resumed.json()["giveaway"]["channels"][0]["id"] == channel_id
+    with SessionLocal() as session:
+        saved = get_post(session, post_id)
+        assert saved.giveaway_campaign.channels[0].status == "scheduled"
+        assert saved.giveaway_campaign.pools[0].status == "scheduled"
+        assert session.get(GiveawayEntrant, entrant_id) is not None
+        assert session.get(GiveawayEvidenceEvent, evidence_id) is not None
+
+
+def test_cancelled_giveaway_is_excluded_from_lifecycle(api_stack, monkeypatch):
+    client, SessionLocal = api_stack
+    with SessionLocal() as session:
+        post, _, _, _ = _create_unsent_giveaway(session)
+        post.giveaway_campaign.channels[0].target_post_uri = "at://did:plc:test/app.bsky.feed.post/history"
+        session.commit()
+        post_id = post.id
+    assert client.put(f"/scheduled-posts/{post_id}", json={"target_account_ids": []}).status_code == 200
+    collection_calls = []
+    monkeypatch.setattr("app.services.giveaway_engine.collect_bluesky_channel_state", lambda *args, **kwargs: collection_calls.append(args))
+    with SessionLocal() as session:
+        process_giveaway_lifecycle(session, AlertDispatcher(), run_id="cancelled-lifecycle", post_id=post_id)
+        session.flush()
+        assert get_post(session, post_id).giveaway_campaign.status == "cancelled"
+    assert collection_calls == []
+
+
+def test_cancelled_giveaway_webhooks_do_not_match_or_change_history(api_stack):
+    client, SessionLocal = api_stack
+    with SessionLocal() as session:
+        post, _, _, _ = _create_unsent_giveaway(session, service="instagram")
+        post.giveaway_campaign.channels[0].target_post_external_id = "ig-known-media"
+        session.commit()
+        post_id = post.id
+    assert client.put(f"/scheduled-posts/{post_id}", json={"target_account_ids": []}).status_code == 200
+    with SessionLocal() as session:
+        events = ingest_instagram_webhook_payload(session, {"entry": [{
+            "id": "ig-provider", "changes": [{"field": "comments", "value": {
+                "media_id": "ig-known-media", "id": "new-comment", "text": "New comment",
+                "from": {"id": "new-user", "username": "new.entrant"},
+            }}],
+        }]}, signature_valid=True, run_id="cancelled-webhook")
+        session.flush()
+        assert len(events) == 1
+        assert events[0].matched_giveaway_id is None
+        assert events[0].processed is True
+        saved = get_post(session, post_id)
+        assert saved.giveaway_campaign.status == "cancelled"
+        assert len(saved.giveaway_campaign.channels[0].entrants) == 1
+        assert len(saved.giveaway_campaign.evidence_events) == 1
+
+
+def test_successful_giveaway_cannot_enter_cancelled_state(api_stack):
+    client, SessionLocal = api_stack
+    with SessionLocal() as session:
+        post, _, _, _ = _create_unsent_giveaway(session)
+        post.delivery_jobs[0].status = "posted"
+        session.commit()
+        post_id = post.id
+    response = client.put(f"/scheduled-posts/{post_id}", json={"target_account_ids": [], "giveaway": {"channels": []}})
+    assert response.status_code == 400
+    with SessionLocal() as session:
+        saved = get_post(session, post_id)
+        assert saved.delivery_jobs[0].status == "posted"
+        assert saved.giveaway_campaign.status == "scheduled"
+
+
+@pytest.mark.parametrize("action", ["recalculate", "rerun-raffle", "reopen", "instagram-scan", "end-now", "approve", "clear-approval"])
+def test_cancelled_giveaway_manual_actions_preserve_inactive_history(api_stack, action):
+    client, SessionLocal = api_stack
+    with SessionLocal() as session:
+        post, _, entrant, evidence = _create_unsent_giveaway(session, service="instagram")
+        post.giveaway_campaign.channels[0].target_post_external_id = "ig-known-media"
+        session.commit()
+        post_id, entrant_id, evidence_id = post.id, entrant.id, evidence.id
+    assert client.put(f"/scheduled-posts/{post_id}", json={"target_account_ids": []}).status_code == 200
+
+    request_options = {"json": {"giveaway_end_at": "2050-01-01T00:00"}} if action == "reopen" else {}
+    if action == "approve":
+        response = client.post(f"/scheduled-posts/{post_id}/giveaway/entrants/{entrant_id}/approve")
+    elif action == "clear-approval":
+        response = client.delete(f"/scheduled-posts/{post_id}/giveaway/entrants/{entrant_id}/approval")
+    else:
+        response = client.post(f"/scheduled-posts/{post_id}/giveaway/{action}", **request_options)
+
+    assert response.status_code == 400
+    if action != "end-now":
+        assert response.json()["detail"] == "Select a destination and save the post plan to resume this cancelled giveaway."
+    with SessionLocal() as session:
+        saved = get_post(session, post_id)
+        campaign = saved.giveaway_campaign
+        assert saved.status == "cancelled"
+        assert all(job.status == "cancelled" for job in saved.delivery_jobs)
+        assert campaign.status == "cancelled"
+        assert campaign.last_evaluated_at is None
+        assert campaign.frozen_at is None
+        assert campaign.channels[0].status == "cancelled"
+        assert campaign.channels[0].target_post_external_id == "ig-known-media"
+        assert campaign.channels[0].last_collected_at is None
+        assert campaign.pools[0].status == "cancelled"
+        assert session.get(GiveawayEntrant, entrant_id).signal_state_json == {"retained": True}
+        assert session.get(GiveawayEvidenceEvent, evidence_id).payload_json == {"retained": True}
+        assert len(campaign.channels[0].entrants) == 1
+        assert len(campaign.evidence_events) == 1
+    page = client.get(f"/scheduled-posts/{post_id}/page")
+    assert 'id="instagram-scan-button"' not in page.text
+    assert 'class="btn btn-sm btn-outline-success giveaway-entrant-approval-action"' not in page.text
+
+
+def test_target_reselection_with_stale_cancelled_status_saves_standard_post_as_draft(api_stack):
+    client, SessionLocal = api_stack
+    with SessionLocal() as session:
+        post, _, _, remaining = _create_target_selection_post(session)
+        session.commit()
+        post_id, remaining_id = post.id, remaining.id
+    assert client.put(f"/scheduled-posts/{post_id}", json={"target_account_ids": []}).status_code == 200
+    response = client.put(f"/scheduled-posts/{post_id}", json={"status": "cancelled", "target_account_ids": [remaining_id]})
+    assert response.status_code == 200
+    assert response.json()["status"] == "draft"
+    assert response.json()["target_account_ids"] == [remaining_id]
+    assert response.json()["deliveries"][remaining_id]["status"] == "draft"
+    assert all(item["status"] in {"draft", "cancelled"} for item in response.json()["deliveries"].values())
+
+
+def test_browser_giveaway_reselection_preserves_saved_rules_and_saves_draft(api_stack):
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node.js is needed to exercise saved giveaway restoration.")
+    client, SessionLocal = api_stack
+    with SessionLocal() as session:
+        post, destination, _, _ = _create_unsent_giveaway(session)
+        post.giveaway_campaign.channels[0].rules_json = {"kind": "atom", "atom": "like_present", "params": {}}
+        post.giveaway_campaign.winner_count = 3
+        session.commit()
+        post_id, destination_id = post.id, destination.id
+    assert client.put(f"/scheduled-posts/{post_id}", json={"target_account_ids": []}).status_code == 200
+    page = client.get(f"/scheduled-posts/{post_id}/page")
+    initial = json.loads(page.text.split("const initialGiveaway = ", 1)[1].split("const existingAttachments", 1)[0].rsplit(";", 1)[0])
+    assert initial["channels"] == []
+    assert initial["inactive_channels"][0]["rules"]["atom"] == "like_present"
+    assert initial["winner_count"] == 3
+    script = r'''
+const assert = require("node:assert/strict");
+global.window = {};
+require("node:vm").runInThisContext(require("node:fs").readFileSync(process.argv[1], "utf8"));
+const initialValue = JSON.parse(process.argv[2]);
+const handlers = {};
+const root = {innerHTML: "", addEventListener(event, handler) { handlers[event] = handler; }};
+const builder = window.LynxGiveawayBuilder.create({root, initialValue,
+  getServiceAccounts: () => ({bluesky: [{id: process.argv[3], label: "Saved account"}], instagram: []})});
+assert.deepEqual(builder.getChannelAccountIds(), []);
+handlers.click({target: {closest() { return {dataset: {action: "add-channel", service: "bluesky"}}; }}});
+assert.equal(builder.getValue().channels[0].rules.atom, "like_present");
+process.stdout.write(JSON.stringify(builder.getValue()));
+'''
+    builder_path = Path(__file__).parents[1] / "app/static/giveaway_builder.js"
+    result = subprocess.run([node, "-e", script, str(builder_path), json.dumps(initial), destination_id], capture_output=True, text=True, timeout=15)
+    assert result.returncode == 0, result.stderr
+    response = client.put(f"/scheduled-posts/{post_id}", json={
+        "status": "cancelled", "target_account_ids": [destination_id], "giveaway": json.loads(result.stdout),
+    })
+    assert response.status_code == 200
+    assert response.json()["status"] == "draft"
+    assert response.json()["deliveries"][destination_id]["status"] == "draft"
+    assert response.json()["giveaway"]["status"] == "scheduled"
+    assert response.json()["giveaway"]["winner_count"] == 3
+    assert response.json()["giveaway"]["channels"][0]["rules"]["atom"] == "like_present"
+    with SessionLocal() as session:
+        saved = get_post(session, post_id)
+        assert saved.giveaway_campaign.channels[0].rules_json["atom"] == "like_present"
+        assert all(job.status != "queued" for job in saved.delivery_jobs)

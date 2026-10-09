@@ -9,6 +9,7 @@ from app.config import get_settings
 from app.database import db_session
 from app.services.alerts import AlertDispatcher
 from app.services.delivery import enqueue_due_scheduled_posts, new_run_id, poll_sources, process_delivery_queue, reconcile_pending_posts
+from app.services.delivery_lock import publishing_guard
 from app.services.events import log_run_event
 from app.services.giveaway_engine import process_giveaway_lifecycle
 from app.services.instagram_private_policy import INSTAGRAM_PRIVATE_SCAN_MODE_WEEKLY, instagram_private_scan_mode
@@ -124,6 +125,14 @@ class CrossposterScheduler:
         self._last_run_error = None
 
         try:
+            with publishing_guard():
+                return self._run_cycle_locked(run_id=run_id, trigger=trigger)
+        finally:
+            self._last_run_finished_at = datetime.now(timezone.utc)
+            self._cycle_lock.release()
+
+    def _run_cycle_locked(self, *, run_id: str, trigger: str) -> dict[str, Any]:
+        try:
             self._log_scheduler_event(
                 run_id=run_id,
                 message=f"{trigger.title()} automation cycle started.",
@@ -177,10 +186,6 @@ class CrossposterScheduler:
                 "message": str(exc),
                 "trigger": trigger,
             }
-        finally:
-            self._last_run_finished_at = datetime.now(timezone.utc)
-            self._cycle_lock.release()
-
     def _log_control_event(self, message: str) -> None:
         run_id = new_run_id()
         self._log_scheduler_event(run_id=run_id, message=message, trigger="control")
@@ -193,7 +198,7 @@ class CrossposterScheduler:
         trigger: str,
         severity: str = "info",
     ) -> None:
-        with self._session_scope() as session:
+        with publishing_guard(), self._session_scope() as session:
             log_run_event(
                 session,
                 run_id=run_id,

@@ -25,7 +25,11 @@ _PREFERRED_MIME_EXTENSIONS = {
     "image/png": ".png",
     "image/webp": ".webp",
     "image/gif": ".gif",
+    "image/avif": ".avif",
+    "image/heic": ".heic",
+    "image/heif": ".heif",
     "video/mp4": ".mp4",
+    "video/quicktime": ".mov",
 }
 
 
@@ -70,6 +74,16 @@ def public_instagram_media_url(attachment_id: str, storage_path: str | Path, *, 
     return f"{normalized_base}/media/instagram/{attachment_id}/{filename}"
 
 
+def prepared_instagram_media_path(attachment_id: str, token: str, filename: str, *, uploads_dir: Path | None = None) -> Path | None:
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,100}", attachment_id) or not re.fullmatch(r"instagram-[a-z0-9_-]{8}", token):
+        return None
+    if filename not in {"image.jpg", "video.mp4"}:
+        return None
+    root = ((uploads_dir or get_settings().uploads_dir) / ".instagram-prepared").resolve()
+    candidate = (root / token / attachment_id / filename).resolve()
+    return candidate if candidate.is_relative_to(root) else None
+
+
 def prune_unreferenced_managed_media_files(
     referenced_paths: set[str],
     *,
@@ -100,7 +114,11 @@ def prune_unreferenced_managed_media_files(
             except OSError:
                 errors += 1
                 continue
-            if modified_at > cutoff:
+            file_cutoff = cutoff
+            if file_path.relative_to(root).parts[0] == ".instagram-prepared":
+                # Meta may still be fetching an active Graph container even with one-minute orphan retention.
+                file_cutoff = (now or datetime.now(timezone.utc)) - timedelta(seconds=max(resolved_retention_seconds, 1800))
+            if modified_at > file_cutoff:
                 continue
             try:
                 file_path.unlink()

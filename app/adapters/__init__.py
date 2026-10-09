@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from app.adapters.base import DestinationAdapter, SourceAdapter
-from app.adapters.bluesky import BlueskyDestinationAdapter, BlueskySourceAdapter
+from app.adapters.bluesky import BLUESKY_IMAGE_LIMITS, BLUESKY_MAX_IMAGES, BLUESKY_VIDEO_LIMITS, BlueskyDestinationAdapter, BlueskySourceAdapter
 from app.adapters.discord import DiscordDestinationAdapter
 from app.adapters.instagram import InstagramDestinationAdapter, InstagramSourceAdapter
 from app.adapters.mastodon import MastodonDestinationAdapter, MastodonSourceAdapter
@@ -27,10 +27,15 @@ class AccountFieldDefinition:
 @dataclass(frozen=True)
 class ComposerConstraintDefinition:
     body_limit: int | None = None
+    body_length_unit: str = "utf16"
+    max_body_bytes: int | None = None
     body_limit_with_media: int | None = None
     max_attachments: int | None = None
     max_images: int | None = None
     max_videos: int | None = None
+    prepared_image_max_bytes: int | None = None
+    prepared_video_max_bytes: int | None = None
+    video_max_duration_seconds: int | None = None
     requires_media: bool = False
     requires_body_or_media: bool = False
     multi_attachment_images_only: bool = False
@@ -68,12 +73,21 @@ SERVICE_REGISTRY: dict[str, ServiceDefinition] = {
         destination_adapter_cls=BlueskyDestinationAdapter,
         composer_constraints=ComposerConstraintDefinition(
             body_limit=300,
-            max_attachments=4,
-            max_images=4,
+            body_length_unit="graphemes",
+            max_body_bytes=3000,
+            max_attachments=BLUESKY_MAX_IMAGES,
+            max_images=BLUESKY_MAX_IMAGES,
             max_videos=1,
+            prepared_image_max_bytes=BLUESKY_IMAGE_LIMITS.max_bytes,
+            prepared_video_max_bytes=BLUESKY_VIDEO_LIMITS.max_bytes,
+            video_max_duration_seconds=int(BLUESKY_VIDEO_LIMITS.max_duration),
             single_video_only=True,
             supported_attachment_kinds=("image", "video"),
-            notes=("Current adapter supports either up to 4 images or one MP4 video.",),
+            notes=(
+                f"Use up to {BLUESKY_MAX_IMAGES} images or one video. Posts with five or more images use a gallery.",
+                f"Images are prepared to fit {BLUESKY_IMAGE_LIMITS.max_bytes // 1_000_000} MB each; stored originals are preserved.",
+                f"Prepared videos must fit {BLUESKY_VIDEO_LIMITS.max_bytes // 1_000_000} MB and {int(BLUESKY_VIDEO_LIMITS.max_duration)} seconds (10 minutes).",
+            ),
         ),
         credential_fields=(
             AccountFieldDefinition("handle", "Handle"),
@@ -90,12 +104,13 @@ SERVICE_REGISTRY: dict[str, ServiceDefinition] = {
         composer_constraints=ComposerConstraintDefinition(
             max_attachments=10,
             requires_media=True,
-            allowed_image_mime_types=("image/jpeg", "image/jpg", "image/pjpeg"),
             supported_attachment_kinds=("image", "video"),
             notes=(
                 "Instagram destination publishing uses the official Graph content publishing flow.",
                 "Public Base URL must be an externally reachable HTTPS URL so Meta can fetch each attachment.",
-                "Supported inputs are JPEG images and MP4 videos.",
+                "Images are prepared as JPEG and videos as MP4; stored originals are preserved.",
+                "Image canvas proportions must be between 4:5 and 1.91:1. Adjust the canvas before publishing if needed.",
+                "Single reels allow up to 15 minutes; stories and carousel videos allow up to 60 seconds.",
             ),
         ),
         credential_fields=(
@@ -162,7 +177,7 @@ SERVICE_REGISTRY: dict[str, ServiceDefinition] = {
         destination_adapter_cls=MastodonDestinationAdapter,
         composer_constraints=ComposerConstraintDefinition(
             body_limit=500,
-            notes=("Server-specific media limits can vary; LynxPoster only enforces the body cap here.",),
+            notes=("Images and videos are prepared to fit the Mastodon instance's advertised media limits; stored originals are preserved.",),
         ),
         credential_fields=(
             AccountFieldDefinition("handle", "Handle"),
@@ -187,8 +202,11 @@ SERVICE_REGISTRY: dict[str, ServiceDefinition] = {
         composer_constraints=ComposerConstraintDefinition(
             body_limit=280,
             max_attachments=4,
+            max_images=4,
+            max_videos=1,
+            single_video_only=True,
             supported_attachment_kinds=("image", "video"),
-            notes=("Current adapter enforces tweet length and total attachment count.",),
+            notes=("Use up to four photos, one animated GIF, or one video. Videos are prepared to fit 512 MB and 20 minutes.",),
         ),
         credential_fields=(
             AccountFieldDefinition("username", "Username"),
@@ -236,8 +254,10 @@ SERVICE_REGISTRY: dict[str, ServiceDefinition] = {
             body_limit_with_media=1024,
             max_attachments=10,
             requires_body_or_media=True,
-            multi_attachment_images_only=True,
-            notes=("Multiple Telegram attachments are sent as a single image album.",),
+            notes=(
+                "Multiple attachments are sent as one media group; groups containing documents are delivered as documents.",
+                "Photos are prepared to fit 10 MB and a maximum 20:1 aspect ratio. Videos are prepared as MP4 up to 50 MB; stored originals are preserved.",
+            ),
         ),
         credential_fields=(
             AccountFieldDefinition(
@@ -268,6 +288,7 @@ SERVICE_REGISTRY: dict[str, ServiceDefinition] = {
             notes=(
                 "Current adapter supports text posts, photo sets, or one video.",
                 "Mixed image and video attachments are not supported.",
+                "Videos are prepared as MP4 up to 500 MB and 10 minutes; stored originals are preserved.",
             ),
         ),
         credential_fields=(
@@ -299,10 +320,15 @@ def service_composer_constraints_context() -> dict[str, dict[str, Any]]:
             "service": definition.service,
             "label": definition.label,
             "body_limit": constraints.body_limit,
+            "body_length_unit": constraints.body_length_unit,
+            "max_body_bytes": constraints.max_body_bytes,
             "body_limit_with_media": constraints.body_limit_with_media,
             "max_attachments": constraints.max_attachments,
             "max_images": constraints.max_images,
             "max_videos": constraints.max_videos,
+            "prepared_image_max_bytes": constraints.prepared_image_max_bytes,
+            "prepared_video_max_bytes": constraints.prepared_video_max_bytes,
+            "video_max_duration_seconds": constraints.video_max_duration_seconds,
             "requires_media": constraints.requires_media,
             "requires_body_or_media": constraints.requires_body_or_media,
             "multi_attachment_images_only": constraints.multi_attachment_images_only,

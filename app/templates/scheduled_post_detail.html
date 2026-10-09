@@ -1,5 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
+{% set successful_deliveries = (post.deliveries|default({}, true)).values()|selectattr('status', 'equalto', 'posted')|list %}
+{% set failed_deliveries = (post.deliveries|default({}, true)).values()|selectattr('status', 'equalto', 'failed')|list %}
 <div class="composer-workspace-page composer-v2-page scheduled-detail-page">
     <section class="figma-page-header composer-v2-header scheduled-detail-header">
         <div>
@@ -21,6 +23,13 @@
         <div class="fw-semibold">Last delivery hiccup</div>
         <div class="mb-0">{{ post.last_error }}</div>
     </div>
+    {% endif %}
+
+    {% if post.post_type != 'giveaway' and successful_deliveries %}
+    <div class="alert alert-info scheduled-detail-alert">Successful destinations are locked. Edit the remaining destinations below, then save and retry. Your edits will only be sent to destinations that have not published.</div>
+    {% endif %}
+    {% if post.origin_kind|default('composer') == 'account_import' %}
+    <div class="alert alert-info scheduled-detail-alert">Changes apply only to unsent destinations; the original source and published copies stay linked.</div>
     {% endif %}
 
     <form id="scheduled-post-update-form" class="composer-form-shell composer-v2-shell scheduled-detail-shell">
@@ -76,7 +85,7 @@
                                 <label class="form-label">Post Type</label>
                                 <select class="form-select" name="post_type" id="post-type-select">
                                     <option value="standard" {% if post.post_type == "standard" %}selected{% endif %}>Standard Post</option>
-                                    <option value="giveaway" {% if post.post_type == "giveaway" %}selected{% endif %}>Giveaway</option>
+                                    <option value="giveaway" {% if post.post_type == "giveaway" %}selected{% endif %} {% if post.origin_kind|default('composer') == 'account_import' %}disabled title="Imported posts keep their original post type."{% endif %}>Giveaway</option>
                                 </select>
                             </div>
                             <div class="col-md-6 col-xl-3">
@@ -89,6 +98,9 @@
                                     <option value="{{ post.status }}" selected>{{ post.status|replace('_', ' ')|title }}</option>
                                     {% endif %}
                                 </select>
+                                {% if post.status == "cancelled" %}
+                                <div class="form-text">Re-selecting a destination saves a draft. Choose Scheduled or Queued when ready to publish.</div>
+                                {% endif %}
                             </div>
                             <div class="col-md-6 col-xl-3">
                                 <label class="form-label d-flex align-items-center gap-2 flex-wrap">
@@ -162,16 +174,21 @@
                         <div class="row g-2 mt-2" id="target-account-list">
                             {% for account in accounts %}
                             <div class="col-12" data-account-service="{{ account.service }}">
+                                {% set account_delivery = (post.deliveries|default({}, true)).get(account.id) %}
+                                {% set destination_succeeded = account_delivery and account_delivery.status == 'posted' %}
                                 {% set account_override = post.publish_overrides_json.get(account.id) or post.publish_overrides_json.get(account.service) %}
                                 {% set override_body = account_override.get('body', '') if account_override is mapping else (account_override if account_override is string else '') %}
                                 {% set override_attachment_ids = account_override.get('attachment_ids') if account_override is mapping and account_override.get('attachment_ids') is not none else none %}
-                                <div class="composer-destination-card scheduled-detail-target-card">
-                                    <div class="form-check">
-                                        <input class="form-check-input target-checkbox" type="checkbox" value="{{ account.id }}" id="target-{{ account.id }}" {% if account.id in post.target_account_ids %}checked{% endif %}>
+                                <div class="composer-destination-card scheduled-detail-target-card {% if destination_succeeded %}bg-body-tertiary{% endif %}">
+                                    <div class="form-check" {% if destination_succeeded %}title="This destination has already published this post successfully and cannot be removed."{% endif %}>
+                                        <input class="form-check-input target-checkbox" type="checkbox" value="{{ account.id }}" id="target-{{ account.id }}" data-delivery-succeeded="{{ 'true' if destination_succeeded else 'false' }}" {% if destination_succeeded or account.id in post.target_account_ids %}checked{% endif %} {% if destination_succeeded %}disabled aria-describedby="target-lock-reason-{{ account.id }}"{% endif %}>
                                         <label class="form-check-label fw-semibold" for="target-{{ account.id }}">{{ account.label }}</label>
                                         <span class="small-muted ms-2">{{ account.service }}</span>
+                                        {% if destination_succeeded %}<span class="badge text-bg-secondary ms-2">Published · Locked</span>{% endif %}
+                                        {% if destination_succeeded %}<span class="visually-hidden" id="target-lock-reason-{{ account.id }}">This destination has already published this post successfully and cannot be removed.</span>{% endif %}
                                     </div>
                                     <div class="small text-secondary mt-2 post-guidance-summary"></div>
+                                    <fieldset {% if destination_succeeded %}disabled title="This destination has already published successfully. Its body and media are locked." aria-describedby="target-lock-reason-{{ account.id }}"{% endif %}>
                                     <div class="mt-2">
                                         <label class="form-label small-muted mb-1">Optional override body</label>
                                         <textarea class="form-control override-body" data-account-id="{{ account.id }}" rows="2">{{ override_body }}</textarea>
@@ -203,8 +220,9 @@
                                             <div class="small text-secondary">Save media first.</div>
                                             {% endfor %}
                                         </div>
-                                        <div class="form-text">Off uses global media order.</div>
+                                        <div class="form-text">Off uses global media order and new uploads. Removing selected media includes new uploads as replacements on save or retry. Save other uploads first to select them individually.</div>
                                     </div>
+                                    </fieldset>
                                     <div class="post-guidance-panel border rounded p-2 bg-body-tertiary mt-3" data-account-id="{{ account.id }}">
                                         <div class="fw-semibold small">Delivery Notes</div>
                                         <div class="small mt-2 post-guidance-status"></div>
@@ -371,7 +389,7 @@
                 {% if post.can_delete|default(false, true) %}
                 <button class="btn btn-outline-danger" type="button" id="delete-post-button">Delete Post</button>
                 {% endif %}
-                {% if post.giveaway %}
+                {% if post.giveaway and post.giveaway.status != "cancelled" %}
                 <button class="btn btn-outline-secondary" type="button" id="recalculate-giveaway-button">Recalculate Entries</button>
                 {% endif %}
                 {% if post.giveaway and post.giveaway.status in ["winner_selected", "winner_confirmed", "review_required", "failed"] %}
@@ -381,7 +399,7 @@
                 {% if post.giveaway and post.giveaway.status in ["scheduled", "collecting"] %}
                 <button class="btn btn-outline-warning" type="button" id="end-giveaway-button">End Giveaway</button>
                 {% endif %}
-                <button class="btn btn-outline-primary" type="button" id="send-now-button">Publish Now</button>
+                <button class="btn btn-outline-primary" type="button" id="send-now-button">{% if post.post_type == 'giveaway' %}Publish Now{% elif failed_deliveries %}Save and Retry Unsent{% else %}Save and Publish Now{% endif %}</button>
                 <a class="btn btn-outline-secondary" href="/sandbox/page?post_id={{ post.id }}">Open In Preview Studio</a>
             </div>
 
@@ -428,6 +446,13 @@
 {%- endmacro %}
 <script>
 const postId = "{{ post.id }}";
+let postPlanSaveInProgress = false;
+const successfulTargetAccountIds = new Set([
+{% for account_id, delivery in (post.deliveries|default({}, true)).items() %}
+{% if delivery.status == 'posted' %}  {{ account_id | tojson }},{% endif %}
+{% endfor %}
+]);
+const successfulDestinationReason = "This destination has already published this post successfully and cannot be removed.";
 const servicePostGuidance = {{ service_post_guidance | tojson }};
 const detailAccounts = [
 {% for account in accounts %}
@@ -442,16 +467,26 @@ const detailAccounts = [
 const initialGiveaway = {% if post.giveaway %}{
   "giveaway_end_at": {{ post.giveaway.giveaway_end_at|datetime_local_input|tojson if post.giveaway.giveaway_end_at else 'null' }},
   "pool_mode": {{ post.giveaway.pool_mode | default('combined', true) | tojson }},
-  "channels": [
-    {% if post.giveaway.channels is defined %}
-    {% for channel in post.giveaway.channels | default([], true) %}
+  "winner_count": {{ post.giveaway.winner_count | default(1, true) | tojson }},
+  "inactive_channels": [
+    {% for channel in post.giveaway.channels | default([], true) if channel.account_id not in post.target_account_ids %}
     {
       "service": {{ channel.service | tojson }},
       "account_id": {{ channel.account_id | tojson }},
       "rules": {{ giveaway_rule_node_json(channel.rules) }}
     }{% if not loop.last %},{% endif %}
     {% endfor %}
-    {% elif post.giveaway.rules is defined %}
+  ],
+  "channels": [
+    {% if post.giveaway.channels is defined %}
+    {% for channel in post.giveaway.channels | default([], true) if channel.account_id in post.target_account_ids %}
+    {
+      "service": {{ channel.service | tojson }},
+      "account_id": {{ channel.account_id | tojson }},
+      "rules": {{ giveaway_rule_node_json(channel.rules) }}
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+    {% elif post.giveaway.rules is defined and post.target_account_ids %}
     {
       "service": "instagram",
       "account_id": {{ post.target_account_ids[0] | default('', true) | tojson }},
@@ -508,6 +543,7 @@ existingAttachments.sort((left, right) => {
 const mediaAltTextMaxLength = 1000;
 
 const bodyTextarea = document.querySelector("textarea[name='body']");
+const postStatusSelect = document.querySelector("select[name='status']");
 const bodyLengthIndicator = document.getElementById("body-length-indicator");
 const snapshotBodyLength = document.getElementById("snapshot-body-length");
 const snapshotAttachments = document.getElementById("snapshot-attachments");
@@ -564,6 +600,8 @@ function attachmentSnapshot(items) {
     videos: videos.length,
     others: others.length,
     imageMimeTypes: images.map((item) => String(item.mime_type || "").toLowerCase()).filter(Boolean),
+    imageSizes: images.map((item) => Number(item.size_bytes || 0)),
+    videoSizes: videos.map((item) => Number(item.size_bytes || 0)),
   };
 }
 
@@ -581,7 +619,7 @@ function describeAttachmentSnapshot(snapshot) {
 
 function fileSnapshot(files) {
   return attachmentSnapshot(
-    Array.from(files || []).map((file) => ({mime_type: file.type || ""}))
+    Array.from(files || []).map((file) => ({mime_type: file.type || "", size_bytes: file.size || 0}))
   );
 }
 
@@ -602,6 +640,8 @@ function combinedAttachmentSnapshot() {
     videos: existingSnapshot.videos + pendingSnapshot.videos,
     others: existingSnapshot.others + pendingSnapshot.others,
     imageMimeTypes: existingSnapshot.imageMimeTypes.concat(pendingSnapshot.imageMimeTypes),
+    imageSizes: existingSnapshot.imageSizes.concat(pendingSnapshot.imageSizes),
+    videoSizes: existingSnapshot.videoSizes.concat(pendingSnapshot.videoSizes),
   };
 }
 
@@ -609,11 +649,17 @@ function activeExistingAttachmentIds() {
   return new Set(activeExistingAttachments().map((item) => item.id));
 }
 
+function destinationReplacesDeletedMedia(wrapper) {
+  const deletedIds = new Set(deletedAttachmentIds());
+  return Array.from(wrapper.querySelectorAll(".override-attachment"))
+    .some((checkbox) => checkbox.checked && deletedIds.has(checkbox.dataset.attachmentId));
+}
+
 function destinationAttachmentItems(wrapper) {
   const customToggle = wrapper.querySelector(".destination-media-custom");
   if (!customToggle?.checked) {
     return activeExistingAttachments().concat(
-      Array.from(uploadsInput?.files || []).map((file) => ({mime_type: file.type || ""}))
+      Array.from(uploadsInput?.files || []).map((file) => ({mime_type: file.type || "", size_bytes: file.size || 0}))
     );
   }
   const activeIds = activeExistingAttachmentIds();
@@ -621,7 +667,11 @@ function destinationAttachmentItems(wrapper) {
     .filter((checkbox) => checkbox.checked && activeIds.has(checkbox.dataset.attachmentId))
     .map((checkbox) => checkbox.dataset.attachmentId);
   const attachmentsById = Object.fromEntries(activeExistingAttachments().map((item) => [item.id, item]));
-  return selectedIds.map((id) => attachmentsById[id]).filter(Boolean);
+  const selectedAttachments = selectedIds.map((id) => attachmentsById[id]).filter(Boolean);
+  if (destinationReplacesDeletedMedia(wrapper)) {
+    selectedAttachments.push(...Array.from(uploadsInput?.files || []).map((file) => ({mime_type: file.type || "", size_bytes: file.size || 0})));
+  }
+  return selectedAttachments;
 }
 
 function destinationAttachmentSnapshot(wrapper) {
@@ -635,10 +685,7 @@ function escapeHtml(value) {
 }
 
 function formatFileSize(value) {
-  if (!Number.isFinite(value) || value <= 0) return "0 B";
-  if (value >= 1024 * 1024) return `${(value / (1024 * 1024)).toFixed(1)} MB`;
-  if (value >= 1024) return `${(value / 1024).toFixed(1)} KB`;
-  return `${value} B`;
+  return window.lynxposterComposerMedia.fileSize(value);
 }
 
 function savedAttachmentTitle(attachment) {
@@ -676,7 +723,7 @@ function renderSavedAttachments() {
           <div class="flex-shrink-0">${preview}</div>
           <div class="flex-grow-1" style="min-width: 0;">
             <div class="fw-semibold text-truncate">${escapeHtml(savedAttachmentTitle(attachment))}</div>
-            <div class="small text-secondary">${escapeHtml(attachment.mime_type || "Unknown type")} &bull; ${formatFileSize(Number(attachment.size_bytes || 0))}</div>
+            <div class="small text-secondary">${escapeHtml(attachment.mime_type || "Unknown type")} &bull; Original: ${formatFileSize(Number(attachment.size_bytes || 0))}</div>
             <div class="small-muted code-ish text-truncate mt-1">${escapeHtml(attachment.storage_path || "")}</div>
             <label class="form-label small-muted mt-2 mb-1" for="saved-alt-${escapeHtml(attachment.id)}">Alt text</label>
             <textarea
@@ -744,7 +791,7 @@ function renderUploadPreviews() {
           </div>
           <div class="col-md-8">
             <div class="fw-semibold">${escapeHtml(file.name)}</div>
-            <div class="small text-secondary">${escapeHtml(file.type || "Unknown type")} &bull; ${formatFileSize(file.size)}</div>
+            <div class="small text-secondary">${escapeHtml(file.type || "Unknown type")} &bull; Original: ${formatFileSize(file.size)}</div>
             <label class="form-label small-muted mt-2 mb-1" for="new-upload-alt-${index}">Alt text</label>
             <textarea
               class="form-control form-control-sm new-upload-alt-input"
@@ -781,6 +828,7 @@ function describeServiceGuidance(rule) {
   }
   if (rule.multi_attachment_images_only) parts.push("image albums only for multi-attachment posts");
   if (rule.allowed_image_mime_types?.length) parts.push("JPEG images only");
+  parts.push(...window.lynxposterComposerMedia.limitSummary(rule));
   if (!parts.length && rule.notes?.length) return rule.notes[0];
   return parts.join(" • ");
 }
@@ -789,9 +837,9 @@ function evaluateServiceGuidance(rule, bodyText, snapshot) {
   const issues = [];
   const lines = [];
   const activeBodyLimit = snapshot.total > 0 && rule?.body_limit_with_media != null ? rule.body_limit_with_media : rule?.body_limit;
-  const bodyLength = bodyText.length;
+  const bodyLength = window.lynxposterComposerText.length(bodyText, rule?.body_length_unit);
 
-  lines.push(activeBodyLimit != null ? `Body: ${bodyLength}/${activeBodyLimit} characters` : `Body: ${bodyLength} characters`);
+  lines.push(bodyLength == null ? "Body length will be checked when saved." : (activeBodyLimit != null ? `Body: ${bodyLength}/${activeBodyLimit} characters` : `Body: ${bodyLength} characters`));
   lines.push(`Media: ${describeAttachmentSnapshot(snapshot)}`);
 
   if (!rule) {
@@ -807,8 +855,11 @@ function evaluateServiceGuidance(rule, bodyText, snapshot) {
   if (rule.requires_media && snapshot.total === 0) {
     issues.push("Needs image or video media.");
   }
-  if (activeBodyLimit != null && bodyLength > activeBodyLimit) {
+  if (activeBodyLimit != null && bodyLength != null && bodyLength > activeBodyLimit) {
     issues.push(`Body exceeds the current ${activeBodyLimit}-character limit.`);
+  }
+  if (rule.max_body_bytes != null && window.lynxposterComposerText.utf8Bytes(bodyText) > rule.max_body_bytes) {
+    issues.push(`Body exceeds the current ${rule.max_body_bytes}-byte limit.`);
   }
   if (rule.max_attachments != null && snapshot.total > rule.max_attachments) {
     issues.push(`Attachment count exceeds the ${rule.max_attachments}-attachment limit.`);
@@ -840,12 +891,13 @@ function evaluateServiceGuidance(rule, bodyText, snapshot) {
   }
 
   if (!issues.length) {
-    const okLines = ["Current post fits this service's known app limits."];
+    const okLines = ["Text and attachment selection fit this service's known app limits. Media is checked and prepared when publishing."];
+    okLines.push(...window.lynxposterComposerMedia.preparationNotices(rule, snapshot));
     if (rule.notes?.length) okLines.push(...rule.notes);
     return {tone: "ok", lines: lines.concat(okLines)};
   }
 
-  return {tone: "danger", lines: lines.concat(issues)};
+  return {tone: "danger", lines: lines.concat(issues, window.lynxposterComposerMedia.preparationNotices(rule, snapshot), rule.notes || [])};
 }
 
 function renderGuidanceLines(container, lines, tone) {
@@ -869,11 +921,23 @@ function syncGiveawayTargets() {
   const giveawayMode = postTypeSelect?.value === "giveaway";
   const selectedIds = new Set(giveawayMode ? giveawayBuilder.getChannelAccountIds() : []);
   document.querySelectorAll(".target-checkbox").forEach((checkbox) => {
+    const succeeded = successfulTargetAccountIds.has(checkbox.value);
     if (giveawayMode) {
-      checkbox.checked = selectedIds.has(checkbox.value);
-      checkbox.disabled = true;
-    } else {
-      checkbox.disabled = false;
+      checkbox.checked = succeeded || selectedIds.has(checkbox.value);
+    } else if (succeeded) {
+      checkbox.checked = true;
+    }
+    checkbox.disabled = giveawayMode || succeeded;
+  });
+  giveawayBuilderRoot?.querySelectorAll('select[data-action="channel-account"]').forEach((select) => {
+    const succeeded = successfulTargetAccountIds.has(select.value);
+    const channel = select.closest("div[data-channel-id]");
+    const removeButton = channel?.querySelector('button[data-action="remove-channel"]');
+    select.disabled = succeeded;
+    select.parentElement.title = succeeded ? successfulDestinationReason : "";
+    if (removeButton) {
+      removeButton.disabled = succeeded;
+      removeButton.parentElement.title = succeeded ? successfulDestinationReason : "";
     }
   });
 }
@@ -885,6 +949,11 @@ function refreshGiveawayState() {
   if (isGiveaway && giveawayTargetHint) {
     const validation = giveawayBuilder.validate();
     const selectedTargets = giveawayBuilder.getChannelAccountIds();
+    if (!selectedTargets.length && !successfulTargetAccountIds.size) {
+      giveawayTargetHint.className = "small text-warning";
+      giveawayTargetHint.textContent = "No destinations selected. Saving will cancel this giveaway.";
+      return;
+    }
     giveawayTargetHint.className = validation.ok ? "small text-success" : "small text-danger";
     giveawayTargetHint.textContent = validation.ok
       ? `Targets sync from giveaway channels: ${selectedTargets.length} destination${selectedTargets.length === 1 ? "" : "s"} selected.`
@@ -896,6 +965,9 @@ function refreshPostGuidance() {
   const snapshot = combinedAttachmentSnapshot();
   refreshGiveawayState();
   const selectedTargets = Array.from(document.querySelectorAll(".target-checkbox")).filter((checkbox) => checkbox.checked).length;
+  if (selectedTargets && postStatusSelect?.value === "cancelled") {
+    postStatusSelect.value = "draft";
+  }
 
   bodyLengthIndicator.textContent = `${bodyTextarea.value.length} chars`;
   snapshotBodyLength.textContent = `${bodyTextarea.value.length} chars`;
@@ -925,7 +997,18 @@ function refreshPostGuidance() {
       return;
     }
 
+    if (successfulTargetAccountIds.has(checkbox.value)) {
+      panel.classList.add("is-ok");
+      renderGuidanceLines(status, ["Already published successfully. Body and media are locked; this destination will not be sent again."], "ok");
+      return;
+    }
+
     const evaluation = evaluateServiceGuidance(rule, override || bodyTextarea.value, targetSnapshot);
+    if (wrapper.querySelector(".destination-media-custom")?.checked && uploadsInput?.files.length) {
+      evaluation.lines.push(destinationReplacesDeletedMedia(wrapper)
+        ? "New uploads will replace removed selected media on save or retry."
+        : "Custom media excludes new uploads. Turn custom media off to include them, or save first to select them individually.");
+    }
     panel.classList.add(`is-${evaluation.tone}`);
     renderGuidanceLines(status, evaluation.lines, evaluation.tone);
   });
@@ -938,16 +1021,22 @@ function buildPostPayload(form) {
   if (form.post_type.value === "giveaway") {
     targetAccountIds = giveawayBuilder.getChannelAccountIds();
   }
+  targetAccountIds = Array.from(new Set([...targetAccountIds, ...successfulTargetAccountIds]));
   const publishOverrides = {};
   form.querySelectorAll(".override-body").forEach((textarea) => {
+    if (successfulTargetAccountIds.has(textarea.dataset.accountId)) return;
     if (textarea.value.trim()) {
       publishOverrides[textarea.dataset.accountId] = {body: textarea.value};
     }
   });
   const activeIds = activeExistingAttachmentIds();
+  if (form.uploads?.files?.length) {
+    deletedAttachmentIds().forEach((attachmentId) => activeIds.add(attachmentId));
+  }
   form.querySelectorAll(".destination-media-custom").forEach((toggle) => {
     if (!toggle.checked) return;
     const accountId = toggle.dataset.accountId;
+    if (successfulTargetAccountIds.has(accountId)) return;
     const attachmentIds = Array.from(form.querySelectorAll(`.override-attachment[data-account-id="${CSS.escape(accountId)}"]`))
       .filter((checkbox) => checkbox.checked && activeIds.has(checkbox.dataset.attachmentId))
       .map((checkbox) => checkbox.dataset.attachmentId);
@@ -1001,51 +1090,66 @@ function activateScheduledDetailTabFromHash() {
   window.bootstrap.Tab.getOrCreateInstance(tabButton).show();
 }
 
-document.getElementById("scheduled-post-update-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const payload = new FormData();
-  const postPayload = buildPostPayload(form);
-  if (postPayload.post_type === "giveaway") {
-    const validation = giveawayBuilder.validate();
-    if (!validation.ok) {
-      alert(validation.message);
+async function submitPostPlan(form, {sendNow = false} = {}) {
+  if (postPlanSaveInProgress) return;
+  postPlanSaveInProgress = true;
+  const buttons = Array.from(document.querySelectorAll('button[type="submit"][form="scheduled-post-update-form"], #scheduled-post-update-form button[type="submit"], #send-now-button'));
+  const previousDisabled = buttons.map((button) => button.disabled);
+  buttons.forEach((button) => { button.disabled = true; });
+  try {
+    const postPayload = buildPostPayload(form);
+    let response;
+    if (sendNow && postPayload.post_type === "giveaway") {
+      response = await fetch(`/scheduled-posts/${postId}/send-now`, {method: "POST"});
+    } else {
+      if (postPayload.post_type === "giveaway" && postPayload.target_account_ids.length) {
+        const validation = giveawayBuilder.validate();
+        if (!validation.ok) {
+          alert(validation.message);
+          return;
+        }
+      }
+      const payload = new FormData();
+      payload.append("body", postPayload.body);
+      payload.append("post_type", postPayload.post_type);
+      payload.append("status", postPayload.status);
+      payload.append("scheduled_for", postPayload.scheduled_for || "");
+      payload.append("target_account_ids", JSON.stringify(postPayload.target_account_ids));
+      payload.append("publish_overrides_json", JSON.stringify(postPayload.publish_overrides_json));
+      payload.append("metadata_json", JSON.stringify(postPayload.metadata_json));
+      payload.append("attachment_order", JSON.stringify(postPayload.attachment_order));
+      payload.append("deleted_attachment_ids", JSON.stringify(postPayload.deleted_attachment_ids));
+      payload.append("attachment_alt_texts", JSON.stringify(postPayload.attachment_alt_texts));
+      payload.append("giveaway_json", JSON.stringify(postPayload.giveaway));
+      payload.append("alt_texts", JSON.stringify(pendingUploadAltTexts()));
+      for (const file of form.uploads.files) {
+        payload.append("uploads", file);
+      }
+      response = await fetch(`/scheduled-posts/${postId}${sendNow ? "?send_now=true" : ""}`, {
+        method: "PUT",
+        body: payload,
+      });
+    }
+    if (!response.ok) {
+      alert(await window.readApiMessage(response));
       return;
     }
+    window.location.reload();
+  } catch (error) {
+    alert(error.message || "Unable to save this post plan. Please try again.");
+  } finally {
+    buttons.forEach((button, index) => { button.disabled = previousDisabled[index]; });
+    postPlanSaveInProgress = false;
   }
-  payload.append("body", postPayload.body);
-  payload.append("post_type", postPayload.post_type);
-  payload.append("status", postPayload.status);
-  payload.append("scheduled_for", postPayload.scheduled_for || "");
-  payload.append("target_account_ids", JSON.stringify(postPayload.target_account_ids));
-  payload.append("publish_overrides_json", JSON.stringify(postPayload.publish_overrides_json));
-  payload.append("metadata_json", JSON.stringify(postPayload.metadata_json));
-  payload.append("attachment_order", JSON.stringify(postPayload.attachment_order));
-  payload.append("deleted_attachment_ids", JSON.stringify(postPayload.deleted_attachment_ids));
-  payload.append("attachment_alt_texts", JSON.stringify(postPayload.attachment_alt_texts));
-  payload.append("giveaway_json", JSON.stringify(postPayload.giveaway));
-  payload.append("alt_texts", JSON.stringify(pendingUploadAltTexts()));
-  for (const file of form.uploads.files) {
-    payload.append("uploads", file);
-  }
-  const response = await fetch(`/scheduled-posts/${postId}`, {
-    method: "PUT",
-    body: payload,
-  });
-  if (!response.ok) {
-    alert(await window.readApiMessage(response));
-    return;
-  }
-  window.location.reload();
+}
+
+document.getElementById("scheduled-post-update-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await submitPostPlan(event.currentTarget);
 });
 
 document.getElementById("send-now-button").addEventListener("click", async () => {
-  const response = await fetch(`/scheduled-posts/${postId}/send-now`, {method: "POST"});
-  if (!response.ok) {
-    alert(await window.readApiMessage(response));
-    return;
-  }
-  window.location.reload();
+  await submitPostPlan(document.getElementById("scheduled-post-update-form"), {sendNow: true});
 });
 
 document.querySelectorAll(".giveaway-review-action").forEach((button) => {

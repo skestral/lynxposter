@@ -686,7 +686,7 @@ def test_bluesky_validate_rejects_mixed_media_and_multiple_videos(session, tmp_p
     messages = [issue.message for issue in issues]
 
     assert any("only one video attachment" in message for message in messages)
-    assert any("up to 4 images or one MP4 video" in message for message in messages)
+    assert any("up to 10 images or one MP4 video" in message for message in messages)
 
 
 def test_bluesky_treats_video_mime_without_mp4_suffix_as_video(session, monkeypatch, tmp_path):
@@ -716,7 +716,7 @@ def test_bluesky_treats_video_mime_without_mp4_suffix_as_video(session, monkeypa
     captured: dict[str, object] = {}
 
     class FakeClient:
-        def send_video(self, body, data, alt_text, facets=None):
+        def send_video(self, body, data, alt_text, facets=None, video_aspect_ratio=None):
             captured["method"] = "send_video"
             captured["body"] = body
             captured["bytes"] = data
@@ -729,6 +729,13 @@ def test_bluesky_treats_video_mime_without_mp4_suffix_as_video(session, monkeypa
         def send_post(self, *args, **kwargs):
             raise AssertionError("send_post should not be used for a video attachment.")
 
+    from contextlib import contextmanager
+
+    @contextmanager
+    def prepared_video(path, *, limits):
+        yield SimpleNamespace(path=path, width=640, height=360)
+
+    monkeypatch.setattr("app.adapters.bluesky.prepare_video", prepared_video)
     monkeypatch.setattr("app.adapters.bluesky._get_client", lambda config, update_session=None: FakeClient())
 
     preview = BlueskyDestinationAdapter().preview(post, persona, bluesky)
@@ -775,6 +782,8 @@ def test_tumblr_validate_rejects_mixed_image_and_video_attachments(session, tmp_
 
 
 def test_tumblr_treats_video_mime_without_mp4_suffix_as_video(session, monkeypatch, tmp_path):
+    from contextlib import contextmanager
+
     persona = _create_persona(session)
     tumblr = _create_account(session, persona, service="tumblr", label="Tumblr", source_enabled=False, destination_enabled=True)
     video_path = tmp_path / "clip.upload"
@@ -816,13 +825,23 @@ def test_tumblr_treats_video_mime_without_mp4_suffix_as_video(session, monkeypat
 
     monkeypatch.setitem(sys.modules, "pytumblr", SimpleNamespace(TumblrRestClient=lambda *args: FakeTumblrClient()))
 
+    prepared_path = tmp_path / "prepared.mp4"
+    prepared_path.write_bytes(b"prepared-video")
+
+    @contextmanager
+    def fake_prepare_video(path, *, limits):
+        assert path == video_path
+        yield SimpleNamespace(path=prepared_path)
+
+    monkeypatch.setattr("app.adapters.tumblr.prepare_video", fake_prepare_video)
+
     preview = TumblrDestinationAdapter().preview(post, persona, tumblr)
     result = TumblrDestinationAdapter().publish(session, post, persona, tumblr)
 
     assert preview.action == "create_video"
     assert captured["method"] == "create_video"
     assert captured["caption"] == "Tumblr video"
-    assert captured["data"] == str(video_path)
+    assert captured["data"] == str(prepared_path)
     assert result.external_id == "tumblr-video-1"
 
 
@@ -832,8 +851,10 @@ def test_telegram_media_group_publish_records_all_message_refs_and_dedupes_polle
 
     image_one = tmp_path / "one.jpg"
     image_two = tmp_path / "two.jpg"
-    image_one.write_bytes(b"one")
-    image_two.write_bytes(b"two")
+    from PIL import Image
+
+    Image.new("RGB", (32, 32), "red").save(image_one)
+    Image.new("RGB", (32, 32), "blue").save(image_two)
 
     post = create_scheduled_post(
         session,
@@ -1057,11 +1078,13 @@ def test_discord_waits_when_preferred_destination_link_is_not_ready(session, mon
 
 
 def test_discord_publish_uses_payload_json_for_multipart_requests(session, monkeypatch, tmp_path):
+    from PIL import Image
+
     persona = _create_persona(session)
     discord = _create_account(session, persona, service="discord", label="Discord", source_enabled=False, destination_enabled=True)
 
     image_path = tmp_path / "photo.jpg"
-    image_path.write_bytes(b"jpeg")
+    Image.new("RGB", (32, 24), "orange").save(image_path)
 
     post = create_scheduled_post(
         session,

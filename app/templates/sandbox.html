@@ -41,7 +41,7 @@
                         <label class="form-label">Attachment Preview</label>
                         <input class="form-control" id="sandbox-uploads" name="uploads" type="file" multiple>
                         <div id="sandbox-attachment-list" class="mt-2"></div>
-                        <button class="btn btn-sm btn-outline-secondary mt-2 d-none" type="button" id="clear-saved-attachments-button">Clear Saved Attachments</button>
+                        <button class="btn btn-sm btn-outline-secondary mt-2 d-none" type="button" id="clear-saved-attachments-button" title="Also resets destination media selections so replacement uploads are included.">Clear Saved Attachments And Media Selections</button>
                     </div>
                     <div class="col-12">
                         <label class="form-label">Destination Accounts</label>
@@ -117,7 +117,7 @@
                 <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
                     <div>
                         <h2 class="h5 mb-1">Preview Results</h2>
-                        <p class="text-secondary mb-0">Local preview only. Nothing is posted.</p>
+                        <p class="text-secondary mb-0">Local preview only. Nothing is posted. Media preparation and destination acceptance are checked during publishing.</p>
                     </div>
                     <span class="badge soft-badge rounded-pill" id="sandbox-result-badge">Waiting to preview</span>
                 </div>
@@ -218,7 +218,8 @@ function renderTargetAccounts() {
     return;
   }
   for (const account of accounts) {
-    const seededOverride = sandboxSeed.publish_overrides_json?.[account.id]?.body || "";
+    const savedOverride = sandboxSeed.publish_overrides_json?.[account.id];
+    const seededOverride = typeof savedOverride === "string" ? savedOverride : savedOverride?.body || "";
     const checked = selectedIds.has(account.id) ? "checked" : "";
     const wrapper = document.createElement("div");
     wrapper.className = "col-12";
@@ -273,7 +274,7 @@ function renderIssues(issues) {
 
 function renderPreviewResults(result) {
   const isHealthy = result.overall_valid && result.overall_expectations_passed;
-  resultBadge.textContent = isHealthy ? "Ready for live publish" : "Needs review";
+  resultBadge.textContent = isHealthy ? "Preview checks passed" : "Needs review";
   resultBadge.className = `badge rounded-pill ${isHealthy ? "text-bg-success" : "text-bg-warning"}`;
 
   const globalErrors = result.global_errors?.length
@@ -301,9 +302,10 @@ function renderPreviewResults(result) {
             <div class="small text-secondary">${escapeHtml(preview.service)} • ${escapeHtml(preview.action)}</div>
           </div>
           <div class="d-flex gap-2 flex-wrap">
-            <span class="badge ${preview.publish_ready ? "text-bg-success" : "text-bg-warning"}">${preview.publish_ready ? "Publish Ready" : "Needs Attention"}</span>
+            <span class="badge ${preview.publish_ready ? "text-bg-success" : "text-bg-warning"}">${preview.publish_ready ? "Preview checks passed" : "Needs Attention"}</span>
             <span class="badge ${preview.configured ? "text-bg-success" : "text-bg-secondary"}">${preview.configured ? "Configured" : "Not Configured"}</span>
             <span class="badge text-bg-light border">${preview.body_length} chars</span>
+            <span class="badge text-bg-light border">${preview.attachment_count} attachments</span>
           </div>
         </div>
         <div class="row g-3">
@@ -339,10 +341,22 @@ function buildPayload() {
   const targetAccountIds = Array.from(form.querySelectorAll(".sandbox-target-checkbox"))
     .filter((checkbox) => checkbox.checked)
     .map((checkbox) => checkbox.value);
-  const publishOverrides = {};
+  const publishOverrides = JSON.parse(JSON.stringify(sandboxSeed.publish_overrides_json || {}));
   form.querySelectorAll(".sandbox-override-body").forEach((textarea) => {
+    const accountId = textarea.dataset.accountId;
+    const savedOverride = publishOverrides[accountId];
+    const override = savedOverride && typeof savedOverride === "object" && !Array.isArray(savedOverride)
+      ? {...savedOverride}
+      : {};
     if (textarea.value.trim()) {
-      publishOverrides[textarea.dataset.accountId] = {body: textarea.value};
+      override.body = textarea.value;
+    } else {
+      delete override.body;
+    }
+    if (Object.keys(override).length) {
+      publishOverrides[accountId] = override;
+    } else {
+      delete publishOverrides[accountId];
     }
   });
   const metadata = {};
@@ -400,6 +414,16 @@ personaSelect?.addEventListener("change", renderTargetAccounts);
 uploadsInput?.addEventListener("change", renderAttachmentList);
 clearSavedAttachmentsButton?.addEventListener("click", () => {
   persistedAttachments = [];
+  for (const [key, override] of Object.entries(sandboxSeed.publish_overrides_json || {})) {
+    if (!override || typeof override !== "object" || Array.isArray(override)) continue;
+    const remaining = {...override};
+    delete remaining.attachment_ids;
+    if (Object.keys(remaining).length) {
+      sandboxSeed.publish_overrides_json[key] = remaining;
+    } else {
+      delete sandboxSeed.publish_overrides_json[key];
+    }
+  }
   renderAttachmentList();
 });
 form?.addEventListener("submit", async (event) => {

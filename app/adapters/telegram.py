@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+import math
+from contextlib import ExitStack, contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 import requests
 from sqlalchemy import select
@@ -21,7 +23,70 @@ from app.domain import (
     ValidationIssue,
 )
 from app.models import Account, AccountSyncState, CanonicalPost, Persona
+from app.services.media_preparation import ImageLimits, prepare_image
 from app.services.storage import download_media
+from app.services.video_preparation import VideoLimits, prepare_video
+
+
+TELEGRAM_PHOTO_MAX_BYTES = 10_000_000
+TELEGRAM_FILE_MAX_BYTES = 50_000_000
+TELEGRAM_UPLOAD_TIMEOUT = (10, 180)
+TELEGRAM_IMAGE_LIMITS = ImageLimits(
+    max_bytes=TELEGRAM_PHOTO_MAX_BYTES, max_dimension=5000, supported_mime_types=("image/jpeg", "image/png")
+)
+TELEGRAM_VIDEO_LIMITS = VideoLimits(max_bytes=TELEGRAM_FILE_MAX_BYTES)
+
+
+def _attachment_media_type(attachment: Any) -> str:
+    mime_type = str(attachment.mime_type or "").lower().split(";", 1)[0].strip()
+    suffix = Path(attachment.storage_path).suffix.lower()
+    if mime_type.startswith("video/") or (
+        mime_type in {"", "application/octet-stream"} and suffix in {".mp4", ".m4v", ".mov", ".webm", ".mkv", ".avi"}
+    ):
+        return "video"
+    if mime_type.startswith("image/") and mime_type != "image/gif":
+        return "photo"
+    return "document"
+
+
+def _attachment_media_types(attachments: list[Any]) -> list[str]:
+    media_types = [_attachment_media_type(attachment) for attachment in attachments]
+    # Telegram document albums cannot mix with native photos or videos. Keep the
+    # files together when an attachment requires document delivery.
+    if len(media_types) > 1 and "document" in media_types:
+        return ["document"] * len(media_types)
+    return media_types
+
+
+def _attachment_size_bytes(attachment: Any) -> int:
+    try:
+        return Path(attachment.storage_path).stat().st_size
+    except OSError:
+        # Sandbox previews have metadata without a stored file.
+        return int(getattr(attachment, "size_bytes", 0) or 0)
+
+
+@contextmanager
+def _prepared_telegram_attachment(attachment: Any) -> Iterator[tuple[Path, str, dict[str, Any]]]:
+    path = Path(attachment.storage_path)
+    media_type = _attachment_media_type(attachment)
+    if media_type == "video":
+        with prepare_video(path, limits=TELEGRAM_VIDEO_LIMITS) as prepared:
+            yield prepared.path, prepared.mime_type, {
+                "supports_streaming": True,
+                "width": prepared.width,
+                "height": prepared.height,
+                "duration": math.ceil(prepared.duration),
+            }
+    elif media_type == "photo":
+        with prepare_image(path, limits=TELEGRAM_IMAGE_LIMITS) as prepared:
+            if max(prepared.width, prepared.height) / min(prepared.width, prepared.height) > 20:
+                raise ValueError("Telegram photos must have an aspect ratio of 20:1 or less.")
+            yield prepared.path, prepared.mime_type, {}
+    else:
+        if _attachment_size_bytes(attachment) > TELEGRAM_FILE_MAX_BYTES:
+            raise ValueError("Telegram documents must fit the 50 MB upload limit.")
+        yield path, attachment.mime_type, {}
 
 
 def _telegram_api_url(bot_token: str, method: str) -> str:
@@ -39,7 +104,7 @@ def _telegram_request(
     json_body: dict[str, Any] | None = None,
     data: dict[str, Any] | None = None,
     files: dict[str, Any] | None = None,
-    timeout: int = 30,
+    timeout: int | tuple[int, int] = 30,
 ) -> Any:
     url = _telegram_api_url(bot_token, method)
     if json_body is not None:
@@ -171,7 +236,12 @@ def _build_preview_shape(post: CanonicalPost, account: Account) -> tuple[str, st
     config = get_account_credentials(account)
     chat_id = _configured_chat_value(str(config.get("channel_id") or ""))
     attachments = service_attachments(post, account)
+    media_types = _attachment_media_types(attachments)
     notes: list[str] = ["Bot token and binary file contents are intentionally omitted from sandbox output."]
+    if any(_attachment_media_type(attachment) == "photo" for attachment in attachments):
+        notes.append("Images are resized or compressed to fit Telegram's 10 MB photo and dimension limits; stored originals are preserved.")
+    if any(_attachment_media_type(attachment) == "video" for attachment in attachments):
+        notes.append("Videos are prepared as streaming MP4 with H.264 video and AAC audio within Telegram's 50 MB upload limit; stored originals are preserved.")
 
     if not attachments:
         return (
@@ -186,7 +256,7 @@ def _build_preview_shape(post: CanonicalPost, account: Account) -> tuple[str, st
 
     if len(attachments) == 1:
         attachment = attachments[0]
-        method = "/sendPhoto" if attachment.mime_type.startswith("image/") else "/sendDocument"
+        method = {"photo": "/sendPhoto", "video": "/sendVideo", "document": "/sendDocument"}[media_types[0]]
         request_shape = {
             "chat_id": chat_id,
             "caption": body,
@@ -196,20 +266,29 @@ def _build_preview_shape(post: CanonicalPost, account: Account) -> tuple[str, st
                 "alt_text": attachment.alt_text,
             },
         }
+        if media_types[0] == "video":
+            request_shape["supports_streaming"] = True
+            request_shape["file"]["mime_type"] = "video/mp4"
+            request_shape["file"]["filename"] = "<prepared-video.mp4>"
         return ("bot_upload_media", method, request_shape, notes)
 
     media = []
     for index, attachment in enumerate(attachments):
         entry = {
-            "type": "photo",
+            "type": media_types[index],
             "media": f"attach://file{index}",
             "filename": Path(attachment.storage_path).name,
             "mime_type": attachment.mime_type,
         }
+        if media_types[index] == "video":
+            entry["supports_streaming"] = True
+            entry["mime_type"] = "video/mp4"
+            entry["filename"] = "<prepared-video.mp4>"
         if index == 0 and body:
             entry["caption"] = body
         media.append(entry)
-    notes.append("Telegram multi-attachment publishing uses one media group and currently supports image albums only.")
+    if "document" in media_types:
+        notes.append("Telegram requires document albums to contain only documents; prepared images and videos are sent alongside documents in this album.")
     return (
         "bot_send_media_group",
         "/sendMediaGroup",
@@ -339,14 +418,18 @@ class TelegramDestinationAdapter(DestinationAdapter):
             issues.append(ValidationIssue(service="telegram", field="body", message="Telegram media captions are limited to 1024 characters."))
         if len(attachments) > 10:
             issues.append(ValidationIssue(service="telegram", field="media", message="Telegram media groups support up to 10 attachments."))
-        if len(attachments) > 1 and not all(attachment.mime_type.startswith("image/") for attachment in attachments):
-            issues.append(
-                ValidationIssue(
-                    service="telegram",
-                    field="media",
-                    message="Telegram multi-attachment publishing currently supports image albums only.",
+        for index, attachment in enumerate(attachments, start=1):
+            media_type = _attachment_media_type(attachment)
+            # Images and videos are compressed before uploading. Documents are
+            # preserved as files and must already fit the Bot API upload cap.
+            if media_type == "document" and _attachment_size_bytes(attachment) > TELEGRAM_FILE_MAX_BYTES:
+                issues.append(
+                    ValidationIssue(
+                        service="telegram",
+                        field="media",
+                        message=f"Telegram attachment {index} exceeds the 50 MB upload limit for documents.",
+                    )
                 )
-            )
         return issues
 
     def preview(
@@ -383,6 +466,7 @@ class TelegramDestinationAdapter(DestinationAdapter):
             raise ConfigurationError("Telegram bot token and channel ID are required.")
 
         attachments = service_attachments(post, account)
+        media_types = _attachment_media_types(attachments)
         body = service_body(post, account)
 
         if not attachments:
@@ -401,23 +485,23 @@ class TelegramDestinationAdapter(DestinationAdapter):
 
         if len(attachments) == 1:
             attachment = attachments[0]
-            method = "sendPhoto" if attachment.mime_type.startswith("image/") else "sendDocument"
+            media_type = media_types[0]
+            method = {"photo": "sendPhoto", "video": "sendVideo", "document": "sendDocument"}[media_type]
             data = {"chat_id": chat_id}
             if body:
                 data["caption"] = body
-            handles = []
-            try:
-                handle = Path(attachment.storage_path).open("rb")
-                handles.append(handle)
+            with ExitStack() as stack:
+                upload_path, upload_mime_type, video_metadata = stack.enter_context(_prepared_telegram_attachment(attachment))
+                handle = stack.enter_context(upload_path.open("rb"))
+                if media_type == "video":
+                    data.update(video_metadata)
                 message = _telegram_request(
                     bot_token,
                     method,
                     data=data,
-                    files={("photo" if method == "sendPhoto" else "document"): (Path(attachment.storage_path).name, handle, attachment.mime_type)},
+                    files={media_type: (upload_path.name, handle, upload_mime_type)},
+                    timeout=TELEGRAM_UPLOAD_TIMEOUT,
                 )
-            finally:
-                for handle in handles:
-                    handle.close()
             external_id = str(message["message_id"])
             return PublishResult(
                 service="telegram",
@@ -426,16 +510,17 @@ class TelegramDestinationAdapter(DestinationAdapter):
                 raw=message if isinstance(message, dict) else {"result": message},
             )
 
-        handles = []
         files: dict[str, Any] = {}
-        try:
+        with ExitStack() as stack:
             media = []
             for index, attachment in enumerate(attachments):
-                handle = Path(attachment.storage_path).open("rb")
-                handles.append(handle)
+                upload_path, upload_mime_type, video_metadata = stack.enter_context(_prepared_telegram_attachment(attachment))
+                handle = stack.enter_context(upload_path.open("rb"))
                 field_name = f"file{index}"
-                files[field_name] = (Path(attachment.storage_path).name, handle, attachment.mime_type)
-                item: dict[str, Any] = {"type": "photo", "media": f"attach://{field_name}"}
+                files[field_name] = (upload_path.name, handle, upload_mime_type)
+                item: dict[str, Any] = {"type": media_types[index], "media": f"attach://{field_name}"}
+                if media_types[index] == "video":
+                    item.update(video_metadata)
                 if index == 0 and body:
                     item["caption"] = body
                 media.append(item)
@@ -444,10 +529,8 @@ class TelegramDestinationAdapter(DestinationAdapter):
                 "sendMediaGroup",
                 data={"chat_id": chat_id, "media": json.dumps(media)},
                 files=files,
+                timeout=TELEGRAM_UPLOAD_TIMEOUT,
             )
-        finally:
-            for handle in handles:
-                handle.close()
 
         messages = list(result or [])
         if not messages:

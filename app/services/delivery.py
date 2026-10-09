@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import timedelta
 from uuid import uuid4
 
-from sqlalchemy import distinct, func, select
+from sqlalchemy import and_, distinct, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.adapters import get_destination_adapter_for_account, get_source_adapter_for_account, supports_source
@@ -17,6 +17,7 @@ from app.services.events import log_run_event
 from app.services.posts import (
     AUTORUN_IMPORT_DELIVERY_DISABLED_REASON,
     IMPORT_DELIVERY_SUPPRESSED_REASON_KEY,
+    MANUAL_RECOVERY_KEY,
     can_remove_post_media_after_delivery,
     get_or_create_sync_state,
     persona_max_retries,
@@ -24,6 +25,7 @@ from app.services.posts import (
     refresh_post_status,
     remove_post_media_files,
     sync_delivery_jobs,
+    upsert_account_post_refs,
     upsert_polled_post,
 )
 from app.services.storage import normalize_media_file
@@ -214,7 +216,13 @@ def enqueue_due_scheduled_posts(session: Session, *, run_id: str | None = None) 
             selectinload(CanonicalPost.persona),
         )
         .where(
-            CanonicalPost.origin_kind == "composer",
+            or_(
+                CanonicalPost.origin_kind == "composer",
+                and_(
+                    CanonicalPost.origin_kind == "account_import",
+                    CanonicalPost.metadata_json[MANUAL_RECOVERY_KEY].as_boolean().is_(True),
+                ),
+            ),
             CanonicalPost.status.in_(["scheduled", "queued"]),
             CanonicalPost.scheduled_for.is_not(None),
             CanonicalPost.scheduled_for <= now_utc(),
@@ -223,7 +231,7 @@ def enqueue_due_scheduled_posts(session: Session, *, run_id: str | None = None) 
     for post in session.scalars(stmt):
         post.status = "queued"
         for job in post.delivery_jobs:
-            if job.status in {"draft", "scheduled", "failed"} and job.target_account and job.target_account.is_enabled:
+            if job.status in {"draft", "scheduled"} and job.target_account and job.target_account.is_enabled:
                 job.status = "queued"
                 job.queued_at = now_utc()
         refresh_post_status(post)
@@ -378,7 +386,12 @@ def process_delivery_queue(
         if job.external_id:
             job.status = "posted"
             job.delivered_at = job.delivered_at or now_utc()
+            if target_account is not None:
+                upsert_account_post_refs(session, post, target_account, [
+                    ExternalPostRefPayload(external_id=job.external_id, external_url=job.external_url, observed_at=job.delivered_at),
+                ])
             refresh_post_status(post)
+            session.commit()
             if _all_delivery_jobs_posted(post) and can_remove_post_media_after_delivery(post):
                 remove_post_media_files(session, post)
             continue
@@ -417,7 +430,8 @@ def process_delivery_queue(
             job.status = "cancelled"
             refresh_post_status(post)
             continue
-        if post.origin_kind == "account_import" and trigger == "autorun" and not _autorun_import_delivery_enabled():
+        manual_recovery = bool((post.metadata_json or {}).get(MANUAL_RECOVERY_KEY))
+        if post.origin_kind == "account_import" and not manual_recovery and trigger == "autorun" and not _autorun_import_delivery_enabled():
             job.status = "skipped"
             job.last_error = "Skipped autorun delivery for an imported source post because source fan-out is disabled."
             job.last_error_class = "AutorunImportDeliveryDisabled"
@@ -445,7 +459,7 @@ def process_delivery_queue(
             )
             refresh_post_status(post)
             continue
-        if post.origin_kind == "account_import" and looks_like_historical_backfill(post, persona, post.origin_account):
+        if post.origin_kind == "account_import" and not manual_recovery and looks_like_historical_backfill(post, persona, post.origin_account):
             job.status = "cancelled"
             job.last_error = "Skipped historical backfill import to avoid reposting old content."
             post.last_error = job.last_error
@@ -548,14 +562,21 @@ def process_delivery_queue(
         job.last_attempt_at = now_utc()
         session.flush()
 
+        delivery_saved = False
         try:
             result = adapter.publish(session, post, persona, target_account, context=context)
-            normalized_response_payload = to_json_compatible(result.raw)
+            external_id = str(result.external_id or "").strip()
+            if not external_id:
+                raise ValueError("The destination returned no external post ID.")
+            try:
+                normalized_response_payload = to_json_compatible(result.raw)
+            except Exception as exc:
+                normalized_response_payload = {"serialization_error": exc.__class__.__name__}
             attempt.status = "posted"
             attempt.finished_at = now_utc()
             attempt.response_payload = normalized_response_payload if isinstance(normalized_response_payload, dict) else {"value": normalized_response_payload}
             job.status = "posted"
-            job.external_id = result.external_id
+            job.external_id = external_id
             job.external_url = result.external_url
             job.delivered_at = now_utc()
             job.last_error = None
@@ -567,37 +588,21 @@ def process_delivery_queue(
                 post.published_at = now_utc()
 
             external_refs = list(result.external_refs or [])
-            if not external_refs:
-                external_refs = [
+            if not any(str(ref.external_id or "").strip() == external_id for ref in external_refs):
+                external_refs.insert(0,
                     ExternalPostRefPayload(
-                        external_id=result.external_id,
+                        external_id=external_id,
                         external_url=result.external_url,
                         observed_at=now_utc(),
                     )
-                ]
-            for external_ref in external_refs:
-                ref = session.scalar(
-                    select(AccountPostRef).where(
-                        AccountPostRef.account_id == target_account.id,
-                        AccountPostRef.external_id == external_ref.external_id,
-                    )
                 )
-                if ref:
-                    ref.post_id = post.id
-                    ref.external_url = external_ref.external_url
-                    ref.observed_at = external_ref.observed_at or now_utc()
-                else:
-                    session.add(
-                        AccountPostRef(
-                            post_id=post.id,
-                            account_id=target_account.id,
-                            external_id=external_ref.external_id,
-                            external_url=external_ref.external_url,
-                            observed_at=external_ref.observed_at or now_utc(),
-                        )
-                    )
+            upsert_account_post_refs(session, post, target_account, external_refs)
 
             refresh_post_status(post)
+            # Publishing is an external side effect. Persist its ID and lookup
+            # refs before later cleanup/scheduler work can roll back the cycle.
+            session.commit()
+            delivery_saved = True
             post_preview = _log_post_preview(post)
             removed_media_count = (
                 remove_post_media_files(session, post)
@@ -624,6 +629,22 @@ def process_delivery_queue(
                 },
             )
         except Exception as exc:
+            if delivery_saved:
+                log_run_event(
+                    session,
+                    run_id=run_id,
+                    persona_id=persona.id,
+                    persona_name=persona.name,
+                    account_id=target_account.id,
+                    service=target_account.service,
+                    operation="publish",
+                    severity="warning",
+                    message=f"Published post {post.id}, but local follow-up failed: {exc}",
+                    post_id=post.id,
+                    delivery_job_id=job.id,
+                    metadata={"delivery_status": "posted", "external_id": job.external_id, "error_class": exc.__class__.__name__},
+                )
+                continue
             attempt.status = "failed"
             attempt.finished_at = now_utc()
             attempt.error_class = exc.__class__.__name__

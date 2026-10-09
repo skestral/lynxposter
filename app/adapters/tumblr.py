@@ -1,13 +1,21 @@
 from __future__ import annotations
 
+from contextlib import ExitStack
 from pathlib import Path
 
 from sqlalchemy.orm import Session
 
 from app.adapters.base import ConfigurationError, DestinationAdapter, get_account_credentials
-from app.adapters.common import is_video_attachment, service_attachments, service_body
+from app.adapters.common import is_image_attachment, is_video_attachment, service_attachments, service_body
 from app.domain import PublishPreview, PublishResult, ValidationIssue
 from app.models import Account, CanonicalPost, Persona
+from app.services.media_preparation import ImageLimits, prepare_image
+from app.services.video_preparation import VideoLimits, prepare_video
+
+
+# This adapter uses Tumblr's legacy /post upload endpoint.
+TUMBLR_IMAGE_LIMITS = ImageLimits(max_bytes=10_000_000, supported_mime_types=("image/jpeg", "image/png", "image/webp", "image/gif"))
+TUMBLR_VIDEO_LIMITS = VideoLimits(max_bytes=500_000_000, max_duration=600)
 
 
 class TumblrDestinationAdapter(DestinationAdapter):
@@ -18,6 +26,9 @@ class TumblrDestinationAdapter(DestinationAdapter):
         attachments = service_attachments(post, account)
         video_count = sum(1 for attachment in attachments if is_video_attachment(attachment))
         image_count = len(attachments) - video_count
+
+        if any(not is_image_attachment(attachment) and not is_video_attachment(attachment) for attachment in attachments):
+            issues.append(ValidationIssue(service="tumblr", field="media", message="Tumblr publishing supports image or video attachments."))
 
         if video_count > 1:
             issues.append(
@@ -107,15 +118,17 @@ class TumblrDestinationAdapter(DestinationAdapter):
         attachments = service_attachments(post, account)
         body = service_body(post, account)
         if attachments:
-            image_paths = [str(Path(attachment.storage_path)) for attachment in attachments if not is_video_attachment(attachment)]
-            video_path = next(
-                (str(Path(attachment.storage_path)) for attachment in attachments if is_video_attachment(attachment)),
-                None,
-            )
-            if video_path:
-                response = client.create_video(config["blog_name"], state="published", caption=body, data=video_path)
-            else:
-                response = client.create_photo(config["blog_name"], state="published", caption=body, data=image_paths)
+            with ExitStack() as stack:
+                video = next((attachment for attachment in attachments if is_video_attachment(attachment)), None)
+                if video is not None:
+                    prepared = stack.enter_context(prepare_video(Path(video.storage_path), limits=TUMBLR_VIDEO_LIMITS))
+                    response = client.create_video(config["blog_name"], state="published", caption=body, data=str(prepared.path))
+                else:
+                    image_paths = [
+                        str(stack.enter_context(prepare_image(Path(attachment.storage_path), limits=TUMBLR_IMAGE_LIMITS)).path)
+                        for attachment in attachments
+                    ]
+                    response = client.create_photo(config["blog_name"], state="published", caption=body, data=image_paths)
         else:
             response = client.create_text(config["blog_name"], state="published", title="", body=body)
         external_id = str(response.get("id"))

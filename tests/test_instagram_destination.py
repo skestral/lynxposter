@@ -155,7 +155,7 @@ def test_instagram_destination_validate_requires_https_public_base_url(session, 
     assert any("externally reachable HTTPS URL" in message for message in messages)
 
 
-def test_instagram_destination_validate_converts_imported_images_to_jpeg(session, monkeypatch, tmp_path):
+def test_instagram_destination_validate_accepts_imported_images_without_changing_them(session, monkeypatch, tmp_path):
     monkeypatch.setenv("APP_BASE_URL", "https://lynxposter.example.com")
     reload_settings()
     persona = _create_persona(session, slug="instagram-imported-image")
@@ -182,8 +182,9 @@ def test_instagram_destination_validate_converts_imported_images_to_jpeg(session
     issues = InstagramDestinationAdapter().validate(post, persona, account)
 
     assert issues == []
-    assert post.attachments[0].mime_type == "image/jpeg"
-    assert post.attachments[0].storage_path.endswith(".jpg")
+    assert post.attachments[0].mime_type == "image/png"
+    assert post.attachments[0].storage_path == str(image_path)
+    assert image_path.exists()
 
 
 def test_validate_instagram_account_login_captures_sessionid_and_settings(monkeypatch):
@@ -477,6 +478,14 @@ def test_instagram_destination_publish_album_uses_graph_children(session, monkey
     video_path = tmp_path / "clip-source.bin"
     _create_image(image_path, image_format="JPEG")
     video_path.write_bytes(b"video")
+
+    from contextlib import contextmanager
+
+    @contextmanager
+    def prepared_video(path, *, limits):
+        yield SimpleNamespace(path=path, mime_type="video/mp4", width=640, height=360, duration=5)
+
+    monkeypatch.setattr("app.adapters.instagram.prepare_video", prepared_video)
 
     post = create_scheduled_post(
         session,

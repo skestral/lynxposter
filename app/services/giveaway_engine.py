@@ -2404,12 +2404,18 @@ def _select_giveaway_pool_winners(campaign: GiveawayCampaign) -> None:
     campaign.last_error = "No qualifying giveaway entrants were found." if campaign.status == GIVEAWAY_STATUS_FAILED else None
 
 
+def _require_uncancelled_giveaway(campaign: GiveawayCampaign) -> None:
+    if campaign.status == "cancelled":
+        raise ValueError("Select a destination and save the post plan to resume this cancelled giveaway.")
+
+
 def recalculate_giveaway_entries(
     session: Session,
     campaign: GiveawayCampaign,
     *,
     run_id: str,
 ) -> GiveawayCampaign:
+    _require_uncancelled_giveaway(campaign)
     hydrate_channel_targets(campaign)
     for channel in campaign.channels:
         if channel.service == "instagram":
@@ -2454,6 +2460,7 @@ def approve_giveaway_entrant(
     note: str | None = None,
     reviewed_by: str | None = None,
 ) -> GiveawayCampaign:
+    _require_uncancelled_giveaway(campaign)
     channel, entrant = _find_campaign_entrant(campaign, entrant_id)
     state = dict(entrant.signal_state_json or {})
     clean_note = str(note or "").strip()
@@ -2496,6 +2503,7 @@ def clear_giveaway_entrant_approval(
     run_id: str,
     reviewed_by: str | None = None,
 ) -> GiveawayCampaign:
+    _require_uncancelled_giveaway(campaign)
     channel, entrant = _find_campaign_entrant(campaign, entrant_id)
     state = dict(entrant.signal_state_json or {})
     state.pop(MANUAL_REVIEW_SIGNAL_KEY, None)
@@ -2569,6 +2577,7 @@ def reopen_giveaway_campaign(
     giveaway_end_at: datetime,
     run_id: str,
 ) -> GiveawayCampaign:
+    _require_uncancelled_giveaway(campaign)
     new_end_at = normalize_datetime(giveaway_end_at)
     if new_end_at is None:
         raise ValueError("Choose a new giveaway end date and time.")
@@ -2741,6 +2750,7 @@ def scan_instagram_giveaway_channels(
     *,
     run_id: str,
 ) -> GiveawayCampaign:
+    _require_uncancelled_giveaway(campaign)
     hydrate_channel_targets(campaign)
     ready_channels = [
         channel

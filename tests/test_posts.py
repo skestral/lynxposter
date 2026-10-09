@@ -264,6 +264,7 @@ def test_update_scheduled_post_reorders_and_deletes_media_attachments(session, t
         ],
     )
     attachment_ids = {attachment.alt_text: attachment.id for attachment in post.attachments}
+    session.commit()
 
     monkeypatch.setattr(
         "app.services.storage.settings",
@@ -284,6 +285,23 @@ def test_update_scheduled_post_reorders_and_deletes_media_attachments(session, t
     attachments = sorted(updated.attachments, key=lambda item: item.sort_order)
     assert [attachment.id for attachment in attachments] == [attachment_ids["three"], attachment_ids["one"]]
     assert [attachment.sort_order for attachment in attachments] == [0, 1]
+    assert paths[0].exists()
+    assert paths[1].exists()
+    assert paths[2].exists()
+    session.rollback()
+    assert [attachment.id for attachment in sorted(post.attachments, key=lambda item: item.sort_order)] == [
+        attachment_ids["one"], attachment_ids["two"], attachment_ids["three"],
+    ]
+    assert all(path.exists() for path in paths)
+
+    update_scheduled_post(
+        session, post, ScheduledPostUpdate.model_validate({
+            "attachment_order": [attachment_ids["three"], attachment_ids["one"]],
+            "deleted_attachment_ids": [attachment_ids["two"]],
+        }),
+    )
+    assert paths[1].exists()
+    session.commit()
     assert paths[0].exists()
     assert not paths[1].exists()
     assert paths[2].exists()
@@ -409,7 +427,7 @@ def test_destination_media_override_selects_ordered_attachment_subset(session, t
     assert [attachment.id for attachment in service_attachments(updated, discord)] == [attachments[0].id, attachments[1].id]
 
 
-def test_destination_media_override_rejects_deleted_attachment(session, tmp_path, monkeypatch):
+def test_destination_media_override_replaces_deleted_selection_and_rejects_unknown_attachment(session, tmp_path, monkeypatch):
     persona = _create_persona(session, slug="destination-media-deleted")
     mastodon = _create_account(session, persona, service="mastodon", label="Mastodon", source_enabled=False, destination_enabled=True)
     uploads_dir = tmp_path / "uploads"
@@ -443,17 +461,27 @@ def test_destination_media_override_rejects_deleted_attachment(session, tmp_path
         replace(storage_settings, uploads_dir=uploads_dir, imported_media_dir=tmp_path / "imported"),
     )
 
+    image_three = uploads_dir / "three.jpg"
+    image_three.write_bytes(b"three")
+    updated = update_scheduled_post(
+        session,
+        post,
+        ScheduledPostUpdate.model_validate({
+            "publish_overrides_json": {mastodon.id: {"attachment_ids": [attachment_ids["Two"]]}},
+            "deleted_attachment_ids": [attachment_ids["Two"]],
+        }),
+        [MediaItem(storage_path=image_three, mime_type="image/jpeg", alt_text="Three", size_bytes=5, checksum="three", sort_order=0)],
+    )
+    replacement = next(attachment for attachment in updated.attachments if attachment.alt_text == "Three")
+    assert updated.publish_overrides_json[mastodon.id]["attachment_ids"] == [replacement.id]
+    assert [attachment.id for attachment in service_attachments(updated, mastodon)] == [replacement.id]
+    assert {attachment.id for attachment in updated.attachments} == {attachment_ids["One"], replacement.id}
+    session.commit()
+
     with pytest.raises(ValueError, match="Destination media overrides"):
-        update_scheduled_post(
-            session,
-            post,
-            ScheduledPostUpdate.model_validate(
-                {
-                    "publish_overrides_json": {mastodon.id: {"attachment_ids": [attachment_ids["Two"]]}},
-                    "deleted_attachment_ids": [attachment_ids["Two"]],
-                }
-            ),
-        )
+        update_scheduled_post(session, updated, ScheduledPostUpdate.model_validate({
+            "publish_overrides_json": {mastodon.id: {"attachment_ids": ["unknown-attachment"]}},
+        }))
 
 
 def test_delete_scheduled_post_removes_draft_and_children(session, tmp_path, monkeypatch):

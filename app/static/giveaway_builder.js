@@ -336,6 +336,7 @@
     }
 
     const initial = initialValue || {};
+    const savedChannels = [...(initial.inactive_channels || []), ...(initial.channels || [])];
     const state = {
       giveaway_end_at: toDatetimeLocalValue(initial.giveaway_end_at),
       pool_mode: initial.pool_mode === "separate" ? "separate" : "combined",
@@ -413,7 +414,11 @@
       const accounts = currentAccounts();
       if (!accounts[service]?.length) return;
       if (state.channels.some((channel) => channel.service === service)) return;
-      state.channels.push(normalizeChannel(accounts, {service, rules: defaultRuleTree(service)}));
+      const savedChannel = savedChannels.find((channel) => channel.service === service
+        && accounts[service].some((account) => account.id === channel.account_id));
+      state.channels.push(normalizeChannel(accounts, savedChannel
+        ? {...savedChannel, rules: withIds(savedChannel.rules || defaultRuleTree(service))}
+        : {service, rules: defaultRuleTree(service)}));
       render();
     }
 
@@ -635,7 +640,7 @@
       rules: withIds(channel.rules || defaultRuleTree(channel.service)),
     }));
     normalizeState();
-    if (!state.channels.length) {
+    if (!state.channels.length && !Array.isArray(initial.channels)) {
       state.channels = defaultChannels();
       normalizeState();
     }

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -136,6 +136,7 @@ from app.services.posts import (
     create_scheduled_post,
     delete_scheduled_post,
     get_post,
+    is_recoverable_post,
     list_scheduled_posts,
     schedule_post_now,
     scheduled_post_delivery_breakdown,
@@ -143,8 +144,9 @@ from app.services.posts import (
     update_scheduled_post,
 )
 from app.services.scheduler import CrossposterScheduler
+from app.services.delivery_lock import DeliveryBusyError, edit_guard, publishing_guard
 from app.services.sandbox import build_sandbox_preview
-from app.services.storage import public_instagram_media_filename, store_upload
+from app.services.storage import delete_managed_media_file, prepared_instagram_media_path, public_instagram_media_filename, store_upload
 from app.services.ui import (
     ui_mode_label,
     ui_theme_catalog_for_client,
@@ -312,7 +314,21 @@ def _alert_dispatcher(request: Request) -> AlertDispatcher:
     return AlertDispatcher()
 
 
+@contextmanager
+def _post_edit_guard():
+    try:
+        with edit_guard():
+            yield
+    except DeliveryBusyError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
 def _process_send_now_delivery(post_id: str, run_id: str, alerts: AlertDispatcher) -> None:
+    with publishing_guard():
+        _process_send_now_delivery_locked(post_id, run_id, alerts)
+
+
+def _process_send_now_delivery_locked(post_id: str, run_id: str, alerts: AlertDispatcher) -> None:
     try:
         with db_session() as session:
             process_delivery_queue(session, alerts, run_id=run_id, post_id=post_id)
@@ -442,6 +458,7 @@ def _sandbox_seed_from_post(post: CanonicalPost) -> dict[str, Any]:
         "metadata_json": dict(post.metadata_json or {}),
         "attachment_inputs": [
             {
+                "id": attachment.id,
                 "filename": Path(attachment.storage_path).name,
                 "mime_type": attachment.mime_type,
                 "alt_text": attachment.alt_text,
@@ -493,17 +510,19 @@ async def _read_account_payload(request: Request) -> dict[str, Any]:
     if request.headers.get("content-type", "").startswith("application/json"):
         return await request.json()
     form = await request.form()
-    return {
+    payload = {
         "service": form.get("service"),
         "label": form.get("label"),
         "handle_or_identifier": form.get("handle_or_identifier", ""),
         "is_enabled": str(form.get("is_enabled", "true")).lower() in {"1", "true", "on", "yes"},
         "source_enabled": str(form.get("source_enabled", "false")).lower() in {"1", "true", "on", "yes"},
         "destination_enabled": str(form.get("destination_enabled", "false")).lower() in {"1", "true", "on", "yes"},
-        "credentials_json": _parse_json_value(form.get("credentials_json"), {}),
         "source_settings_json": _parse_json_value(form.get("source_settings_json"), {}),
         "publish_settings_json": _parse_json_value(form.get("publish_settings_json"), {}),
     }
+    if "credentials_json" in form:
+        payload["credentials_json"] = _parse_json_value(form.get("credentials_json"), {})
+    return payload
 
 
 async def _read_routes_payload(request: Request) -> dict[str, Any]:
@@ -797,6 +816,31 @@ def public_instagram_media(attachment_id: str, filename: str):
 @app.head("/media/instagram/{attachment_id}/{filename}", include_in_schema=False)
 def public_instagram_media_head(attachment_id: str, filename: str):
     return _public_instagram_media_response(attachment_id, filename, head=True)
+
+
+def _prepared_instagram_media_response(attachment_id: str, token: str, filename: str, *, head: bool = False):
+    with db_session() as session:
+        attachment = session.get(MediaAttachment, attachment_id)
+        if attachment is None:
+            raise HTTPException(status_code=404, detail="Attachment not found.")
+        file_path = prepared_instagram_media_path(attachment_id, token, filename, uploads_dir=settings.uploads_dir)
+        if file_path is None or not file_path.is_file():
+            raise HTTPException(status_code=404, detail="Prepared attachment not found.")
+        media_type = "image/jpeg" if filename == "image.jpg" else "video/mp4"
+        headers = {"Cache-Control": "no-store"}
+        if head:
+            return Response(media_type=media_type, headers={**headers, "Content-Length": str(file_path.stat().st_size)})
+        return FileResponse(path=file_path, media_type=media_type, headers=headers)
+
+
+@app.get("/media/instagram/{attachment_id}/prepared/{token}/{filename}")
+def public_prepared_instagram_media(attachment_id: str, token: str, filename: str):
+    return _prepared_instagram_media_response(attachment_id, token, filename)
+
+
+@app.head("/media/instagram/{attachment_id}/prepared/{token}/{filename}", include_in_schema=False)
+def public_prepared_instagram_media_head(attachment_id: str, token: str, filename: str):
+    return _prepared_instagram_media_response(attachment_id, token, filename, head=True)
 
 
 @app.get("/robots.txt", include_in_schema=False)
@@ -1159,11 +1203,15 @@ def scheduled_post_detail_page(post_id: str, request: Request) -> HTMLResponse:
         owner_user_id = _owner_user_id_for_principal(principal)
         access_user_id = _access_user_id_for_principal(principal)
         post = get_post(session, post_id, owner_user_id=owner_user_id, access_user_id=access_user_id)
-        if not post or post.origin_kind != "composer":
+        if not is_recoverable_post(post):
             raise HTTPException(status_code=404, detail="Scheduled post not found.")
         persona = get_persona(session, post.persona_id, owner_user_id=owner_user_id, access_user_id=access_user_id)
         if not persona:
             raise HTTPException(status_code=404, detail="Persona not found.")
+        target_accounts = {account.id: account for account in persona_destination_accounts(persona)}
+        for job in post.delivery_jobs:
+            if job.status == "posted":
+                target_accounts[job.target_account_id] = job.target_account
         return templates.TemplateResponse(
             name="scheduled_post_detail.html",
             request=request,
@@ -1171,7 +1219,7 @@ def scheduled_post_detail_page(post_id: str, request: Request) -> HTMLResponse:
                 request,
                 post=_serialize_post(post),
                 persona=persona,
-                accounts=[_serialize_account(account).model_dump(mode="json") for account in persona_destination_accounts(persona)],
+                accounts=[_serialize_account(account).model_dump(mode="json") for account in target_accounts.values()],
                 service_post_guidance=service_composer_constraints_context(),
             ),
         )
@@ -1751,9 +1799,11 @@ async def api_create_account(persona_id: str, request: Request) -> AccountRead:
     raw_payload = await _read_account_payload(request)
     payload = AccountCreate.model_validate(raw_payload)
     with db_session() as session:
-        persona = get_persona(session, persona_id, owner_user_id=_owner_user_id_for_principal(principal))
+        persona = get_persona(session, persona_id, **_persona_access_kwargs(principal, min_permission="edit"))
         if not persona:
             raise HTTPException(status_code=404, detail="Persona not found.")
+        if not user_can_manage_persona_access(persona, principal.user_id, is_admin=principal.is_admin):
+            raise HTTPException(status_code=403, detail="Only the persona owner or an administrator can add connections.")
         try:
             account = create_account(session, persona, payload.model_dump())
         except ValueError as exc:
@@ -1767,17 +1817,21 @@ async def api_update_account(persona_id: str, account_id: str, request: Request)
     raw_payload = await _read_account_payload(request)
     payload = AccountUpdate.model_validate(raw_payload)
     with db_session() as session:
-        persona = get_persona(session, persona_id, owner_user_id=_owner_user_id_for_principal(principal))
+        persona = get_persona(session, persona_id, **_persona_access_kwargs(principal, min_permission="edit"))
         if not persona:
             raise HTTPException(status_code=404, detail="Persona not found.")
         account = get_account(session, account_id)
         if not account or account.persona_id != persona_id:
             raise HTTPException(status_code=404, detail="Account not found.")
+        can_manage_credentials = user_can_manage_persona_access(persona, principal.user_id, is_admin=principal.is_admin)
+        payload_data = payload.model_dump(exclude_unset=True)
+        if not can_manage_credentials and "credentials_json" in payload_data:
+            raise HTTPException(status_code=403, detail="Only the persona owner or an administrator can change connection credentials.")
         try:
-            updated = update_account(session, persona, account, payload.model_dump(exclude_unset=True))
+            updated = update_account(session, persona, account, payload_data)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        return _serialize_account(updated)
+        return _serialize_account(updated, include_credentials=can_manage_credentials)
 
 
 @app.post("/personas/{persona_id}/accounts/{account_id}/instagram-login/validate")
@@ -1788,12 +1842,14 @@ async def api_validate_instagram_account_login(persona_id: str, account_id: str,
     run_id = new_run_id()
 
     with db_session() as session:
-        persona = get_persona(session, persona_id, owner_user_id=_owner_user_id_for_principal(principal))
+        persona = get_persona(session, persona_id, **_persona_access_kwargs(principal, min_permission="edit"))
         if not persona:
             raise HTTPException(status_code=404, detail="Persona not found.")
         account = get_account(session, account_id)
         if not account or account.persona_id != persona_id:
             raise HTTPException(status_code=404, detail="Account not found.")
+        if not user_can_manage_persona_access(persona, principal.user_id, is_admin=principal.is_admin):
+            raise HTTPException(status_code=403, detail="Only the persona owner or an administrator can validate connection credentials.")
         if account.service != "instagram":
             raise HTTPException(status_code=400, detail="Instagram login validation is only available for Instagram accounts.")
 
@@ -1849,12 +1905,14 @@ async def api_validate_instagram_account_login(persona_id: str, account_id: str,
 def api_delete_account(persona_id: str, account_id: str, request: Request) -> dict[str, Any]:
     principal = require_api_access(request, role="user")
     with db_session() as session:
-        persona = get_persona(session, persona_id, owner_user_id=_owner_user_id_for_principal(principal))
+        persona = get_persona(session, persona_id, **_persona_access_kwargs(principal, min_permission="edit"))
         if not persona:
             raise HTTPException(status_code=404, detail="Persona not found.")
         account = get_account(session, account_id)
         if not account or account.persona_id != persona_id:
             raise HTTPException(status_code=404, detail="Account not found.")
+        if not user_can_manage_persona_access(persona, principal.user_id, is_admin=principal.is_admin):
+            raise HTTPException(status_code=403, detail="Only the persona owner or an administrator can delete connections.")
         try:
             delete_account(session, persona, account)
         except ValueError as exc:
@@ -1866,12 +1924,14 @@ def api_delete_account(persona_id: str, account_id: str, request: Request) -> di
 def api_record_instagram_token_refresh(persona_id: str, account_id: str, request: Request) -> AccountRead:
     principal = require_api_access(request, role="user")
     with db_session() as session:
-        persona = get_persona(session, persona_id, owner_user_id=_owner_user_id_for_principal(principal))
+        persona = get_persona(session, persona_id, **_persona_access_kwargs(principal, min_permission="edit"))
         if not persona:
             raise HTTPException(status_code=404, detail="Persona not found.")
         account = get_account(session, account_id)
         if not account or account.persona_id != persona_id:
             raise HTTPException(status_code=404, detail="Account not found.")
+        if not user_can_manage_persona_access(persona, principal.user_id, is_admin=principal.is_admin):
+            raise HTTPException(status_code=403, detail="Only the persona owner or an administrator can update connection credentials.")
         try:
             updated = record_account_token_refresh(session, persona, account)
         except ValueError as exc:
@@ -1941,7 +2001,7 @@ def api_scheduled_post_detail(post_id: str, request: Request) -> ScheduledPostRe
     principal = require_api_access(request, role="user")
     with db_session() as session:
         post = get_post(session, post_id, **_persona_access_kwargs(principal))
-        if not post or post.origin_kind != "composer":
+        if not is_recoverable_post(post):
             raise HTTPException(status_code=404, detail="Scheduled post not found.")
         return _serialize_post(post)
 
@@ -1959,32 +2019,49 @@ def api_scheduled_post_giveaway(post_id: str, request: Request):
 
 
 @app.put("/scheduled-posts/{post_id}")
-async def api_update_scheduled_post(post_id: str, request: Request) -> ScheduledPostRead:
+async def api_update_scheduled_post(post_id: str, request: Request, background_tasks: BackgroundTasks, send_now: bool = False) -> ScheduledPostRead:
     principal = require_api_access(request, role="user")
     raw_payload, uploads, alt_texts = await _read_scheduled_post_payload(request)
     payload = ScheduledPostUpdate.model_validate(raw_payload)
     media_items = []
-    with db_session() as session:
-        post = get_post(session, post_id, **_persona_access_kwargs(principal, min_permission="edit"))
-        if not post or post.origin_kind != "composer":
-            raise HTTPException(status_code=404, detail="Scheduled post not found.")
-        next_sort_order = len(post.attachments)
+    saved = False
+    try:
+        with db_session() as session:
+            post = get_post(session, post_id, **_persona_access_kwargs(principal, min_permission="edit"))
+            if not is_recoverable_post(post):
+                raise HTTPException(status_code=404, detail="Scheduled post not found.")
+            next_sort_order = len(post.attachments)
         for index, upload in enumerate(uploads):
             alt_text = alt_texts[index] if index < len(alt_texts) else ""
             media_items.append(await store_upload(upload, alt_text=alt_text, sort_order=next_sort_order + index))
-    with db_session() as session:
-        post = get_post(session, post_id, **_persona_access_kwargs(principal, min_permission="edit"))
-        if not post or post.origin_kind != "composer":
-            raise HTTPException(status_code=404, detail="Scheduled post not found.")
-        try:
+        # No awaits while this guard is held: publishing cannot start between
+        # saving replacement media and committing the explicit retry plan.
+        with edit_guard(), db_session() as session:
+            post = get_post(session, post_id, **_persona_access_kwargs(principal, min_permission="edit"))
+            if not is_recoverable_post(post):
+                raise HTTPException(status_code=404, detail="Scheduled post not found.")
+            if send_now:
+                payload = payload.model_copy(update={"status": "draft"})
             updated = update_scheduled_post(session, post, payload, media_items)
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            if send_now:
+                updated = schedule_post_now(session, updated)
+            response = _serialize_post(updated)
+        saved = True
         publish_live_update(
             LIVE_UPDATE_TOPIC_SCHEDULED_POSTS,
             LIVE_UPDATE_TOPIC_DASHBOARD,
         )
-        return _serialize_post(updated)
+        if send_now:
+            background_tasks.add_task(_process_send_now_delivery, post_id, new_run_id(), _alert_dispatcher(request))
+        return response
+    except DeliveryBusyError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        if not saved:
+            for item in media_items:
+                delete_managed_media_file(item.storage_path)
 
 
 @app.delete("/scheduled-posts/{post_id}")
@@ -2134,11 +2211,14 @@ def api_recalculate_giveaway(post_id: str, request: Request):
         post = get_post(session, post_id, **_persona_access_kwargs(principal, min_permission="edit"))
         if not post or post.origin_kind != "composer" or post.giveaway_campaign is None:
             raise HTTPException(status_code=404, detail="Giveaway not found.")
-        updated = recalculate_giveaway_entries(
-            session,
-            post.giveaway_campaign,
-            run_id=new_run_id(),
-        )
+        try:
+            updated = recalculate_giveaway_entries(
+                session,
+                post.giveaway_campaign,
+                run_id=new_run_id(),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         publish_live_update(
             LIVE_UPDATE_TOPIC_SCHEDULED_POSTS,
             LIVE_UPDATE_TOPIC_DASHBOARD,
@@ -2154,12 +2234,15 @@ def api_rerun_giveaway_raffle(post_id: str, request: Request):
         post = get_post(session, post_id, **_persona_access_kwargs(principal, min_permission="edit"))
         if not post or post.origin_kind != "composer" or post.giveaway_campaign is None:
             raise HTTPException(status_code=404, detail="Giveaway not found.")
-        updated = rerun_giveaway_raffle(
-            session,
-            post.giveaway_campaign,
-            _alert_dispatcher(request),
-            run_id=new_run_id(),
-        )
+        try:
+            updated = rerun_giveaway_raffle(
+                session,
+                post.giveaway_campaign,
+                _alert_dispatcher(request),
+                run_id=new_run_id(),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         publish_live_update(
             LIVE_UPDATE_TOPIC_SCHEDULED_POSTS,
             LIVE_UPDATE_TOPIC_DASHBOARD,
@@ -2230,9 +2313,9 @@ def api_scan_instagram_giveaway(post_id: str, request: Request):
 @app.post("/scheduled-posts/{post_id}/send-now")
 def api_send_now(post_id: str, request: Request, background_tasks: BackgroundTasks) -> ScheduledPostRead:
     principal = require_api_access(request, role="user")
-    with db_session() as session:
+    with _post_edit_guard(), db_session() as session:
         post = get_post(session, post_id, **_persona_access_kwargs(principal, min_permission="edit"))
-        if not post or post.origin_kind != "composer":
+        if not is_recoverable_post(post):
             raise HTTPException(status_code=404, detail="Scheduled post not found.")
         try:
             run_id = new_run_id()

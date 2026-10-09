@@ -326,6 +326,8 @@ function attachmentSnapshot(files) {
     videos: videos.length,
     others: others.length,
     imageMimeTypes: images.map((item) => String(item.type || "").toLowerCase()).filter(Boolean),
+    imageSizes: images.map((item) => Number(item.size || 0)),
+    videoSizes: videos.map((item) => Number(item.size || 0)),
   };
 }
 
@@ -361,6 +363,7 @@ function describeServiceGuidance(rule) {
   }
   if (rule.multi_attachment_images_only) parts.push("image albums only for multi-attachment posts");
   if (rule.allowed_image_mime_types?.length) parts.push("JPEG images only");
+  parts.push(...window.lynxposterComposerMedia.limitSummary(rule));
   if (!parts.length && rule.notes?.length) return rule.notes[0];
   return parts.join(" • ");
 }
@@ -369,9 +372,9 @@ function evaluateServiceGuidance(rule, bodyText, snapshot) {
   const issues = [];
   const lines = [];
   const activeBodyLimit = snapshot.total > 0 && rule?.body_limit_with_media != null ? rule.body_limit_with_media : rule?.body_limit;
-  const bodyLength = bodyText.length;
+  const bodyLength = window.lynxposterComposerText.length(bodyText, rule?.body_length_unit);
 
-  lines.push(activeBodyLimit != null ? `Body: ${bodyLength}/${activeBodyLimit} characters` : `Body: ${bodyLength} characters`);
+  lines.push(bodyLength == null ? "Body length will be checked when saved." : (activeBodyLimit != null ? `Body: ${bodyLength}/${activeBodyLimit} characters` : `Body: ${bodyLength} characters`));
   lines.push(`Media: ${describeAttachmentSnapshot(snapshot)}`);
 
   if (!rule) {
@@ -387,8 +390,11 @@ function evaluateServiceGuidance(rule, bodyText, snapshot) {
   if (rule.requires_media && snapshot.total === 0) {
     issues.push("Needs image or video media.");
   }
-  if (activeBodyLimit != null && bodyLength > activeBodyLimit) {
+  if (activeBodyLimit != null && bodyLength != null && bodyLength > activeBodyLimit) {
     issues.push(`Body exceeds the current ${activeBodyLimit}-character limit.`);
+  }
+  if (rule.max_body_bytes != null && window.lynxposterComposerText.utf8Bytes(bodyText) > rule.max_body_bytes) {
+    issues.push(`Body exceeds the current ${rule.max_body_bytes}-byte limit.`);
   }
   if (rule.max_attachments != null && snapshot.total > rule.max_attachments) {
     issues.push(`Attachment count exceeds the ${rule.max_attachments}-attachment limit.`);
@@ -420,12 +426,13 @@ function evaluateServiceGuidance(rule, bodyText, snapshot) {
   }
 
   if (!issues.length) {
-    const okLines = ["Current post fits this service's known app limits."];
+    const okLines = ["Text and attachment selection fit this service's known app limits. Media is checked and prepared when publishing."];
+    okLines.push(...window.lynxposterComposerMedia.preparationNotices(rule, snapshot));
     if (rule.notes?.length) okLines.push(...rule.notes);
     return {tone: "ok", lines: lines.concat(okLines)};
   }
 
-  return {tone: "danger", lines: lines.concat(issues)};
+  return {tone: "danger", lines: lines.concat(issues, window.lynxposterComposerMedia.preparationNotices(rule, snapshot), rule.notes || [])};
 }
 
 function renderGuidanceLines(container, lines, tone) {
@@ -524,15 +531,7 @@ function refreshGiveawayState() {
 }
 
 function formatFileSize(bytes) {
-  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
-  const units = ["B", "KB", "MB", "GB"];
-  let value = bytes;
-  let unitIndex = 0;
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024;
-    unitIndex += 1;
-  }
-  return `${value.toFixed(value >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+  return window.lynxposterComposerMedia.fileSize(bytes);
 }
 
 function cleanupUploadPreviewUrls() {
@@ -602,7 +601,7 @@ function renderUploadPreviews() {
         </div>
         <div class="composer-media-copy">
           <div class="fw-semibold text-truncate">${escapeHtml(file.name)}</div>
-          <div class="small text-secondary">${escapeHtml(file.type || "Unknown type")} • ${formatFileSize(file.size)}</div>
+          <div class="small text-secondary">${escapeHtml(file.type || "Unknown type")} • Original: ${formatFileSize(file.size)}</div>
           <label class="form-label small-muted mt-2 mb-1" for="upload-alt-${index}">Alt text</label>
           <textarea
             class="form-control form-control-sm upload-alt-input"
