@@ -138,13 +138,24 @@ The Settings page currently lets you:
 
 ## Versioning
 
-LynxPoster reads the visible app version from `VERSION`. To increment the patch version automatically with each normal commit, enable the repo hooks once per checkout:
+LynxPoster uses `VERSION` as a release checkpoint and advances the patch number for each subsequent commit on the branch's first-parent history. Rebuilding the same commit keeps the same version. This also covers commits made through GitHub or with local hooks bypassed. Full Git history is required when calculating build versions; source archives without Git use `VERSION` directly.
+
+Enable the repo hook once per development checkout to include the next patch number in each normal commit:
 
 ```bash
-git config core.hooksPath .githooks
+git config --local core.hooksPath .githooks
 ```
 
-After that, committing staged changes bumps `VERSION` and includes the bump in the same commit. To intentionally skip the bump for one commit:
+The hook uses the checkout's Python virtual environment when available and requires Python. It preserves an explicitly staged `VERSION` change and rejects unstaged edits to that file. To start a new minor or major release, edit and stage `VERSION`, for example `0.2.0`.
+
+Inspect the current version or the next commit's patch number without changing files:
+
+```bash
+python app/version.py --print
+python app/version.py --next
+```
+
+To skip writing `VERSION` for one commit, set the following flag. The calculated build version still advances for that commit:
 
 ```bash
 LYNXPOSTER_SKIP_VERSION_BUMP=1 git commit -m "Update docs"
@@ -183,6 +194,8 @@ For the full Linux and Docker deployment guide, including ports, environment var
   Default: `3.12-slim`
 - `LYNXPOSTER_PYTHON_VERSION`
   Compose-only override for the Docker build arg. Default: `3.12-slim`
+- `APP_VERSION`
+  Resolved app version. Pass `python app/version.py --print` at build time so commits made without hooks are included. GitHub Actions supplies this automatically.
 - `APP_GIT_SHA`
   Commit SHA shown in the app. Pass this at build time because `.git` is not copied into the image.
 
@@ -199,7 +212,7 @@ For the full Linux and Docker deployment guide, including ports, environment var
 - `APP_ENV_FILE`
   Container default: `/data/config/.env`
 - `APP_VERSION`
-  Optional override for the release version shown in the app. Default: the value in `VERSION`.
+  Optional explicit override for the version shown in the app. Otherwise the app uses its baked `BUILD_VERSION`, Git history, or `VERSION`, in that order. Leave this unset in runtime configuration to follow automatic versioning.
 
 ### Docker Compose
 
@@ -218,10 +231,18 @@ docker compose up --build -d
 
 If you need to override the Python base image when using Compose, set `LYNXPOSTER_PYTHON_VERSION`, not the generic host `PYTHON_VERSION`.
 
-The app footer and `/version` endpoint show the deployed version and short commit hash. For Docker Compose builds, pass the current commit explicitly:
+The app footer and `/version` endpoint show the deployed version and short commit hash. Docker images contain both values because `.git` is excluded. For Docker Compose builds, pass the resolved version and current commit explicitly:
 
 ```bash
-APP_GIT_SHA="$(git rev-parse HEAD)" docker compose up --build -d
+APP_VERSION="$(python app/version.py --print)" APP_GIT_SHA="$(git rev-parse HEAD)" docker compose up --build -d
+```
+
+In PowerShell:
+
+```powershell
+$env:APP_VERSION = python app/version.py --print
+$env:APP_GIT_SHA = git rev-parse HEAD
+docker compose up --build -d
 ```
 
 That value must be present in the shell that starts the build. The app's runtime `docker/config/.env` file is loaded after the image exists, so it cannot fill in the Docker build arg by itself. If your deploy runner already exposes `GITHUB_SHA` or `COMMIT_SHA`, Compose will use that automatically when `APP_GIT_SHA` is not set.
@@ -267,6 +288,8 @@ docker compose up --build -d
 ```bash
 docker build \
   --build-arg PYTHON_VERSION=3.12-slim \
+  --build-arg APP_VERSION="$(python app/version.py --print)" \
+  --build-arg APP_GIT_SHA="$(git rev-parse HEAD)" \
   -t lynxposter:latest .
 
 docker run -d \

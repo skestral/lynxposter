@@ -119,17 +119,36 @@ If you use host bind mounts on Linux, make sure the mounted directory is writabl
 
 | Variable | Default | Purpose |
 |---|---|---|
+| `APP_VERSION` | `VERSION` | Resolved build version; pass the version CLI output so hookless commits also advance the patch number |
 | `APP_GIT_SHA` | `unknown` | Commit SHA baked into the Docker image and shown in the footer and `/version` endpoint |
 | `GITHUB_SHA` | unset | Used by Compose as a fallback build SHA when `APP_GIT_SHA` is not set |
 | `COMMIT_SHA` | unset | Used by Compose as a fallback build SHA when `APP_GIT_SHA` and `GITHUB_SHA` are not set |
 
-Pass `APP_GIT_SHA` from the shell that runs the build:
+Pass the resolved version and commit from the shell that runs the build. Use a checkout with full Git history:
 
 ```bash
-APP_GIT_SHA="$(git rev-parse HEAD)" docker compose up --build -d
+APP_VERSION="$(python3 app/version.py --print)" APP_GIT_SHA="$(git rev-parse HEAD)" docker compose up --build -d
 ```
 
-The app also reads `BUILD_SHA` inside the image, which lets production keep showing the right commit even though `.git` is not copied into the container.
+The image stores `BUILD_VERSION` and `BUILD_SHA`, which keep the footer and `/version` accurate without copying `.git` into the container. GitHub Actions fetches full history and supplies both values automatically. Leave runtime version overrides unset to use the built version.
+
+### Updating an existing installation
+
+Git updates and container restarts do not replace code already copied into an image. For the repository's Compose deployment, run from its existing checkout:
+
+```bash
+git pull --ff-only
+APP_VERSION="$(python3 app/version.py --print)" APP_GIT_SHA="$(git rev-parse HEAD)" docker compose up --build --force-recreate --no-deps -d lynxposter
+curl -fsS https://your-lynxposter-host/version
+```
+
+Keep the existing data mounts and configuration. The `/version` response should identify the commit just built and its calculated patch version. Rebuilding the same commit keeps the version unchanged.
+
+For deployments using published images, the Docker workflow publishes `ghcr.io/skestral/lynxposter:main`, `:latest`, and a `:sha-<short-commit>` tag for default-branch builds. It bakes the calculated version and full commit into the image. Wait for a successful build of the intended commit, then pull and recreate the service using that image in the installation's existing Compose/Portainer stack. Pulling an image without recreating the container leaves the old process running.
+
+If GitHub shows the Docker workflow as disabled due to inactivity, re-enable it in Actions before running a build. The workflow supports **Run workflow** on the default branch. A push to a disabled workflow does not produce a new image.
+
+After updating, verify `/version` and the footer before retrying a failed post through **Save and Retry Unsent**. Successful destinations stay locked.
 
 ### Scheduler
 

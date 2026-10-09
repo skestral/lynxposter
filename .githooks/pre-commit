@@ -5,42 +5,30 @@ if [ "${LYNXPOSTER_SKIP_VERSION_BUMP:-}" = "1" ]; then
     exit 0
 fi
 
-staged_paths="$(git diff --cached --name-only --diff-filter=ACMRT || true)"
-staged_without_version="$(printf "%s\n" "$staged_paths" | grep -v '^VERSION$' || true)"
-if [ -z "$staged_without_version" ]; then
-    exit 0
-fi
+cd "$(git rev-parse --show-toplevel)"
 
 if ! git diff --quiet -- VERSION; then
     echo "VERSION has unstaged changes. Stage or discard them before committing." >&2
     exit 1
 fi
 
+if [ -x .venv/Scripts/python.exe ]; then
+    python=.venv/Scripts/python.exe
+elif [ -x .venv/bin/python ]; then
+    python=.venv/bin/python
+elif command -v python3 >/dev/null 2>&1; then
+    python=python3
+else
+    python=python
+fi
+
+# Preserve a manual release or a bump staged by an earlier failed commit.
 if ! git diff --cached --quiet -- VERSION; then
+    "$python" app/version.py --print >/dev/null
     exit 0
 fi
 
-current="$(tr -d '[:space:]' < VERSION)"
-IFS=.
-set -- $current
-IFS=' '
-
-if [ "$#" -ne 3 ]; then
-    echo "VERSION must use major.minor.patch format, got: $current" >&2
-    exit 1
-fi
-
-major="$1"
-minor="$2"
-patch="$3"
-case "$major.$minor.$patch" in
-    *[!0-9.]*)
-        echo "VERSION must use numeric major.minor.patch format, got: $current" >&2
-        exit 1
-        ;;
-esac
-
-patch=$((patch + 1))
-printf "%s.%s.%s\n" "$major" "$minor" "$patch" > VERSION
+next_version="$("$python" app/version.py --next)"
+printf "%s\n" "$next_version" > VERSION
 git add VERSION
-echo "Bumped LynxPoster version to $major.$minor.$patch"
+echo "Bumped LynxPoster version to $next_version"

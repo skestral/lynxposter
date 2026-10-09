@@ -3,6 +3,7 @@
 ARG PYTHON_VERSION=3.12-slim
 FROM python:${PYTHON_VERSION}
 
+ARG APP_VERSION
 ARG APP_GIT_SHA=unknown
 
 LABEL org.opencontainers.image.revision=${APP_GIT_SHA}
@@ -10,6 +11,7 @@ LABEL org.opencontainers.image.revision=${APP_GIT_SHA}
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
+    APP_VERSION=${APP_VERSION} \
     APP_GIT_SHA=${APP_GIT_SHA} \
     APP_PORT=8000 \
     APP_DATA_DIR=/data \
@@ -32,7 +34,12 @@ RUN pip install --upgrade pip \
 
 COPY . .
 
-RUN printf "%s\n" "${APP_GIT_SHA}" > /app/BUILD_SHA
+RUN if [ -n "${APP_VERSION}" ]; then \
+        printf "%s\n" "${APP_VERSION}" > /app/BUILD_VERSION; \
+    else \
+        python app/version.py --print > /app/BUILD_VERSION; \
+    fi \
+    && printf "%s\n" "${APP_GIT_SHA}" > /app/BUILD_SHA
 
 RUN mkdir -p /data /data/config \
     && chown -R appuser:appuser /app /data

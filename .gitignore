@@ -17,3 +17,5 @@ app/__pycache__/
 .codex-home
 .venv-linux
 .aider*
+BUILD_VERSION
+BUILD_SHA

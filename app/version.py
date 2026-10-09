@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 from dataclasses import dataclass
 from functools import lru_cache
@@ -22,6 +23,7 @@ GIT_SHA_ENV_KEYS = (
 )
 GIT_SHA_BUILD_FILES = ("BUILD_SHA", ".build-sha", "REVISION")
 UNKNOWN_BUILD = "unknown"
+VERSION_PATTERN = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 
 
 @dataclass(frozen=True)
@@ -42,13 +44,79 @@ def _project_root() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
-def _read_version_file() -> str:
-    version_file = _project_root() / "VERSION"
+def _read_version_file(root: Path | None = None) -> str:
+    version_file = (root or _project_root()) / "VERSION"
     try:
         version = version_file.read_text(encoding="utf-8").strip()
     except OSError:
         return "0.1.0"
     return version or "0.1.0"
+
+
+def _version_components(version: str) -> tuple[int, int, int]:
+    match = VERSION_PATTERN.fullmatch(version)
+    if not match:
+        raise ValueError(f"VERSION must use numeric major.minor.patch format, got: {version}")
+    return tuple(int(component) for component in match.groups())
+
+
+def _git_output(root: Path, *arguments: str) -> str:
+    result = subprocess.run(
+        ["git", *arguments], cwd=root, check=True, capture_output=True, text=True, timeout=5,
+    )
+    return result.stdout.strip()
+
+
+def version_for_checkout(root: Path) -> str:
+    """Resolve a checkout version without environment or baked-build overrides.
+
+    A manually edited VERSION is authoritative. Committed checkpoints use the
+    largest patch plus first-parent distance within the current major/minor, so
+    merging an older VERSION cannot lower the effective version. This requires
+    complete history; shallow clones raise rather than inventing a commit count.
+    Unversioned directories and environments without Git use the plain file.
+    """
+    version = _read_version_file(root)
+    major, minor, _patch = _version_components(version)
+    try:
+        committed_version = _git_output(root, "show", "HEAD:VERSION")
+    except (OSError, subprocess.SubprocessError):
+        return version
+    if version != committed_version:
+        return version
+    try:
+        if _git_output(root, "rev-parse", "--is-shallow-repository") == "true":
+            raise ValueError("Cannot calculate a commit-based version from a shallow Git checkout. Fetch full history before building.")
+        first_parent_commits = _git_output(root, "rev-list", "--first-parent", "HEAD").splitlines()
+        distances = {commit: distance for distance, commit in enumerate(first_parent_commits)}
+        history = _git_output(
+            root, "log", "--first-parent", "--diff-merges=first-parent", "--format=VERSION_COMMIT:%H",
+            "--no-ext-diff", "--no-textconv", "-p", "--", "VERSION",
+        )
+        candidates: list[int] = []
+        commit = None
+        for line in history.splitlines():
+            if line.startswith("VERSION_COMMIT:"):
+                commit = line.removeprefix("VERSION_COMMIT:")
+            elif line.startswith("+") and commit in distances:
+                match = VERSION_PATTERN.fullmatch(line[1:].strip())
+                if match:
+                    checkpoint_major, checkpoint_minor, checkpoint_patch = (int(value) for value in match.groups())
+                    if (checkpoint_major, checkpoint_minor) == (major, minor):
+                        candidates.append(checkpoint_patch + distances[commit])
+        if not candidates:
+            raise ValueError("Cannot locate the VERSION baseline in Git history.")
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise ValueError("Cannot calculate a version from this Git checkout.") from exc
+    return f"{major}.{minor}.{max(candidates)}"
+
+
+def _version_from_build_file() -> str | None:
+    try:
+        version = (_project_root() / "BUILD_VERSION").read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    return version or None
 
 
 def _version_from_environment() -> str | None:
@@ -104,7 +172,12 @@ def _git_sha_from_command() -> tuple[str | None, str]:
 
 @lru_cache(maxsize=1)
 def get_app_version() -> AppVersion:
-    version = _version_from_environment() or _read_version_file()
+    version = _version_from_environment() or _version_from_build_file()
+    if version is None:
+        try:
+            version = version_for_checkout(_project_root())
+        except ValueError:
+            version = _read_version_file()
     git_sha, git_source = _git_sha_from_environment()
     if git_sha is None:
         git_sha, git_source = _git_sha_from_build_file()
@@ -127,3 +200,25 @@ def app_version_payload() -> dict[str, str | None]:
 
 def reset_app_version_cache() -> None:
     get_app_version.cache_clear()
+
+
+def _main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Calculate LynxPoster versions from this checkout.")
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--print", action="store_true", help="Print this checkout's effective version.")
+    mode.add_argument("--next", action="store_true", help="Print the next patch version without writing files.")
+    arguments = parser.parse_args()
+    try:
+        version = version_for_checkout(_project_root())
+        if arguments.next:
+            major, minor, patch = _version_components(version)
+            version = f"{major}.{minor}.{patch + 1}"
+    except ValueError as exc:
+        parser.error(str(exc))
+    print(version)
+
+
+if __name__ == "__main__":
+    _main()

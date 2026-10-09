@@ -19,3 +19,5 @@ logs/
 docker/config/.env
 docker/config/settings/
 ffmpeg
+BUILD_VERSION
+BUILD_SHA

@@ -5,6 +5,7 @@ services:
       dockerfile: Dockerfile
       args:
         PYTHON_VERSION: ${LYNXPOSTER_PYTHON_VERSION:-3.12-slim}
+        APP_VERSION: ${APP_VERSION:-}
         APP_GIT_SHA: ${APP_GIT_SHA:-${GITHUB_SHA:-${COMMIT_SHA:-unknown}}}
     image: lynxposter:latest
     restart: unless-stopped
